@@ -34,9 +34,17 @@ internal sealed class ProducerConnection
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
     private readonly bool _publisherAcks;
-    // Track which exchange names have already been declared on the current connection.
-    // Cleared on reconnect because exchange state is per-connection.
-    private readonly ConcurrentDictionary<string, bool> _declaredExchanges = new(StringComparer.Ordinal);
+    // Track which exchange names have already been declared on the *current* connection.
+    // Stamped with the connection generation rather than a bool so a publisher that observed
+    // a `true` entry on connection #1 cannot short-circuit re-declare on connection #2 in
+    // the window between `_connectionSemaphore` releasing in EnsureConnectedAsync (where
+    // _connectionGeneration was bumped and the cache cleared) and the publisher's subsequent
+    // ContainsKey check. A stale entry's generation no longer matches `_connectionGeneration`,
+    // so the publisher always re-declares on the new channel.
+    private readonly ConcurrentDictionary<string, long> _declaredExchanges = new(StringComparer.Ordinal);
+    // Monotonic counter — bumped inside the connection semaphore on every successful
+    // (re)connect. Read by EnsureExchangeDeclaredAsync to validate cache entries.
+    private long _connectionGeneration;
     private readonly SemaphoreSlim _connectionSemaphore = new(1, 1);
 
     private ConnectionFactory? _connectionFactory;
@@ -76,6 +84,12 @@ internal sealed class ProducerConnection
 
     public ProducerConnection(ITransportConfiguration transportConfiguration, ILogger logger)
     {
+        ArgumentNullException.ThrowIfNull(transportConfiguration);
+        ArgumentNullException.ThrowIfNull(logger);
+        if (string.IsNullOrEmpty(transportConfiguration.Host))
+        {
+            throw new ArgumentException("transportConfiguration.Host must be set to a non-empty comma-separated host list.", nameof(transportConfiguration));
+        }
         _transportConfiguration = transportConfiguration;
         _logger = logger;
         _lifecycle = new ConnectionLifecycleHooks(logger);
@@ -103,8 +117,11 @@ internal sealed class ProducerConnection
     /// <summary>
     /// Resolves the cap on outstanding publisher confirms from <c>ClientSettings</c>, falling back
     /// to <see cref="DefaultMaxOutstandingPublishConfirms"/> when the setting is unset. Throws on
-    /// non-<c>int</c> or non-positive values so misconfiguration surfaces loudly, consistent with
-    /// the convention in <c>ConnectionFactoryBuilder.ConvertSettingToInt32</c>.
+    /// non-positive values so misconfiguration surfaces loudly. Numeric coercion matches the
+    /// convention used elsewhere in this codebase (<c>ConnectionFactoryBuilder.ConvertSettingToInt32</c>,
+    /// <c>Convert.ToInt32 / ToInt64 / ToUInt16</c>) so configuration sources that produce
+    /// <c>long</c>, <c>string</c>, or other numeric types (e.g. <c>IConfiguration.GetValue</c>,
+    /// JSON binders) bind successfully without forcing the caller to cast first.
     /// </summary>
     internal static int ResolveMaxOutstandingPublishConfirms(ITransportConfiguration transport)
     {
@@ -112,10 +129,16 @@ internal sealed class ProducerConnection
         {
             return DefaultMaxOutstandingPublishConfirms;
         }
-        if (raw is not int permits)
+        int permits;
+        try
+        {
+            permits = Convert.ToInt32(raw, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
         {
             throw new InvalidOperationException(
-                $"Setting '{RabbitMQSettingKeys.MaxOutstandingPublishConfirms}' must be an int; got value '{raw}' of type '{raw?.GetType().FullName ?? "<null>"}'.");
+                $"Setting '{RabbitMQSettingKeys.MaxOutstandingPublishConfirms}' must be convertible to Int32; got value '{raw}' of type '{raw?.GetType().FullName ?? "<null>"}'.",
+                ex);
         }
         if (permits <= 0)
         {
@@ -132,6 +155,17 @@ internal sealed class ProducerConnection
     /// </summary>
     public IChannel Channel => _model ?? throw new InvalidOperationException(
         "ProducerConnection.Channel accessed before EnsureConnectedAsync established a channel.");
+
+    /// <summary>
+    /// Tolerant variant of <see cref="Channel"/> for the small TOCTOU window between
+    /// <see cref="EnsureConnectedAsync"/> returning healthy and the caller acquiring its
+    /// own publish lock — a concurrent reset (slow-path teardown driven by another
+    /// publisher's MarkResetRequired flag) can land <c>_model = null</c> in that window.
+    /// Returns <see langword="null"/> rather than throwing so the caller can classify
+    /// the transient state as retriable without invoking <see cref="MarkResetRequired"/>
+    /// again (the concurrent teardown already is the reset).
+    /// </summary>
+    public IChannel? TryGetChannel() => _model;
 
     /// <summary>
     /// Returns true only when both the connected flag is set AND the underlying channel
@@ -209,6 +243,11 @@ internal sealed class ProducerConnection
             if (Interlocked.Exchange(ref _resetRequired, 0) == 1)
             {
                 await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
+                // Bump generation before clearing so a concurrent EnsureExchangeDeclaredAsync
+                // that sneaks in between the clear and the subsequent CreateConnectionAsync's
+                // own bump cannot stamp an entry under the old generation and fool a later
+                // lookup. See CreateConnectionAsync for the full ordering rationale.
+                Volatile.Write(ref _connectionGeneration, _connectionGeneration + 1);
                 _declaredExchanges.Clear();
             }
 
@@ -247,13 +286,22 @@ internal sealed class ProducerConnection
     /// </summary>
     public async Task EnsureExchangeDeclaredAsync(string exchangeName, string type, CancellationToken cancellationToken)
     {
-        if (_declaredExchanges.ContainsKey(exchangeName))
+        // Snapshot the current generation BEFORE the cache lookup so a concurrent reset
+        // doesn't make us declare against the new channel and then stamp the cache with
+        // a stale generation. Volatile.Read pairs with the Volatile.Write in
+        // CreateConnectionAsync to give us an acquire-fence on the generation.
+        var generation = Volatile.Read(ref _connectionGeneration);
+        if (_declaredExchanges.TryGetValue(exchangeName, out var stamped) && stamped == generation)
         {
             return;
         }
 
         await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null, false, false, cancellationToken).ConfigureAwait(false);
-        _declaredExchanges[exchangeName] = true;
+        // Stamp with the generation we observed. If a reset slid in between the snapshot
+        // and the declare-call, the next caller's lookup will see generation+1 and won't
+        // short-circuit — at worst a redundant re-declare on the new connection, never a
+        // declared-on-wrong-channel skip.
+        _declaredExchanges[exchangeName] = generation;
     }
 
     /// <summary>
@@ -266,6 +314,12 @@ internal sealed class ProducerConnection
         // it after assignment and tear down its own work rather than orphaning the connection.
         Interlocked.Exchange(ref _disposed, 1);
 
+        // Share a single stopwatch budget across lock wait + broker close. Without this,
+        // a stalled broker swallowing close frames hangs the broker-side CloseAsync calls
+        // indefinitely after the semaphore wait — same failure shape Connection.cs's R7
+        // fix addressed, propagated here so producer and consumer connection-close paths
+        // are symmetric.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var connectionLockAcquired = false;
         try
         {
@@ -283,8 +337,16 @@ internal sealed class ProducerConnection
         }
         finally
         {
+            // Compute remaining budget for the broker close; floor at 100ms so a fully-
+            // exhausted budget still issues a CloseAsync with some chance of success.
+            var remaining = timeoutBudget - stopwatch.Elapsed;
+            if (remaining < TimeSpan.FromMilliseconds(100))
+            {
+                remaining = TimeSpan.FromMilliseconds(100);
+            }
+
             // Best-effort teardown ALWAYS runs, whether or not we held the lock.
-            try { await TearDownChannelAndConnectionAsync().ConfigureAwait(false); }
+            try { await TearDownChannelAndConnectionAsync(remaining).ConfigureAwait(false); }
             catch (Exception ex) { _logger.LogWarning(ex, "ProducerConnection channel/connection close failed"); }
 
             if (connectionLockAcquired)
@@ -302,7 +364,15 @@ internal sealed class ProducerConnection
     {
         _connectionFactory = ConnectionFactoryBuilder.Build(_transportConfiguration, _logger);
 
-        // Exchange declarations are per-connection — reset the cache on every (re)connect.
+        // Exchange declarations are per-connection. Bump the generation FIRST, then clear:
+        // a concurrent EnsureExchangeDeclaredAsync that read the old generation sees an
+        // entry stamped with that generation and short-circuits — but its declare was made
+        // against the prior channel, which is the channel its publish will use, so the
+        // skip is safe. A caller that arrives AFTER the bump reads the new generation
+        // and any leftover stale entry no longer matches, forcing a fresh declare on the
+        // new channel. Volatile.Write provides release-fence ordering with the matching
+        // Volatile.Read in EnsureExchangeDeclaredAsync.
+        Volatile.Write(ref _connectionGeneration, _connectionGeneration + 1);
         _declaredExchanges.Clear();
 
         IConnection? connection = null;
@@ -425,14 +495,14 @@ internal sealed class ProducerConnection
         }
     }
 
-    private async Task TearDownChannelAndConnectionAsync()
+    private async Task TearDownChannelAndConnectionAsync(TimeSpan? closeTimeout = null)
     {
         var model = Interlocked.Exchange(ref _model, null);
         var connection = Interlocked.Exchange(ref _connection, null);
         var rateLimiter = Interlocked.Exchange(ref _publisherRateLimiter, null);
 
-        await DisposeModelAsync(model).ConfigureAwait(false);
-        await DisposeConnectionInstanceAsync(connection).ConfigureAwait(false);
+        await DisposeModelAsync(model, closeTimeout).ConfigureAwait(false);
+        await DisposeConnectionInstanceAsync(connection, closeTimeout).ConfigureAwait(false);
         // Dispose the rate limiter AFTER the channel is gone: any publish in flight
         // has already errored out on the closed channel, so no caller is still
         // waiting on a permit when the limiter dispose invalidates outstanding
@@ -450,7 +520,7 @@ internal sealed class ProducerConnection
         _connected = false;
     }
 
-    private async Task DisposeModelAsync(IChannel? model)
+    private async Task DisposeModelAsync(IChannel? model, TimeSpan? closeTimeout = null)
     {
         if (model != null)
         {
@@ -459,7 +529,22 @@ internal sealed class ProducerConnection
                 _logger.LogDebug("Disposing Model");
                 if (model.IsOpen)
                 {
-                    await model.CloseAsync().ConfigureAwait(false);
+                    if (closeTimeout is { } budget)
+                    {
+                        // Bound the broker close so a stalled broker swallowing close frames
+                        // cannot wedge dispose past the caller's budget. Mirrors Connection.cs's
+                        // R7 fix on the consumer side.
+                        using var closeCts = new CancellationTokenSource(budget);
+                        try { await model.CloseAsync(closeCts.Token).ConfigureAwait(false); }
+                        catch (OperationCanceledException) when (closeCts.IsCancellationRequested)
+                        {
+                            _logger.LogWarning("Model close timed out within {Budget}; proceeding with disposal.", budget);
+                        }
+                    }
+                    else
+                    {
+                        await model.CloseAsync().ConfigureAwait(false);
+                    }
                 }
 
                 model.Dispose();
@@ -472,7 +557,7 @@ internal sealed class ProducerConnection
         }
     }
 
-    private async Task DisposeConnectionInstanceAsync(IConnection? connection)
+    private async Task DisposeConnectionInstanceAsync(IConnection? connection, TimeSpan? closeTimeout = null)
     {
         if (connection != null)
         {
@@ -487,7 +572,19 @@ internal sealed class ProducerConnection
                 _logger.LogDebug("Disposing connection");
                 if (connection.IsOpen)
                 {
-                    await connection.CloseAsync().ConfigureAwait(false);
+                    if (closeTimeout is { } budget)
+                    {
+                        using var closeCts = new CancellationTokenSource(budget);
+                        try { await connection.CloseAsync(closeCts.Token).ConfigureAwait(false); }
+                        catch (OperationCanceledException) when (closeCts.IsCancellationRequested)
+                        {
+                            _logger.LogWarning("Connection close timed out within {Budget}; proceeding with disposal.", budget);
+                        }
+                    }
+                    else
+                    {
+                        await connection.CloseAsync().ConfigureAwait(false);
+                    }
                 }
 
                 connection.Dispose();

@@ -5,7 +5,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Wraps persisted process manager data with an identifier and version.
 /// </summary>
-public sealed class MemoryData<T> : IPersistenceData<T>, IVersioned, IIdentified where T : class, IProcessManagerData
+internal sealed class MemoryData<T> : IPersistenceData<T>, IVersioned, IIdentified where T : class, IProcessManagerData
 {
     /// <summary>
     /// Gets or sets the storage identifier for this entry.
@@ -15,7 +15,7 @@ public sealed class MemoryData<T> : IPersistenceData<T>, IVersioned, IIdentified
     /// <summary>
     /// Gets or sets the optimistic concurrency version for this entry.
     /// </summary>
-    public int Version { get; set; }
+    public long Version { get; set; }
 
     /// <summary>
     /// Gets or sets the process manager data payload.

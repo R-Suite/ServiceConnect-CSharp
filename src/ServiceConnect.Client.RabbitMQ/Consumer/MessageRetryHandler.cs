@@ -19,13 +19,15 @@ internal sealed class MessageRetryHandler(
     string errorExchange,
     string consumerQueueName,
     ILogger logger,
-    TimeProvider? timeProvider = null)
+    TimeProvider? timeProvider = null,
+    bool errorsDisabled = false)
 {
     private readonly int _maxRetries = maxRetries;
     private readonly string _errorExchange = errorExchange ?? throw new ArgumentNullException(nameof(errorExchange));
     private readonly string _consumerQueueName = consumerQueueName ?? throw new ArgumentNullException(nameof(consumerQueueName));
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    private readonly bool _errorsDisabled = errorsDisabled;
 
     public async Task HandleFailureAsync(
         IChannel channel,
@@ -123,6 +125,35 @@ internal sealed class MessageRetryHandler(
                 ExceptionType = ex.GetType().FullName,
                 Message = HeaderHelpers.GetErrorMessage(ex)
             }));
+        }
+
+        // IQueueConfiguration.DisableErrors=true contract: "failed messages bypass the error
+        // queue." Honour it here at the single PublishErrorAsync site so both the exhausted-
+        // retry path (HandleFailureAsync) and the validator/no-handler terminal path
+        // (HandleTerminalFailureAsync) skip the publish. The caller acks the original delivery,
+        // the message is dropped, and operators see the drop on the dedicated counter rather
+        // than the message landing in the error queue they explicitly asked us not to use.
+        if (_errorsDisabled)
+        {
+            if (logAsMaxRetries)
+            {
+                _logger.LogWarning(ex,
+                    "Max retries exceeded for MessageId {MessageId}; dropping per DisableErrors=true (no error-queue publish).",
+                    args.BasicProperties.MessageId);
+            }
+            else
+            {
+                _logger.LogWarning(ex,
+                    "Rejecting permanently invalid inbound message with MessageId {MessageId}; dropping per DisableErrors=true (no error-queue publish).",
+                    args.BasicProperties.MessageId);
+            }
+            ServiceConnectMeter.AddRetryDrop(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "messaging.destination.name", _consumerQueueName },
+                { "error.type", "errors-disabled" },
+            });
+            return;
         }
 
         if (logAsMaxRetries)

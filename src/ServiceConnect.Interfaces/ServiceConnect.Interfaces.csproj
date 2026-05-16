@@ -5,11 +5,9 @@
     <Nullable>enable</Nullable>
     <AssemblyName>ServiceConnect.Interfaces</AssemblyName>
     <PackageId>ServiceConnect.Interfaces</PackageId>
-    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
-    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
-    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
-    <Version>7.0.0</Version>
-    <Description>ServiceConnect Interfaces</Description>
+    <Title>ServiceConnect.Interfaces</Title>
+    <Description>Public API contracts (IBus, IMessage, IConsumer, IProducer, options and headers) for the ServiceConnect messaging framework. Reference this package from libraries that need to type-check against ServiceConnect without taking a runtime dependency.</Description>
+    <PackageTags>ServiceConnect;Interfaces;Contracts;MessageBus;Messaging;Message;Bus;Service</PackageTags>
   </PropertyGroup>
 
 </Project>

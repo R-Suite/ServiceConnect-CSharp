@@ -75,4 +75,29 @@ public interface ITimeoutStore
         Guid id,
         Guid? lockOwner = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Reaps timeouts whose lease has expired but whose row is still flagged locked
+    /// (worker crashed mid-dispatch, broker partition outlasted the lease). Returns the
+    /// number of rows reclaimed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The natural-recovery path is the next <see cref="GetTimeoutsBatchAsync"/> poll, whose
+    /// filter accepts both unlocked rows and locked-but-expired rows — operators don't need
+    /// to call this method for routine recovery. It exists for on-demand cleanup from an
+    /// admin endpoint or a one-off script when a deployment wants to unstick the queue
+    /// without waiting for the next poll cycle.
+    /// </para>
+    /// <para>
+    /// The default-interface implementation returns zero. Persistors with explicit lease
+    /// rows (MongoDB) override with a single batch update; persistors whose batch path
+    /// already reclaims expired leases as a side-effect (InMemory) can leave the default
+    /// in place.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <returns>The number of rows whose lease was reclaimed.</returns>
+    Task<long> ReapStaleLeasesAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(0L);
 }

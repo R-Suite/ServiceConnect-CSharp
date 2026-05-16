@@ -81,15 +81,11 @@ Sets an async callback invoked when handler processing throws. Use for push-base
 
 **Remarks.** The callback must not throw — any exception raised from `ExceptionHandler` is swallowed by the caller. For structured observability, prefer the pipeline's middleware and filters. The `CancellationToken` parameter is the consumer-loop token; observe it if the callback performs async I/O.
 
-#### v8 async migration
+#### Synchronous callback
 
-The signature changed from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?` in v8 (breaking change M27). Update call sites as follows:
+Wrap a synchronous side-effect with a completed `ValueTask`:
 
 ```csharp
-// Before (v7)
-cfg.ExceptionHandler = ex => Log.Error(ex);
-
-// After (v8)
 cfg.ExceptionHandler = (ex, _) => { Log.Error(ex); return ValueTask.CompletedTask; };
 ```
 
@@ -150,6 +146,42 @@ bool DeadLetterUnhandledMessages { get; set; }
 When true, messages that the dispatcher runs to completion on but which no processor claims — see [`ConsumeEventResult.NotHandled`](../../handlers/event-args/#nothandled) — are published to the error exchange instead of silently acked.
 
 **Remarks.** Defaults to false, preserving historical behaviour where unhandled messages are logged and acked. Enable when a handler-less message should be treated as a terminal failure for operator visibility.
+
+---
+
+### `StrictReplyValidation`
+
+```csharp
+bool StrictReplyValidation { get; set; }
+```
+
+When true, the request-reply manager validates that the reply payload's CLR type exactly matches the request site's expected reply type before completing the awaiting task. A mismatched reply is faulted with `InvalidOperationException` rather than silently coerced.
+
+**Remarks.** Defaults to false. Enable in environments where a malformed/misrouted reply must be diagnosed loudly rather than tolerated. Strict validation costs one extra type check per reply on the hot path.
+
+---
+
+### `MaxRoutingSlipHops`
+
+```csharp
+int MaxRoutingSlipHops { get; set; }
+```
+
+Caps the number of destinations the routing-slip processor will forward a message through before treating the slip as runaway and routing the message to the error exchange. Defaults to **32**.
+
+**Remarks.** A misbehaving handler that re-prepends destinations could otherwise loop a message indefinitely. The cap is intentionally generous — typical routing slips have 3–6 hops; the limit catches accidents without constraining legitimate patterns.
+
+---
+
+### `DisposeTimeout`
+
+```csharp
+TimeSpan DisposeTimeout { get; }
+```
+
+The maximum time `IBus.DisposeAsync` waits for in-flight work to drain (graceful consumer cancel, last batch ack, persistor flush) before tearing down the broker connection. Defaults to **30 seconds**.
+
+**Remarks.** Read-only on the interface — populated from the builder's `ConfigureBus` callback (`bus.DisposeTimeout = ...`) and frozen at startup. Pass `Timeout.InfiniteTimeSpan` to wait indefinitely; pass `TimeSpan.Zero` to skip the drain entirely (suits CLI tools and tests). Startup throws if a non-positive, non-infinite value is configured.
 
 ## Usage
 

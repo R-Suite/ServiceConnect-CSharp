@@ -219,7 +219,7 @@ ServiceConnect emits a `Warning`-level log under the `ServiceConnect.Client.Rabb
 
 ### Feature — operator metrics + connection-lifecycle logs
 
-ServiceConnect now emits operator-grade metrics via `System.Diagnostics.Metrics`. Six instruments under the OTel `messaging.*` namespace (publish/process duration histograms, published/consumed message counters with outcome dimensions) plus four ServiceConnect-specific extensions (`messaging.serviceconnect.retry.attempts / retry.drops / publish.confirm_timeouts / audit.drops`) and an in-flight gauge.
+ServiceConnect now emits operator-grade metrics via `System.Diagnostics.Metrics`. Four instruments under the OTel `messaging.*` namespace (publish/process duration histograms, published/consumed message counters with outcome dimensions) plus five ServiceConnect-specific extensions (`messaging.serviceconnect.retry.attempts / retry.drops / publish.confirm_timeouts / audit.drops / outgoing_filters.blocked`) and an in-flight UpDownCounter.
 
 OpenTelemetry users wire them with `MeterProvider.AddServiceConnectInstrumentation()` from the `ServiceConnect.Telemetry` package — which transitively brings `OpenTelemetry.Api` ≥ 1.15.3 (the patched line for [GHSA-g94r-2vxg-569j](https://github.com/advisories/GHSA-g94r-2vxg-569j)). Apps pinning an older `OpenTelemetry` line will see a NuGet downgrade warning during restore; bump the pin to a 1.11+ release alongside the v8 upgrade. Without OTel, attach a `MeterListener` to the `ServiceConnect.Bus` meter.
 
@@ -253,6 +253,47 @@ If your scenario needs `netstandard2.1` (or you'd like to upstream the work), pl
 #### When `net8.0` will be dropped
 
 .NET 8 reaches end of Microsoft support on **November 10, 2026**. ServiceConnect will drop the `net8.0` target framework in the first major version released after that date — current consumers on .NET 8 should plan their migration to .NET 10 LTS during the second half of 2026 or pin to a pre-drop ServiceConnect major.
+
+### Breaking — public API surface tightened to extension contracts only
+
+The v7 surface keeps only what third-party persistor / transport authors and end-user app code need. Implementation-detail types are now `internal`. Specifically:
+
+- **Now `internal`:** `MessageDispatcher` (concrete), `FilterPipeline`, `SendMessagePipeline`, `RequestReplyManager`, `Bus`, `HandlerScanner`, `MessageTypeRegistry`, `ConsumeContext`, `ConsumeScopeAccessor`, `MessageBusReadStream`, `MessageBusWriteStream`, `BusHostedService`, `ProcessManagerTimeoutService`, `SystemTextJsonMessageSerializer`, every `*Configuration` concrete class (`BusConfiguration`, `TransportConfiguration`, `QueueConfiguration`, `PipelineConfiguration`, `PersistenceConfiguration`), every concrete persistor (`MongoDbProcessManagerFinder`, `MongoDbAggregatorPersistor`, `MongoDbTimeoutStore`, `MongoClientFactory`, `InMemoryProcessManagerFinder`, `InMemoryAggregatorPersistor`, `InMemoryTimeoutStore`, `CacheProvider`), all RabbitMQ concrete impls (`Producer`, `Consumer`, `Connection`, `IServiceConnectConnection`, `RabbitMqTopologyProvisioner`).
+- **`IRegistryInitializer` moved.** Was a public interface in `ServiceConnect.Interfaces`; now an internal interface in `ServiceConnect.Services`. The framework's own bootstrap hook, not an extension point.
+- **`MessageTypeExchangeName` stays public.** It is the wire-protocol-stable shared helper between the core bus and adapter packages; a third-party RabbitMQ-shaped transport must derive the same exchange name as the bundled one.
+- **`[Obsolete] IProducer.DisconnectAsync` removed.** Lifecycle is owned exclusively by `IAsyncDisposable.DisposeAsync`. Migration: replace any `await producer.DisconnectAsync()` with `await producer.DisposeAsync()` (or rely on DI to dispose).
+- **`SendEventArgs.EndPoints` (plural) removed.** Multi-endpoint sends now raise one `SendEventArgs` per destination, each carrying the singular `EndPoint`. Correlate fan-out via `CorrelationId` (stable across the deliveries).
+- **`ConsumeEventResult` is `init`-only.** The properties are now `{ get; init; }` rather than `{ get; set; }` — framework-produced, consumer-observed only.
+- **`RequestOptions.DefaultTimeoutMs` is `static readonly` (not `const`).** A future tuning of the default no longer requires every consumer to recompile to pick it up.
+- **`ConfigurePipeline(Action<PipelineConfiguration>)` is now `internal`.** Public callers must use the typed builder methods: `AddOutgoingFilter<T>`, `AddBeforeConsumingFilter<T>`, `AddOnConsumedSuccessfullyFilter<T>`, `AddAfterConsumingFilter<T>`, `AddSendMessageMiddleware<T>`, `AddMessageProcessingMiddleware<T>`. Two new public helpers cover the outermost-position case: `InsertSendMessageMiddlewareOutermost<T>` and `InsertMessageProcessingMiddlewareOutermost<T>` (with type-dedup, so a repeat `AddTelemetry()` is safe).
+
+### Build and packaging
+
+- **MongoDB.Driver bumped to 3.8.0** (from 2.23.1). The 2.x → 3.x migration replaces `BsonDefaults.GuidRepresentationMode` (now always V3) and adopts the `RenderArgs<T>` shape for filter/sort/update rendering. The bundled MongoDB persistor handles both transparently; consumers running custom MongoDB code may need to follow MongoDB's [2.x → 3.x migration guide](https://www.mongodb.com/docs/drivers/csharp/current/upgrade/).
+- **Explicit `SharpCompress 1.0.0` and `Snappier 1.3.1`** pinned by `ServiceConnect.Persistence.MongoDb` to replace audit-suppressed GHSA-6c8g-7p36-r338 and GHSA-pggp-6c3x-2xmx — the driver still bundles older versions; the explicit pins force a vuln-free graph into consumer projects.
+- **Csproj-driven `dotnet pack`.** The seven `.nuspec` files were deleted; package metadata (Version=7.0.0, Authors, Copyright, license, project URL, repository URL, tags, README) now lives in `src/Directory.Build.props`.
+- **SourceLink + `.snupkg` symbol packages.** All shippable packages embed source and produce sidecar `.snupkg` files; debugger step-into works from any consumer with a SymbolSource configured.
+- **CI workflows.** `.github/workflows/ci.yml` runs build + unit + E2E + pack-validate on Linux and Windows; `release.yml` tags drive NuGet pushes with a version-vs-tag guard.
+
+### Behaviour fixes
+
+- **`Bus.SendToManyAsync` OCE filter on caller-token.** A middleware-internal `OperationCanceledException` whose token differs from the caller's no longer aborts the per-endpoint loop as if the caller cancelled; it falls through to the per-endpoint aggregate-failure path.
+- **Saga BSON / FormatException → `PersistenceException`.** The MongoDB process-manager finder now wraps BSON-layer failures so a poison row is quarantined to the error queue rather than NACK-looping forever.
+- **`ProcessManagerHandlerRegistry` dedup by `HandlerType`.** Dual-interface saga handlers and repeat-assembly scans no longer crash startup with a duplicate-key dictionary throw.
+- **`AddServiceConnect` re-entry guard.** Calling `services.AddServiceConnect(...)` twice on the same `IServiceCollection` now throws `InvalidOperationException` with a clear remediation — the second call's handler scan would otherwise have been silently dropped.
+- **`ProcessManagerTimeoutService.PollLoop` catch-up.** Up to 32 batches drain per tick when a brief outage backed up the timeout store, so timeout dispatch latency does not lag the deadline by N polls after a recovery.
+- **`ProducerConnection._declaredExchanges` generation-stamped.** Concurrent declared-exchange cache lookups now match against a monotonic generation counter bumped on every (re)connect — a stale entry from before a reset can no longer trick a publisher into skipping the re-declare on the new channel.
+- **`RabbitMqConsumerHost._consumerTag` reads/writes are `Volatile`.** Auto-recovery's tag-swap and StopAsync's `BasicCancelAsync` no longer admit a torn-read race where the framework cancels a tag the broker has already replaced.
+- **`PublishConfirmTimeouts` counter tag schema.** Now tagged with `messaging.operation.type=publish` and emits the routing key (when exchange is empty) as `messaging.destination.name`, so `SendAsync` per-queue alerting works against the conventional default-exchange + routing-key shape.
+- **`ConsumeContextPool.Initialize` publish ordering.** Fields are written before the rent-token bump, so an ARM64 reader who sees the new token via `Volatile.Read` is guaranteed (under release/acquire semantics) to see the fresh `BusUnsafe` / `CancellationTokenUnsafe` / headers.
+
+### New — `messaging.serviceconnect.outgoing_filters.blocked` metric
+
+A counter that increments every time an outgoing filter returns `FilterAction.Stop`. The blocked operation never enters the send-message middleware, so no publish/send span is emitted — this counter is the operator-visible signal for filter-suppressed deliveries. Tagged with `messaging.system=serviceconnect` and (when the type is known) `messaging.message.type`.
+
+### Observability — semconv 1.x messaging attributes
+
+Spans emit `messaging.operation.type` (`publish` for sends/publishes, `process` for consumes) and `messaging.operation.name` (`publish` for sends/publishes, `receive` for consumes). The pre-1.x `messaging.operation` attribute is no longer emitted. Dashboards that filtered on the legacy attribute should switch to `messaging.operation.type`.
 
 ### Breaking — `ServiceConnect.Filters.MessageDeduplication` removed
 
@@ -334,7 +375,7 @@ A pass over the RabbitMQ producer's outbound path and the retry-queue declaratio
 
 - **`messaging.publish.duration` does not add `error.type=timeout` for `TimeoutException`.** A publish-confirm timeout means the broker acknowledgement did not arrive within the configured window — delivery may still succeed. The `error.type` tag is deliberately suppressed for this case to avoid misleading "publish failed" signals in duration-based dashboards. Use the `messaging.serviceconnect.publish.confirm_timeouts` counter as the authoritative signal for confirm-timeouts. All other failure types continue to carry `error.type` as documented.
 
-**Per-delivery `MessageId` for multi-endpoint Send.** Every endpoint resolved by `AddQueueMapping` (or supplied through `SendOptions.EndPoints`) now receives a delivery with a distinct `MessageId` and `TimeSent`. Correlate cross-endpoint deliveries via `CorrelationId`, which remains constant across the fan-out.
+**Per-delivery `MessageId` for multi-endpoint Send.** Every endpoint resolved by `AddQueueMapping` (or supplied through `IBus.SendToManyAsync`) now receives a delivery with a distinct `MessageId` and `TimeSent`. Correlate cross-endpoint deliveries via `CorrelationId`, which remains constant across the fan-out.
 
 **Retry DLX always durable.** The retry dead-letter exchange is now always declared with `autoDelete: false`, regardless of the consumer queue's auto-delete setting. Without this invariant, messages dwelling in the retry queue would be silently dropped after the consumer disconnected. Pre-existing topologies are unaffected on next provisioning.
 
@@ -503,8 +544,7 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **`MongoDbTimeoutStore.GetTimeoutsBatchAsync` read-back `FindAsync` sorts by `(Time, Id)`.** The candidate sort and the read-back sort now match. Pre-fix the read-back returned rows in unspecified order, masking the candidate-sort tie-breaker (Group D Mongo timeout-store fixes) and risking starvation under concurrent batch claims.
 - **`MongoDbTimeoutStore` orphan-lease cleanup widens from `OperationCanceledException` to any error.** A transient `MongoException` between successful claim (`UpdateManyAsync`) and read-back (`FindAsync`) previously propagated as `PersistenceException` while leaving rows locked under `sessionId` until `LockExpiresAt` or the reaper ran. Best-effort cleanup now triggers on any failure between claim and read-back.
 - **`MongoDbTimeoutStore.EnsureTimeoutIndexAsync` cached per-instance.** Pre-fix every `Insert`/`Get`/`Remove`/`Release`/`Reap` round-tripped `DropOneAsync("Locked_1_Time_1")` (404'ing every steady-state call) plus `CreateManyAsync` of three index specs. The cache mirrors the saga finder and aggregator persistor patterns; on success `Volatile.Write(ref _indexed, 1)`. Concurrent multi-process index creation across replicas is benign (`MongoCommandException` codes 85/86 are swallowed).
-- **Production `DeepClone` switches from `Newtonsoft.Json` to `MongoDB.Bson` round-trip.** Removes the security-flagged `TypeNameHandling.Auto` deserialisation-gadget surface from `ServiceConnect.Persistence.InMemory`. BSON's `_t` discriminator preserves polymorphism for nested values; the helper wraps the root value in a synthetic single-field document so collection-typed roots (`List<>`, arrays, `Dictionary<,>` — legitimate header values on `TimeoutData`) round-trip without hitting BSON's "root must be `{}` not `[]`" constraint.
-- **Explicit-interface auto-properties round-trip correctly through the in-memory store.** A saga or aggregator data type with a property declared as an explicit-interface impl (`Guid IFoo.FooId { get; set; }`) was invisible to `Newtonsoft.Json` (which only saw public short-name properties) and round-tripped as `default(Guid)`. BSON's `BsonClassMap` auto-discovers explicit-interface auto-properties, eliminating the silent test-vs-prod divergence between the in-memory and Mongo stores.
+- **Production `DeepClone` switches from `Newtonsoft.Json` to `System.Text.Json` round-trip.** Removes the security-flagged `TypeNameHandling.Auto` deserialisation-gadget surface from `ServiceConnect.Persistence.InMemory`, and drops the `MongoDB.Bson` package coupling so a project that wants the in-memory persistor for tests no longer pulls a MongoDB dependency. STJ handles every saga and aggregator shape used in the codebase. Two limitations are intentional and documented in `DeepClone`'s xmldoc: polymorphic nested values require `[JsonDerivedType]` attributes (STJ does not auto-discriminate the way BSON's `_t` did), and saga data with explicit-interface auto-properties (`Guid IFoo.FooId { get; set; }`) is not supported by the in-memory persistor — use the MongoDB persistor for that edge case, or expose the backing field via a public property.
 
 **Documentation / contract clarifications (non-breaking)**
 
@@ -512,7 +552,7 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 
 **Behaviour changes**
 
-- **`Newtonsoft.Json` removed from production packages.** `ServiceConnect.Client.RabbitMQ` and `ServiceConnect.Persistence.InMemory` no longer reference `Newtonsoft.Json`. `MongoDB.Bson 2.23.1` is now a direct dependency on `ServiceConnect.Persistence.InMemory` (it was already transitive via `ServiceConnect.Persistence.MongoDb`).
+- **`Newtonsoft.Json` removed from production packages.** `ServiceConnect.Client.RabbitMQ` and `ServiceConnect.Persistence.InMemory` no longer reference `Newtonsoft.Json`. `ServiceConnect.Persistence.InMemory` also drops its `MongoDB.Bson` dependency — the in-memory deep-clone uses `System.Text.Json` (BCL, no extra package).
 - **`InMemoryTimeoutStore` is now `IDisposable`.** Direct callers (tests, custom hosts that bypass DI) should `using` the store or call `Dispose()` to release the owned `InMemoryPersistenceState` (timer registrations, kernel lock handles). DI consumers via `UseInMemoryPersistence()` see no change — the container handles disposal.
 - **`MongoDbTimeoutStore` indexes no longer self-heal after admin-drop.** Once `_indexed=1` (set after first successful `CreateManyAsync`), an admin dropping the database while the process is running requires a process restart to re-create the indexes. Mirrors the `MongoDbAggregatorPersistor` cache contract (Group F). The trade-off vs the per-message round-trip is documented; pin tests guard against future regression.
 

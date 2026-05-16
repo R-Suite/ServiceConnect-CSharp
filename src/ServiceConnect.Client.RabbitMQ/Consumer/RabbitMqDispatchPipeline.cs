@@ -34,9 +34,10 @@ internal sealed class RabbitMqDispatchPipeline(
         IChannel? model,
         IChannel publishChannel,
         BasicDeliverEventArgs args,
+        Dictionary<string, object> copiedHeaders,
         CancellationToken cancellationToken)
     {
-        bool processed = await ProcessWithMetricsAsync(processor, publishChannel, args, cancellationToken).ConfigureAwait(false);
+        bool processed = await ProcessWithMetricsAsync(processor, publishChannel, args, copiedHeaders, cancellationToken).ConfigureAwait(false);
         await AckOrNackAsync(model, args, processed).ConfigureAwait(false);
     }
 
@@ -115,6 +116,7 @@ internal sealed class RabbitMqDispatchPipeline(
         InboundMessageProcessor processor,
         IChannel publishChannel,
         BasicDeliverEventArgs args,
+        Dictionary<string, object> copiedHeaders,
         CancellationToken cancellationToken)
     {
         var processStartTimestamp = Stopwatch.GetTimestamp();
@@ -122,7 +124,16 @@ internal sealed class RabbitMqDispatchPipeline(
         Exception? processFailure = null;
         try
         {
-            processed = await processor.ProcessAsync(publishChannel, args, cancellationToken).ConfigureAwait(false);
+            processed = await processor.ProcessAsync(publishChannel, args, copiedHeaders, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cooperative shutdown — the host's per-delivery CTS fired and a well-behaved
+            // handler honoured it. Don't log Error and don't tag the metric with
+            // `error.type=OperationCanceledException`, which would alert dashboards every
+            // graceful shutdown. Fall through so EmitProcessMetrics records the consume
+            // as outcome=retry (processed=false, processFailure=null) and the caller
+            // nacks-with-requeue; the broker redelivers on the next consumer start.
         }
         catch (Exception ex)
         {

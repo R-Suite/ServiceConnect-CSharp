@@ -38,7 +38,7 @@ public class AggregatorExceptionTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddTransient<Aggregator<TestMessage>, ThrowingAggregator>();
 
         services.AddServiceConnect(builder =>
@@ -115,6 +115,6 @@ file class ThrowingAggregator : Aggregator<TestMessage>
 {
     public override int BatchSize() => 1;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
-    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default) =>
+    public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default) =>
         Task.FromException(new InvalidOperationException("Aggregator Execute failed"));
 }

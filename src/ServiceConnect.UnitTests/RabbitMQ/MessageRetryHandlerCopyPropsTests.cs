@@ -65,9 +65,12 @@ public sealed class MessageRetryHandlerCopyPropsTests
         Assert.Equal("msg-1", capturedProps.MessageId);
         Assert.Equal(new AmqpTimestamp(1234567890), capturedProps.Timestamp);
         Assert.Equal("MyMessage", capturedProps.Type);
-        Assert.Equal("guest", capturedProps.UserId);
-        Assert.Equal("test-app", capturedProps.AppId);
-        Assert.Equal("cluster-1", capturedProps.ClusterId);
+        // UserId / AppId / ClusterId are deliberately dropped on republish — see
+        // BasicPropertiesCopier's xmldoc. Asserting they're NOT preserved makes the
+        // intentional safety behaviour load-bearing on the test suite.
+        Assert.False(capturedProps.IsUserIdPresent());
+        Assert.False(capturedProps.IsAppIdPresent());
+        Assert.False(capturedProps.IsClusterIdPresent());
     }
 
     [Fact]

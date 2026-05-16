@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using ServiceConnect;
-using ServiceConnect.Configuration;
 
 namespace ServiceConnect.Telemetry;
 
@@ -43,21 +42,13 @@ public static class TelemetryBuilderExtensions
             services.TryAddSingleton<TelemetryProcessingMiddleware>();
         });
 
-        builder.ConfigurePipeline(p =>
-        {
-            // Guard against duplicate Insert on a second AddTelemetry call. Without the
-            // guard each pipeline gets a duplicate entry and emits two activities per
-            // message (corrupting OTel cardinality and double-counting publish/consume
-            // duration histograms).
-            if (!p.SendMessageMiddleware.Contains(typeof(TelemetrySendMiddleware)))
-            {
-                p.SendMessageMiddleware.Insert(0, typeof(TelemetrySendMiddleware));
-            }
-            if (!p.MessageProcessingMiddleware.Contains(typeof(TelemetryProcessingMiddleware)))
-            {
-                p.MessageProcessingMiddleware.Insert(0, typeof(TelemetryProcessingMiddleware));
-            }
-        });
+        // InsertOutermost on both pipelines so the telemetry middleware brackets every
+        // other middleware (span starts first, ends last) and so a repeat AddTelemetry
+        // call doesn't double-register — each Insert*Outermost method de-duplicates by
+        // middleware type so we don't emit two activities per message.
+        builder
+            .InsertSendMessageMiddlewareOutermost<TelemetrySendMiddleware>()
+            .InsertMessageProcessingMiddlewareOutermost<TelemetryProcessingMiddleware>();
 
         return builder;
     }

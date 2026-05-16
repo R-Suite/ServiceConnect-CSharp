@@ -8,7 +8,7 @@ namespace ServiceConnect.Configuration;
 /// <summary>
 /// Mutable implementation of <see cref="ITransportConfiguration"/> for configuring broker connectivity and TLS.
 /// </summary>
-public sealed class TransportConfiguration : ITransportConfiguration
+internal sealed class TransportConfiguration : ITransportConfiguration
 {
     /// <summary>Default dead-letter retry delay, in milliseconds.</summary>
     public const int DefaultRetryDelayMilliseconds = 3000;
@@ -27,10 +27,47 @@ public sealed class TransportConfiguration : ITransportConfiguration
     public string? Password { get; set; }
     /// <inheritdoc />
     public string? VirtualHost { get; set; }
+    private int _retryDelay = DefaultRetryDelayMilliseconds;
     /// <summary>Dead-letter retry delay, in milliseconds. Must be non-negative.</summary>
-    public int RetryDelay { get; set; } = DefaultRetryDelayMilliseconds;
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    /// <remarks>
+    /// Negative values are rejected at the setter; a negative TTL on the broker-declared
+    /// retry queue would be refused with <c>PRECONDITION_FAILED</c> when the topology is
+    /// declared, masking the misconfiguration behind a transport error.
+    /// </remarks>
+    public int RetryDelay
+    {
+        get => _retryDelay;
+        set
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "RetryDelay must be non-negative (milliseconds).");
+            }
+            _retryDelay = value;
+        }
+    }
+
+    private int _maxRetries = DefaultMaxRetries;
     /// <inheritdoc />
-    public int MaxRetries { get; set; } = DefaultMaxRetries;
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative.</exception>
+    /// <remarks>
+    /// Negative values are rejected at the setter; a negative <c>MaxRetries</c> would
+    /// route every first-failure message straight to the error exchange via the malformed
+    /// <c>RetryCount</c> path (every fresh message has <c>RetryCount=0 &gt; -1</c>).
+    /// </remarks>
+    public int MaxRetries
+    {
+        get => _maxRetries;
+        set
+        {
+            if (value < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "MaxRetries must be non-negative.");
+            }
+            _maxRetries = value;
+        }
+    }
     /// <inheritdoc />
     public ushort PrefetchCount { get; set; } = DefaultPrefetchCount;
     /// <summary>

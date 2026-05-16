@@ -3,7 +3,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Interface for caching providers
 /// </summary>
-public interface ICacheProvider
+internal interface ICacheProvider
 {
     /// <summary>
     /// Occurs after a cache key is removed.
@@ -78,8 +78,8 @@ public interface ICacheProvider
     /// sliding-time window.
     /// </summary>
     /// <exception cref="KeyNotFoundException">
-    /// Thrown when <paramref name="key"/> is not present. Pre-v8 this was a silent
-    /// no-op; v8 throws so callers fail deterministically. Use
+    /// Thrown when <paramref name="key"/> is not present, so callers fail deterministically
+    /// rather than silently no-op'ing on a missing key. Use
     /// <see cref="Add{TKey,TValue}(TKey, TValue, CacheItemPriority)"/> to insert new keys.
     /// </exception>
     void Update<TKey, TValue>(TKey key, TValue value);

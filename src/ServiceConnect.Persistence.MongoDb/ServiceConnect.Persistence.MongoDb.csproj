@@ -2,6 +2,11 @@
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <PackageId>ServiceConnect.Persistence.MongoDb</PackageId>
+        <AssemblyName>ServiceConnect.Persistence.MongoDb</AssemblyName>
+        <Title>ServiceConnect.Persistence.MongoDb</Title>
+        <Description>MongoDB process manager, aggregator and timeout persistence for ServiceConnect, with optional SSL/TLS.</Description>
+        <PackageTags>ServiceConnect;Persistence;MongoDB;MessageBus;Messaging;Message;Bus;Service</PackageTags>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
@@ -15,17 +20,32 @@
             <_Parameter1>ServiceConnect.EndToEndTests</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>
-    <!-- DynamicProxyGenAssembly2 is only needed in Debug builds (Moq/Castle DynamicProxy for unit tests).
-         Exclude from Release so the production assembly does not expose its internals surface to a
-         runtime-generated proxy assembly with no production benefit. -->
-    <ItemGroup Condition="'$(Configuration)' == 'Debug'">
+    <!-- DynamicProxyGenAssembly2 is the runtime-generated assembly Moq/Castle DynamicProxy
+         emits its proxies into. Needed at both Debug and Release because Moq creates proxies
+         on demand from test runs regardless of which configuration the SUT was built with.
+         The full strong-name public key is required because MongoDB.Driver 3.x is strong-named:
+         Castle's `AssertValidTypeForTarget` refuses to proxy a strong-named interface that
+         references an internal type whose assembly's InternalsVisibleTo lacks the matching
+         public-key token (security check against forged friend-assembly tokens). The key
+         below is the public key of DynamicProxyGenAssembly2 published by Castle. -->
+    <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-            <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+            <_Parameter1>DynamicProxyGenAssembly2, PublicKey=0024000004800000940000000602000000240000525341310004000001000100c547cac37abd99c8db225ef2f6c8a3602f3b3606cc9891605d02baa56104f4cfc0734aa39b93bf7852f7d9266654753cc297e7d2edfe0bac1cdcf9f717241550e0a7b191195b7667bb4f64bcb8e2121380fd1d9d46ad2d92d2d15605093924cceaf74c4861eff62abf69b9291ed0a340e113be11e6a7d3113e92484cf7045cc7</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>
     <ItemGroup>
-        <PackageReference Include="MongoDB.Driver" Version="2.23.1" />
+        <PackageReference Include="MongoDB.Driver" Version="3.8.0" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
         <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+        <!-- Explicit overrides for MongoDB.Driver's transitive compression dependencies.
+             Driver 3.x still bundles SharpCompress 0.30.1 (GHSA-6c8g-7p36-r338, zip-slip,
+             moderate) and Snappier 1.0.0 (GHSA-pggp-6c3x-2xmx, DoS via malformed input,
+             high). The driver does not exercise either format on the request path the
+             persistors hit, but the vulnerable assemblies still ship in the consumer's
+             bin output. Pinning patched versions here forces them up the dependency graph
+             so consumers of ServiceConnect.Persistence.MongoDb get a clean
+             NuGet vulnerability scan result without needing their own suppression. -->
+        <PackageReference Include="SharpCompress" Version="1.0.0" />
+        <PackageReference Include="Snappier" Version="1.3.1" />
     </ItemGroup>
 </Project>

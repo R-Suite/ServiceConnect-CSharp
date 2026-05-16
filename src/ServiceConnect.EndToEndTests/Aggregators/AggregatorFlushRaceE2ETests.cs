@@ -28,7 +28,7 @@ public class AggregatorFlushRaceE2ETests(MessagingFixture fixture)
     {
         // Arrange: first flush completion signal
         // Use wrapper types so DI can distinguish the two TCS instances (DI resolves a
-        // bare TaskCompletionSource<IList<TestMessage>> to whichever registration won last).
+        // bare TaskCompletionSource<IReadOnlyList<TestMessage>> to whichever registration won last).
         var firstFlushSignal = new FirstFlushSignal();
         var secondFlushSignal = new SecondFlushSignal();
         // Gate that blocks the first Execute call while we push the second batch
@@ -47,7 +47,7 @@ public class AggregatorFlushRaceE2ETests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton(firstFlushSignal);
         services.AddSingleton(secondFlushSignal);
         services.AddSingleton(gate);
@@ -127,13 +127,13 @@ public class AggregatorFlushRaceE2ETests(MessagingFixture fixture)
 
 file sealed class FirstFlushSignal
 {
-    public TaskCompletionSource<IList<TestMessage>> Tcs { get; } =
+    public TaskCompletionSource<IReadOnlyList<TestMessage>> Tcs { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 file sealed class SecondFlushSignal
 {
-    public TaskCompletionSource<IList<TestMessage>> Tcs { get; } =
+    public TaskCompletionSource<IReadOnlyList<TestMessage>> Tcs { get; } =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
@@ -156,7 +156,7 @@ file class FlushRaceAggregator(FirstFlushSignal first, SecondFlushSignal second,
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(60);
 
-    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default)
     {
         var count = _gate.Increment();
         if (count == 1)

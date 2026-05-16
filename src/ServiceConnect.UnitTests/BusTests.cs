@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Moq;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
@@ -30,7 +31,7 @@ public class BusTests
     private readonly Mock<ILogger<Bus>> _mockLogger;
     private readonly Mock<IQueueConfiguration> _mockQueueConfig;
     private readonly Mock<IMessageDispatcher> _mockDispatcher;
-    private readonly IList<HandlerReference> _handlerReferences;
+    private readonly IReadOnlyList<HandlerReference> _handlerReferences;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly Bus _bus;
@@ -763,7 +764,7 @@ public class BusTests
     }
 
     [Fact]
-    public async Task PublishRequestAsync_WhenFilterBlocksMessage_ThrowsInvalidOperationException()
+    public async Task PublishRequestAsync_WhenFilterBlocksMessage_ThrowsOutgoingFiltersBlocked()
     {
         _mockFilterPipeline
             .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
@@ -787,7 +788,7 @@ public class BusTests
 
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
+        await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
             () => busWithFilters.PublishRequestAsync<FakeMessage1, FakeMessage1>(message, _ => { }));
     }
 
@@ -1349,6 +1350,7 @@ public class BusTests
             "timeoutStore" => timeoutStore,
             "consumeContextAccessor" => accessor,
             "busConfig" => null,
+            "timeProvider" => null,
             _ => throw new InvalidOperationException($"Unexpected Bus constructor parameter '{parameter.Name}'.")
         }).ToArray();
 

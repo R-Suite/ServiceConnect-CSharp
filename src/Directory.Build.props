@@ -18,6 +18,46 @@
     <!-- Emit XML documentation files so DocFX can build the API reference. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+
+  <!-- Shared package metadata. Per-project csprojs override PackageId, AssemblyName,
+       Description, PackageTags, and PackageReadmeFile where they differ. Version is
+       centralized here so a release cuts a single coherent set of packages. -->
+  <PropertyGroup>
+    <Version>7.0.0</Version>
+    <Authors>Jakub Pachansky, Tim Watson</Authors>
+    <Company>ServiceConnect</Company>
+    <Product>ServiceConnect</Product>
+    <Copyright>Copyright 2026 ServiceConnect contributors</Copyright>
+    <PackageProjectUrl>https://github.com/R-Suite/ServiceConnect-CSharp</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/R-Suite/ServiceConnect-CSharp.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <NeutralLanguage>en-GB</NeutralLanguage>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- SourceLink + symbol packages. ContinuousIntegrationBuild is set only under
+       GitHub Actions so local builds stay fast (deterministic-build mode disables
+       a few MSBuild optimisations). IncludeSymbols + snupkg ships PDBs in a sidecar
+       symbol package rather than inside the main .nupkg; PublishRepositoryUrl +
+       EmbedUntrackedSources make `Step into` work in consumer IDEs. -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Pack the repo-root README into every shippable package so the NuGet.org
+       landing page renders the project README. Per-project csprojs that want a
+       package-specific README override PackageReadmeFile and adjust the Include. -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
   <!-- Pin language version per target framework. net8.0 stays on C# 12 so multi-targeting
        projects do not gain C# 13+ features (Lock object lock semantics, field keyword) under
        net8.0 — those features are guarded by #if NET9_0_OR_GREATER and must compile cleanly
@@ -30,14 +70,6 @@
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <LangVersion>14.0</LangVersion>
   </PropertyGroup>
-  <!-- Suppress audit advisories for vulnerabilities in transitive dependencies of MongoDB.Driver
-       2.23.1 that have no available fix at the pinned driver version. These are transitive-only;
-       the vulnerabilities are in compression libraries (SharpCompress, Snappier) that the driver
-       bundles but that this codebase does not use directly or expose to untrusted input. -->
-  <ItemGroup>
-    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-6c8g-7p36-r338" /> <!-- SharpCompress 0.30.1 moderate -->
-    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-pggp-6c3x-2xmx" /> <!-- Snappier 1.0.0 high -->
-  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0">
       <PrivateAssets>all</PrivateAssets>
@@ -48,6 +80,15 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Meziantou.Analyzer" Version="3.0.54">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- SourceLink for GitHub. PrivateAssets=all keeps it out of the package's
+       dependency graph (it's a build-time-only tool). -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
     </PackageReference>

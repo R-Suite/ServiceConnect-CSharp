@@ -122,7 +122,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         Assert.NotNull(activity);
         Assert.Equal("anonymous publish", activity!.DisplayName);
-        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+        Assert.Equal(true, activity.GetTagItem(MessagingDestinationAnonymous));
         Assert.Null(activity.GetTagItem(MessagingDestination));
     }
 
@@ -241,7 +241,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         Assert.NotNull(activity);
         Assert.Equal("anonymous receive", activity!.DisplayName);
-        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+        Assert.Equal(true, activity.GetTagItem(MessagingDestinationAnonymous));
     }
 
     [Fact]
@@ -363,7 +363,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
 
         Assert.NotNull(activity);
         Assert.Equal("anonymous send", activity!.DisplayName);
-        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+        Assert.Equal(true, activity.GetTagItem(MessagingDestinationAnonymous));
     }
 
     [Fact]
@@ -548,54 +548,15 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     }
 
     [Fact]
-    public void Send_EndPointsPluralOnly_TagsJoinedDestination()
+    public void Send_EmptyEndPoint_FallsBackToAnonymous()
     {
-        // Multi-destination sends must surface every endpoint in telemetry; reading only
-        // the singular EndPoint would lose them. EndPoints (plural) renders as a
-        // comma-joined messaging.destination tag and DisplayName.
+        // SendEventArgs carries one per-delivery endpoint. When that endpoint is empty
+        // (e.g. publish-style sends with no resolved destination), the span tags as
+        // anonymous rather than emitting an empty-string destination that would
+        // pollute trace-by-destination dashboards.
         var args = new SendEventArgs
         {
             EndPoint = "",
-            EndPoints = ["queue-a", "queue-b"],
-            Headers = new Dictionary<string, string>(),
-        };
-
-        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
-
-        Assert.NotNull(activity);
-        Assert.Equal("queue-a,queue-b send", activity!.DisplayName);
-        Assert.Equal("queue-a,queue-b", activity.GetTagItem(MessagingDestination));
-    }
-
-    [Fact]
-    public void Send_EndPointsContainsWhitespaceEntries_FiltersBeforeJoining()
-    {
-        // Holistic follow-up: a stray ""/null/whitespace entry in EndPoints must not leak
-        // into traces as "queue-a,,queue-b". Confirm whitespace entries drop out of the
-        // joined destination tag and display name.
-        var args = new SendEventArgs
-        {
-            EndPoint = "",
-            EndPoints = ["queue-a", "", "   ", "queue-b"],
-            Headers = new Dictionary<string, string>(),
-        };
-
-        using var activity = ServiceConnectActivitySource.Send(args, _options, _attrs);
-
-        Assert.NotNull(activity);
-        Assert.Equal("queue-a,queue-b send", activity!.DisplayName);
-        Assert.Equal("queue-a,queue-b", activity.GetTagItem(MessagingDestination));
-    }
-
-    [Fact]
-    public void Send_EndPointsAllWhitespace_FallsBackToAnonymous()
-    {
-        // Holistic follow-up: if filtering empties the list, the send must be tagged
-        // anonymous rather than producing a spurious empty-string destination.
-        var args = new SendEventArgs
-        {
-            EndPoint = "",
-            EndPoints = ["", "   "],
             Headers = new Dictionary<string, string>(),
         };
 
@@ -604,7 +565,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.NotNull(activity);
         Assert.Equal("anonymous send", activity!.DisplayName);
         Assert.Null(activity.GetTagItem(MessagingDestination));
-        Assert.Equal("true", activity.GetTagItem(MessagingDestinationAnonymous));
+        Assert.Equal(true, activity.GetTagItem(MessagingDestinationAnonymous));
     }
 
     [Fact]
@@ -1236,7 +1197,7 @@ public sealed class ServiceConnectActivitySource_PropagationOnlyTests
 
             Assert.NotNull(captured);
             Assert.Null(captured!.GetTagItem(MessagingDestination));  // no destination — anonymous.
-            Assert.Equal("true", captured.GetTagItem(MessagingDestinationAnonymous));
+            Assert.Equal(true, captured.GetTagItem(MessagingDestinationAnonymous));
             // Routing key is still preserved for RabbitMQ-specific routing observability.
             Assert.Equal("high-priority", captured.GetTagItem(MessagingDestinationRoutingKey));
             // New OTel pair.

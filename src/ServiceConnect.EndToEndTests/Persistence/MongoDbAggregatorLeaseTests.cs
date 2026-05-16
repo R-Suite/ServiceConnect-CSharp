@@ -26,6 +26,12 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
         public int Sequence { get; set; }
     }
 
+    // Short lease so the lease-expiry path can be exercised against a real broker without
+    // waiting 5 real minutes. The lease is enforced server-side ($$NOW + leaseMs) so the
+    // test sleeps real time past the lease deadline — FakeTimeProvider cannot move the
+    // server's clock, so it isn't useful for verifying lease expiry against MongoDB.
+    private static readonly TimeSpan TestLeaseDuration = TimeSpan.FromSeconds(2);
+
     private MongoDbAggregatorPersistor BuildPersistor(string dbName, TimeProvider timeProvider, MessageTypeRegistry registry)
     {
         var options = new MongoDbPersistenceOptions
@@ -39,7 +45,8 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
             options,
             NullLogger<MongoDbAggregatorPersistor>.Instance,
             registry,
-            timeProvider);
+            timeProvider,
+            leaseDuration: TestLeaseDuration);
     }
 
     [Fact]
@@ -91,8 +98,10 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
         var first = await persistorA.GetSnapshotAsync("lease-exp");
         Assert.Single(first.ResolvedMessages);
 
-        // Advance past the 5-minute lease window.
-        clock.Advance(TimeSpan.FromMinutes(6));
+        // Wait past the server-side lease deadline ($$NOW + leaseMs). FakeTimeProvider
+        // cannot move the MongoDB server clock; the lease is enforced server-side, so
+        // expiry requires real wall-clock advancement.
+        await Task.Delay(TestLeaseDuration + TimeSpan.FromMilliseconds(500));
 
         var second = await persistorB.GetSnapshotAsync("lease-exp");
         Assert.Single(second.ResolvedMessages);
@@ -118,7 +127,7 @@ public class MongoDbAggregatorLeaseTests(PersistenceFixture fixture)
         var snapshotA = await persistorA.GetSnapshotAsync("lease-rot");
         Assert.Single(snapshotA.ResolvedIds);
 
-        clock.Advance(TimeSpan.FromMinutes(6));
+        await Task.Delay(TestLeaseDuration + TimeSpan.FromMilliseconds(500));
 
         var snapshotB = await persistorB.GetSnapshotAsync("lease-rot");
         Assert.Single(snapshotB.ResolvedIds);

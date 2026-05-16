@@ -3,7 +3,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Defines the retention priority assigned to cached items.
 /// </summary>
-public enum CacheItemPriority
+internal enum CacheItemPriority
 {
     /// <summary>
     /// Indicates standard cache retention behavior.

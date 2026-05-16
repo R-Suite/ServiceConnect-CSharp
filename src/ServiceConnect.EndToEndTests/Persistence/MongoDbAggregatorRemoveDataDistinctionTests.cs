@@ -44,16 +44,18 @@ public class MongoDbAggregatorRemoveDataDistinctionTests(PersistenceFixture fixt
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task RemoveData_NoRowsForName_ThrowsKeyNotFoundException()
+    public async Task RemoveData_NoRowsForName_ThrowsConcurrencyException()
     {
-        // The name has never been inserted; no documents exist for it. The persistor
-        // must raise KeyNotFoundException rather than ConcurrencyException so callers
-        // can distinguish a wrong-name mistake from a concurrent-removal race.
+        // The name has never been inserted; no documents exist for it. The contract
+        // on IAggregatorPersistor.RemoveDataAsync names ConcurrencyException for any
+        // "row could not be located" outcome — both the empty-bucket case and the
+        // wrong-CorrelationId case — so the failure shape matches the InMemory persistor.
         var dbName = _fixture.GetUniqueDatabaseName("removedist1");
         var persistor = BuildPersistor(dbName);
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+        var ex = await Assert.ThrowsAsync<ConcurrencyException>(() =>
             persistor.RemoveDataAsync("never-existed", Guid.NewGuid()));
+        Assert.Contains("no rows for Name", ex.Message);
     }
 
     [Fact]

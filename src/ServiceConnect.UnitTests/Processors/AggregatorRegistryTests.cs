@@ -205,10 +205,10 @@ file class ArgFoo(Guid c) : Message(c) { public string Val { get; set; } = ""; }
 
 file class ArgFooAggregator : Aggregator<ArgFoo>
 {
-    public IList<ArgFoo>? Executed { get; private set; }
+    public IReadOnlyList<ArgFoo>? Executed { get; private set; }
     public override int BatchSize() => 42;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(7);
-    public override Task ExecuteAsync(IList<ArgFoo> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<ArgFoo> messages, CancellationToken cancellationToken = default)
     {
         Executed = messages;
         return Task.CompletedTask;
@@ -217,7 +217,7 @@ file class ArgFooAggregator : Aggregator<ArgFoo>
 
 file class ArgSecondFooAggregator : Aggregator<ArgFoo>
 {
-    public override Task ExecuteAsync(IList<ArgFoo> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public override Task ExecuteAsync(IReadOnlyList<ArgFoo> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 file class ArgFooMessageHandler : IMessageHandler<ArgFoo>
@@ -231,6 +231,6 @@ file class ArgBarAggregator(int batchSize, TimeSpan timeout) : Aggregator<ArgBar
 {
     public override int BatchSize() => batchSize;
     public override TimeSpan Timeout() => timeout;
-    public override Task ExecuteAsync(IList<ArgBar> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<ArgBar> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }

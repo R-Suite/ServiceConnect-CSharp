@@ -76,10 +76,14 @@ internal sealed class MessageAuditPublisher
         // successfully-handled delivery.
         try
         {
+            // mandatory:true so unroutable audit messages (queue purged, exchange wrong,
+            // binding broken) raise PublishException instead of being silently dropped at
+            // the broker — otherwise the drop counter only fires on transport failures
+            // and topology problems are invisible.
             await channel.BasicPublishAsync(
                 _queueConfiguration.AuditQueueName,
                 string.Empty, // audit direct-exchange binds with empty routing key; AuditRoutingKey is ignored
-                mandatory: false,
+                mandatory: true,
                 props,
                 args.Body,
                 cancellationToken).ConfigureAwait(false);
@@ -88,6 +92,22 @@ internal sealed class MessageAuditPublisher
         {
             throw;
         }
+        catch (global::RabbitMQ.Client.Exceptions.PublishException pex)
+        {
+            // mandatory:true unroutable returns surface as PublishException — these mean the
+            // audit topology is broken (binding removed, queue purged), NOT a transient
+            // transport failure. Tag distinctly so operators can alert on misconfigured-audit
+            // separately from broker-down events; otherwise a stale audit binding produces
+            // the same drop-counter shape as a real outage and dashboards lose signal.
+            _logger.LogWarning(pex,
+                "Audit publish unroutable for message {MessageType} — audit topology likely misconfigured; original delivery is acked normally.",
+                messageType ?? "<unknown>");
+            ServiceConnectMeter.AddAuditDrop(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "error.type", "unroutable" },
+            });
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
@@ -95,8 +115,9 @@ internal sealed class MessageAuditPublisher
                 messageType ?? "<unknown>");
             // Audit drops are observable through the messaging.serviceconnect.audit.drops
             // counter so operators can alert on broker-side audit failures without parsing
-            // logs. The audit queue is a single global destination per the spec — no
-            // messaging.destination.name tag.
+            // logs. PublishException is handled above with a distinct `error.type=unroutable`
+            // tag; the remaining catch covers transport / IO failures. The audit queue is a
+            // single global destination per the spec — no messaging.destination.name tag.
             ServiceConnectMeter.AddAuditDrop(new TagList
             {
                 { "messaging.system", "rabbitmq" },

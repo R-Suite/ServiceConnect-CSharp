@@ -96,9 +96,23 @@ internal sealed class ProcessManagerProcessor(
         }
 
         // ConfigureMapper may read per-instance handler state, so build the mapper against
-        // the freshly-resolved handler each delivery rather than memoising one mapper.
+        // the freshly-resolved handler each delivery rather than memoising one mapper. Wrap
+        // any user exception in a typed PersistenceException — without the wrap, a raw
+        // user-thrown exception would surface as the dispatch failure with no context, and
+        // the broker retry loop would keep redelivering the same poison message indefinitely.
         var mapper = new DefaultProcessManagerPropertyMapper();
-        descriptor.ConfigureMapper(handler, mapper);
+        try
+        {
+            descriptor.ConfigureMapper(handler, mapper);
+        }
+        catch (Exception ex)
+        {
+            throw new PersistenceException(
+                $"ConfigureMapper threw while building the property mapper for {descriptor.ProcessHandlerInterfaceType.Name} (message type '{messageType.FullName}'). " +
+                "ConfigureMapper must not throw — it is invoked once per delivery to build the saga-to-message property mapping. " +
+                "See the inner exception for the user-thrown failure.",
+                ex);
+        }
 
         // Run the find→invoke→update cycle exactly once per delivery. A previous version
         // looped on ConcurrencyException, but every retry re-invoked the user's handler —
@@ -166,11 +180,23 @@ internal sealed class ProcessManagerProcessor(
             }
             catch
             {
-                // Fall through to CorrelationId fallback; FindData will rethrow with a typed wrapper.
+                // Fall through to fallback key; FindData will rethrow with a typed wrapper.
             }
         }
 
-        return new SagaLockKey(descriptor.DataType, msg.CorrelationId);
+        // Fallback key when the user's mapping doesn't resolve. msg.CorrelationId is the
+        // only stable per-message identifier the framework can rely on from this surface
+        // (the wire MessageId lives in headers and isn't reachable here). When it's
+        // Guid.Empty — usually because the producer forgot to stamp CorrelationId — every
+        // empty-correlation message of the same saga DataType would otherwise key against
+        // (DataType, Guid.Empty), creating a global pseudo-lock that serialises unrelated
+        // sagas. Use a fresh Guid per-message in that case: the lock becomes effectively
+        // exclusive to this delivery, so unrelated empty-correlation messages run in
+        // parallel. The trade-off is that two redeliveries of the SAME empty-correlation
+        // message no longer share a lock — but the persistor's correlation-keyed find
+        // wouldn't have matched them anyway, so the lock was already meaningless.
+        var fallbackKey = msg.CorrelationId != Guid.Empty ? msg.CorrelationId : Guid.NewGuid();
+        return new SagaLockKey(descriptor.DataType, fallbackKey);
     }
 
     private CorrelationLock AcquireCorrelationLock(SagaLockKey key)
@@ -266,11 +292,11 @@ internal sealed class ProcessManagerProcessor(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Process-manager handler threw for {MessageType}; persisting partial saga state before rethrow", messageType.Name);
+                logger.LogError(ex, "Process-manager handler threw for {MessageType}; attempting best-effort persist before rethrow", messageType.Name);
                 handlerThrew = true;
                 try
                 {
-                    await PersistAsync(finder, descriptor, persistenceData, data, isNew, cancellationToken).ConfigureAwait(false);
+                    await PersistAsync(finder, descriptor, mapper, message, persistenceData, data, isNew, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -278,36 +304,28 @@ internal sealed class ProcessManagerProcessor(
                     // original handler exception propagate. Mutation may not be durable;
                     // the redelivery path still recovers — it just re-runs from stale state.
                 }
-                catch (ConcurrencyException)
+                catch (ConcurrencyException raceEx)
                 {
-                    // The new-saga cross-process race lost: another writer inserted first.
-                    // The work is recoverable as Find→Update on the now-existing row, so try
-                    // once before giving up. If the second find still misses (extremely
-                    // unlikely — the winning insert is durable by the time we got the
-                    // ConcurrencyException), or the update also throws, fall through to the
-                    // generic catch below and let the original handler exception propagate.
-                    try
+                    // Two distinct shapes reach this catch:
+                    //   (a) isNew=true: a peer worker won the insert race for a never-before-seen
+                    //       correlation id. Our handler ran against fresh CreateData() state; the
+                    //       winner's row is durable; our local mutations are not.
+                    //   (b) isNew=false: the row exists and a peer updated it to a newer version
+                    //       between our FindData and our UpdateData. Our handler ran against
+                    //       version N; the store now holds version N+1 (or later).
+                    // Both shapes resolve identically — redelivery re-finds the durable state and
+                    // re-runs the handler from it, idempotency invariants on the handler permitting.
+                    // Log the actual shape so operators don't chase the wrong race.
+                    if (isNew)
                     {
-                        var freshFind = await descriptor.FindData(finder, mapper, message, cancellationToken).ConfigureAwait(false);
-                        if (freshFind is not null)
-                        {
-                            await descriptor.UpdateData(finder, freshFind, cancellationToken).ConfigureAwait(false);
-                        }
-                        else
-                        {
-                            logger.LogWarning(
-                                "Best-effort persist for {MessageType}: race winner's row not visible on re-find; partial saga state was not persisted",
-                                messageType.Name);
-                        }
+                        logger.LogWarning(raceEx,
+                            "Best-effort persist for {MessageType}: cross-process new-saga insert race lost. The peer's insert won; our handler mutations are not durable. Redelivery will re-run from the durable state.",
+                            messageType.Name);
                     }
-                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                    else
                     {
-                        // Cancellation cuts the recovery path; redelivery will re-run from stale state.
-                    }
-                    catch (Exception recoverEx)
-                    {
-                        logger.LogError(recoverEx,
-                            "Best-effort persist Find→Update recovery after concurrency loss also failed for {MessageType}; original exception will be rethrown",
+                        logger.LogWarning(raceEx,
+                            "Best-effort persist for {MessageType}: optimistic-concurrency conflict on update — a peer updated the saga to a newer version mid-handler. Our handler mutations are not durable. Redelivery will re-find the current version and re-run the handler.",
                             messageType.Name);
                     }
                 }
@@ -329,13 +347,15 @@ internal sealed class ProcessManagerProcessor(
         // handled the failure path so this only runs when handlerThrew is false.
         if (!handlerThrew)
         {
-            await PersistAsync(finder, descriptor, persistenceData, data, isNew, cancellationToken).ConfigureAwait(false);
+            await PersistAsync(finder, descriptor, mapper, message, persistenceData, data, isNew, cancellationToken).ConfigureAwait(false);
         }
     }
 
     private static async Task PersistAsync(
         IProcessManagerFinder finder,
         ProcessManagerDescriptor descriptor,
+        IProcessManagerPropertyMapper mapper,
+        Message message,
         object? persistenceData,
         object data,
         bool isNew,
@@ -344,10 +364,44 @@ internal sealed class ProcessManagerProcessor(
         if (isNew)
         {
             await finder.InsertDataAsync((IProcessManagerData)data, cancellationToken).ConfigureAwait(false);
+            return;
         }
-        else
+
+        // Handler-driven physical completion: the documented saga-completion pattern
+        // (IProcessManagerFinder.DeleteDataAsync xmldoc) lets a handler resolve the
+        // finder from DI and delete the saga's row mid-handler. If the handler did
+        // so and then returned cleanly, the row is gone — UpdateData against the
+        // captured persistenceData would throw ConcurrencyException, message goes to
+        // retry, redelivery sees a missing saga and resurrects it via CreateData().
+        // Re-find here so a handler that completed the saga sees its decision respected:
+        //   - re-find returns null: handler deleted; skip the update; saga stays completed.
+        //   - re-find returns non-null AND Version moved: handler called UpdateData itself.
+        //     Re-running PersistAsync's UpdateData against the captured (now-stale) Version
+        //     would race-fail as ConcurrencyException → broker NACK → handler re-runs with
+        //     all side effects replayed. Skip; the handler's own UpdateData call already
+        //     committed the intended state.
+        //   - re-find returns non-null AND Version unchanged: handler did not persist;
+        //     proceed with UpdateData, which still uses the original captured Version so
+        //     concurrent peer updates race-fail as ConcurrencyException (the intended
+        //     optimistic-concurrency path).
+        var freshFind = await descriptor.FindData(finder, mapper, message, cancellationToken).ConfigureAwait(false);
+        if (freshFind is null)
         {
-            await descriptor.UpdateData(finder, persistenceData!, cancellationToken).ConfigureAwait(false);
+            return;
         }
+
+        // Cast both wrappers to IVersioned for the comparison. The persistor returns
+        // typed MemoryData<T> / MongoDbData<T>; both implement IVersioned per
+        // IProcessManagerFinder's contract. A version mismatch indicates handler-driven
+        // persistence happened during dispatch — the framework's optimistic-concurrency
+        // update would now race-fail; skip to preserve handler side-effect idempotence.
+        if (persistenceData is IVersioned originalVersioned
+            && freshFind is IVersioned currentVersioned
+            && originalVersioned.Version != currentVersioned.Version)
+        {
+            return;
+        }
+
+        await descriptor.UpdateData(finder, persistenceData!, cancellationToken).ConfigureAwait(false);
     }
 }

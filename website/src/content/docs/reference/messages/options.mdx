@@ -63,19 +63,7 @@ public string? EndPoint { get; init; }
 
 Gets the single destination endpoint.
 
-**Remarks.** Default is `null`. When set, overrides the queue mapping configured for the message type. Mutually exclusive with `EndPoints`.
-
----
-
-### `EndPoints`
-
-```csharp
-public IReadOnlyList<string>? EndPoints { get; init; }
-```
-
-Gets the destination endpoints when sending to multiple queues.
-
-**Remarks.** Default is `null`. Use this when a single logical send should be delivered to several queues in one call. Any `IReadOnlyList<string>` implementation — `List<string>`, an immutable list, an array — is assignable at construction time via the object initialiser.
+**Remarks.** Default is `null`. When set, overrides the queue mapping configured for the message type. To send to multiple endpoints, use `IBus.SendToManyAsync` with the explicit `endPoints` parameter (the `SendOptions.EndPoint` field is ignored by `SendToManyAsync` — the explicit list always wins).
 
 ## `RequestOptions`
 
@@ -84,10 +72,10 @@ Passed to `IBus.SendRequestAsync` and `IBus.SendRequestMultiAsync`. A `readonly 
 ### `DefaultTimeoutMs`
 
 ```csharp
-public const int DefaultTimeoutMs = 10_000;
+public static readonly int DefaultTimeoutMs = 10_000;
 ```
 
-The default request timeout, in milliseconds (10 seconds).
+The default request timeout, in milliseconds (10 seconds). Declared `static readonly` rather than `const` so a future tuning of the default doesn't require every consumer to recompile to pick up the change — `const` values are inlined into the consumer's binary at compile time and frozen, whereas `static readonly` is resolved at runtime.
 
 ---
 
@@ -123,19 +111,7 @@ public string? EndPoint { get; init; }
 
 Gets the single destination endpoint for the request.
 
-**Remarks.** Default is `null`. Overrides the configured queue mapping for the request message type. Mutually exclusive with `EndPoints`.
-
----
-
-### `EndPoints`
-
-```csharp
-public IReadOnlyList<string>? EndPoints { get; init; }
-```
-
-Gets the destination endpoints when broadcasting a multi-request.
-
-**Remarks.** Default is `null`. Used by `SendRequestMultiAsync` to fan out to several respondents. Mutually exclusive with `EndPoint`.
+**Remarks.** Default is `null`. Overrides the configured queue mapping for the request message type. `PublishRequestAsync` requires `EndPoint` to be `null` or empty (it's a fanout-only operation); a non-empty value throws `ArgumentException`.
 
 ---
 
@@ -164,13 +140,12 @@ public int? ExpectedReplyCount { get; init; }
 Number of replies the multi-request should wait for before completing. Only consulted by `SendRequestMultiAsync`.
 
 <Aside type="note" title="ExpectedReplyCount semantics">
-  The property has three modes:
+  The property has two modes:
 
-  - **Positive value** — the call completes as soon as that many replies have arrived, or when `Timeout` elapses, whichever happens first.
-  - **Zero or negative** — the call always waits the full `Timeout` and returns every reply received during the window.
-  - **`null` (default)** — falls back to `EndPoints.Count` when `EndPoints` is set; otherwise behaves as the zero-or-negative case (timeout-only).
+  - **Positive value N** — the call completes as soon as `N` replies have arrived. If fewer than `N` arrive before `Timeout` elapses, the task throws `RequestTimeoutException` with the partials available on `RequestTimeoutException.PartialReplies`.
+  - **Zero, negative, or `null` (default)** — the call always waits the full `Timeout` and returns every reply received during the window (the silent-partial-return mode).
 
-  Set a positive count when you know how many respondents to expect and want to return as soon as they have all replied; leave it unset (or zero) when you want to drain the full window.
+  Set a positive count when you know how many respondents to expect AND want to catch under-delivery as a typed exception; leave it unset (or zero) when you want to drain the full window regardless of how many reply.
 </Aside>
 
 ## Usage

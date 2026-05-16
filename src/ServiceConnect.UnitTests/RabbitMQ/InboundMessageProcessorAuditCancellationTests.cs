@@ -88,7 +88,7 @@ public sealed class InboundMessageProcessorAuditCancellationTests
             shutdownPublishToken: () => shutdownCts.Token);
 
         // Corrected: the audit OCE is SWALLOWED — processor returns normally so the message is ack'd.
-        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None);
+        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None);
 
         // Returns true (acks the original message).
         Assert.True(processed);

@@ -19,9 +19,9 @@ public class MongoDbTimeoutStoreIndexMigrationTests
     }
 
     private static string RenderKeys(IndexKeysDefinition<TimeoutData> keys) =>
-        keys.Render(
+        keys.Render(new RenderArgs<TimeoutData>(
             BsonSerializer.LookupSerializer<TimeoutData>(),
-            BsonSerializer.SerializerRegistry).ToJson();
+            BsonSerializer.SerializerRegistry)).ToJson();
 
     private static (MongoDbTimeoutStore Store, Mock<IMongoIndexManager<TimeoutData>> Indexes)
         BuildStore(

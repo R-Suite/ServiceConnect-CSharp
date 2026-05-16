@@ -5,7 +5,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// <summary>
 /// Represents a RabbitMQ connection abstraction used by ServiceConnect transport components.
 /// </summary>
-public interface IServiceConnectConnection : IAsyncDisposable
+internal interface IServiceConnectConnection : IAsyncDisposable
 {
     /// <summary>
     /// Creates a new channel on the underlying RabbitMQ connection.

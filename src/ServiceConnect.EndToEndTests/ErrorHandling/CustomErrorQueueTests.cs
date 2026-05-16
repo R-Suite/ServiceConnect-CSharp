@@ -37,7 +37,7 @@ public class CustomErrorQueueTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddTransient<IMessageHandler<TestMessage>>(_ =>
             new CallbackHandler<TestMessage>(_ =>
                 throw new InvalidOperationException("Always fails")));

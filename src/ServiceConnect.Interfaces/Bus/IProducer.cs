@@ -15,6 +15,26 @@ public interface IProducer : IAsyncDisposable
     Task PublishAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Publishes a serialized message to subscribers of the specified type, with an AMQP-level
+    /// routing key for topic-exchange dispatch.
+    /// </summary>
+    /// <param name="type">The logical message type.</param>
+    /// <param name="body">The serialized message body.</param>
+    /// <param name="routingKey">The transport routing key (empty string for fanout dispatch).</param>
+    /// <param name="headers">Optional read-only headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the publish operation.</param>
+    /// <remarks>
+    /// Default-interface-method shim: third-party <see cref="IProducer"/> implementations that
+    /// predate this overload fall back to the no-routing-key path (the AMQP routing key is
+    /// dropped — the same behaviour as before). First-party transports override this to honour
+    /// the routing key on the wire so <c>PublishOptions.RoutingKey</c> is no longer silently
+    /// ignored. Callers must continue to read <see cref="HeaderKeys.RoutingKey"/> for
+    /// application-level routing concepts; the parameter here drives only the transport.
+    /// </remarks>
+    Task PublishAsync(Type type, ReadOnlyMemory<byte> body, string? routingKey, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+        => PublishAsync(type, body, headers, cancellationToken);
+
+    /// <summary>
     /// Sends a serialized message to the configured queue for the specified type.
     /// </summary>
     /// <param name="type">The logical message type used to resolve destination queues.</param>
@@ -91,9 +111,4 @@ public interface IProducer : IAsyncDisposable
     /// </remarks>
     ProducerHealthSnapshot GetHealthSnapshot()
         => new(IsHealthy, HasAttemptedConnection);
-
-    /// <summary>
-    /// Disconnects the producer from the broker.
-    /// </summary>
-    Task DisconnectAsync(CancellationToken cancellationToken = default);
 }

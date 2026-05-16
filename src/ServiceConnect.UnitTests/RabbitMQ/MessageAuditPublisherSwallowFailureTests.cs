@@ -136,8 +136,10 @@ public class MessageAuditPublisherSwallowFailureTests
         Assert.Equal("msg-audit", capturedProps.MessageId);
         Assert.Equal(new AmqpTimestamp(1234567890), capturedProps.Timestamp);
         Assert.Equal("AuditMsg", capturedProps.Type);
-        Assert.Equal("guest", capturedProps.UserId);
-        Assert.Equal("test-app", capturedProps.AppId);
-        Assert.Equal("cluster-1", capturedProps.ClusterId);
+        // UserId / AppId / ClusterId are deliberately dropped on republish — see
+        // BasicPropertiesCopier's xmldoc for the validated_user_id rationale.
+        Assert.False(capturedProps.IsUserIdPresent());
+        Assert.False(capturedProps.IsAppIdPresent());
+        Assert.False(capturedProps.IsClusterIdPresent());
     }
 }

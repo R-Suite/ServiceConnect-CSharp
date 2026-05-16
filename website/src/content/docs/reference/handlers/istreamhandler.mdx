@@ -75,23 +75,27 @@ public sealed class FileUploadStreamHandler : IStreamHandler<FileUpload>
         var destination = _storage.OpenWrite(message.FileName);
         try
         {
-            var buffer = new byte[64 * 1024];
-            int read;
-            while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+            // IMessageBusReadStream materialises the fully reassembled payload via Read()
+            // (returns byte[]) or ReadSequence() (returns ReadOnlySequence<byte>). For very
+            // large payloads, prefer ReadSequence() to walk segment-by-segment without
+            // forcing a single contiguous allocation.
+            foreach (var segment in stream.ReadSequence())
             {
-                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+                await destination.WriteAsync(segment, cancellationToken);
             }
         }
         finally
         {
             destination.Dispose();
-            stream.Dispose();
+            // IMessageBusReadStream is not IDisposable in v7 — the handler does not own
+            // the stream's lifetime. Broker resources are released when the dispatch
+            // completes and the StreamProcessor evicts the per-sequence entry.
         }
     }
 }
 ```
 
-Streaming handlers are ideal for large uploads — the file never materialises in memory as a single `byte[]`. Read from `stream` in chunk-sized buffers and write through to durable storage, then dispose the stream so the broker resources can be released.
+Streaming handlers are ideal for large uploads — the file never materialises in memory as a single `byte[]` if the handler walks `ReadSequence()` segment-by-segment. The framework owns the stream's lifetime — handlers must not dispose it.
 
 ## See also
 

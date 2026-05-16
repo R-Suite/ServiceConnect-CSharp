@@ -32,7 +32,7 @@ public class AggregatorProcessorUnresolvedGateTests
             new() { MessageType = typeof(AggUnrTestMessage), HandlerType = typeof(AggUnrTestAggregator) }
         };
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggUnrTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -86,7 +86,7 @@ public class AggregatorProcessorUnresolvedGateTests
             new() { MessageType = typeof(AggUnrTestMessage), HandlerType = typeof(AggUnrTestAggregator) }
         };
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggUnrTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -122,6 +122,6 @@ file sealed class AggUnrTestAggregator(int batchSize) : Aggregator<AggUnrTestMes
 
     public override int BatchSize() => _batchSize;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(60);
-    public override Task ExecuteAsync(IList<AggUnrTestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<AggUnrTestMessage> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }

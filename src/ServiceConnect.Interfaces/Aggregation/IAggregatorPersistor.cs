@@ -68,6 +68,29 @@ public interface IAggregatorPersistor
     Task RemoveSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Releases the lease held by the supplied snapshot so the rows become immediately
+    /// re-claimable by a subsequent <see cref="GetSnapshotAsync"/>. Called by the
+    /// aggregator processor on handler failure — without an explicit release the rows
+    /// would sit leased until the persistor's lease TTL expires (5 minutes on the
+    /// MongoDB persistor by default), during which the next redelivery's snapshot
+    /// is empty and the handler is never re-invoked.
+    /// </summary>
+    /// <param name="name">The logical aggregator name.</param>
+    /// <param name="snapshot">The snapshot whose lease should be released.</param>
+    /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <remarks>
+    /// Default-interface-method shim: persistors that don't lease (InMemory, third-party
+    /// implementations that predate this method) return immediately — the no-op semantics
+    /// match a persistor where rows are always re-claimable by id alone. Persistors that
+    /// stamp a <c>LockedBy</c>/<c>LockExpiresAt</c> pair on rows during snapshot acquisition
+    /// (the MongoDB persistor) MUST override to clear those columns for the snapshot's
+    /// session id; otherwise the handler-failure → lease-strand → silent-empty-redelivery
+    /// failure mode at the processor level is unaddressed.
+    /// </remarks>
+    Task ReleaseSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default) =>
+        Task.CompletedTask;
+
+    /// <summary>
     /// Counts the number of persisted messages for the named aggregator.
     /// </summary>
     /// <param name="name">The logical aggregator name.</param>

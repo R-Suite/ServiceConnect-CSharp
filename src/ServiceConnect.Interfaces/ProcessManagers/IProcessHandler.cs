@@ -20,11 +20,21 @@ public interface IProcessHandler<TData, TMessage>
     /// from the transport consume context and signals cooperative shutdown.
     /// </summary>
     /// <remarks>
-    /// v8: <c>Context</c> moved from a property to a parameter (same rationale as
-    /// <see cref="IMessageHandler{TMessage}.HandleAsync"/>). Migration: add
-    /// <c>IConsumeContext context</c> between <paramref name="data"/> and
-    /// <paramref name="cancellationToken"/>, and replace <c>this.Context</c> reads
-    /// with <c>context</c>.
+    /// <para>
+    /// <b>Idempotency invariant.</b> The handler MUST be safe to invoke more than once
+    /// for the same logical message. ServiceConnect delivers at-least-once: a transport
+    /// redelivery (consumer crash before ack, broker requeue, optimistic-concurrency
+    /// retry on <see cref="Exceptions.ConcurrencyException"/>) can replay <em>any</em>
+    /// message into this handler, including after the handler has already mutated
+    /// <paramref name="data"/> and committed the persistence write but the broker
+    /// ack failed. Side effects with external observability — outbound bus sends,
+    /// HTTP calls, DB writes outside the saga, file I/O — must therefore be guarded
+    /// by an idempotency check (e.g., a state flag in <paramref name="data"/>, an
+    /// IdempotencyKey on the outbound message, an upsert with a deterministic key).
+    /// A handler that unconditionally <c>SendAsync</c>s an outbound command on every
+    /// invocation will double-send on retry; that is the framework's contract, not
+    /// a bug.
+    /// </para>
     /// </remarks>
     Task HandleAsync(TMessage message, TData data, IConsumeContext context, CancellationToken cancellationToken = default);
 

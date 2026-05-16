@@ -135,7 +135,7 @@ public sealed class InboundMessageProcessorTransportTests
         var processor = MakeRetryPublishProcessor(channelMock, transportException, loggerMock);
 
         var thrown = await Assert.ThrowsAsync<AlreadyClosedException>(() =>
-            processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None));
+            processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None));
 
         Assert.Same(transportException, thrown);
     }
@@ -152,7 +152,7 @@ public sealed class InboundMessageProcessorTransportTests
         var processor = MakeRetryPublishProcessor(channelMock, transportException, loggerMock);
 
         var thrown = await Assert.ThrowsAsync<BrokerUnreachableException>(() =>
-            processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None));
+            processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None));
 
         Assert.Same(transportException, thrown);
     }
@@ -171,7 +171,7 @@ public sealed class InboundMessageProcessorTransportTests
         var processor = MakeRetryPublishProcessor(channelMock, poisonException, loggerMock);
 
         // Returns true (acks) — does not throw.
-        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None);
+        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None);
         Assert.True(processed);
     }
 
@@ -190,7 +190,7 @@ public sealed class InboundMessageProcessorTransportTests
         var processor = MakeTerminalPublishProcessor(channelMock, transportException, loggerMock);
 
         var thrown = await Assert.ThrowsAsync<AlreadyClosedException>(() =>
-            processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None));
+            processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None));
 
         Assert.Same(transportException, thrown);
     }
@@ -206,7 +206,7 @@ public sealed class InboundMessageProcessorTransportTests
 
         var processor = MakeTerminalPublishProcessor(channelMock, poisonException, loggerMock);
 
-        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None);
+        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None);
         Assert.True(processed);
     }
 
@@ -222,7 +222,7 @@ public sealed class InboundMessageProcessorTransportTests
         var processor = MakeTerminalPublishProcessor(channelMock, transportException, loggerMock);
 
         var thrown = await Assert.ThrowsAsync<BrokerUnreachableException>(() =>
-            processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None));
+            processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None));
 
         Assert.Same(transportException, thrown);
     }

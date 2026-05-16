@@ -79,7 +79,7 @@ public sealed class InboundMessageProcessorMetricsTests
             shutdownPublishToken: () => CancellationToken.None);
 
         // The catch swallows the poison exception and returns true → message is acked.
-        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None);
+        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None);
         Assert.True(processed);
 
         var record = Assert.Single(collector.GetLongRecords(MetricNames.RetryDrops));
@@ -135,7 +135,7 @@ public sealed class InboundMessageProcessorMetricsTests
             shutdownTimedOut: () => false,
             shutdownPublishToken: () => CancellationToken.None);
 
-        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), CancellationToken.None);
+        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None);
         Assert.True(processed);
 
         var record = Assert.Single(collector.GetLongRecords(MetricNames.AuditDrops));

@@ -106,7 +106,7 @@ services.AddServiceConnect(builder =>
         transport.Host = "localhost";
         transport.Username = "guest";
         transport.Password = "guest";
-        transport.SslEnabled = false; // local-dev plaintext
+        transport.SslEnabled = false; // v7 defaults TLS on; set false against the plaintext local broker only.
     });
     builder.ConfigureQueues(queues => queues.QueueName = "getting-started-sender");
 });
@@ -173,7 +173,7 @@ services.AddServiceConnect(builder =>
         transport.Host = "localhost";
         transport.Username = "guest";
         transport.Password = "guest";
-        transport.SslEnabled = false; // local-dev plaintext
+        transport.SslEnabled = false; // v7 defaults TLS on; set false against the plaintext local broker only.
     });
     builder.ConfigureQueues(queues => queues.QueueName = "getting-started-consumer");
     builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);

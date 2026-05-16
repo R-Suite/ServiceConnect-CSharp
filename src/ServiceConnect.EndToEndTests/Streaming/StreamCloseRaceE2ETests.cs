@@ -30,6 +30,24 @@ public class StreamCloseRaceE2ETests(MessagingFixture fixture)
         var consumerQueue = _fixture.GetUniqueQueueName("stream-close-race-consumer");
         var producerQueue = _fixture.GetUniqueQueueName("stream-close-race-producer");
 
+        // Producer publishes stream packets with mandatory:true, so the consumer queue
+        // must exist on the broker before writes start — otherwise every SendBytesAsync
+        // would fail with NO_ROUTE and the test would observe transport exceptions rather
+        // than the close-race semantics it's trying to assert on. Pre-declare directly
+        // via RabbitMQ.Client (the producer-only bus below never starts a consumer).
+        var preDeclareFactory = new global::RabbitMQ.Client.ConnectionFactory
+        {
+            HostName = _fixture.RabbitMqHostname,
+            Port = _fixture.RabbitMqPort,
+            UserName = _fixture.RabbitMqUsername,
+            Password = _fixture.RabbitMqPassword,
+        };
+        await using (var preConn = await preDeclareFactory.CreateConnectionAsync())
+        await using (var preCh = await preConn.CreateChannelAsync())
+        {
+            await preCh.QueueDeclareAsync(consumerQueue, durable: false, exclusive: false, autoDelete: true);
+        }
+
         var payload = new byte[packetSize];
         new Random(42).NextBytes(payload);
 
@@ -38,7 +56,7 @@ public class StreamCloseRaceE2ETests(MessagingFixture fixture)
         // valid TestMessage, so a consumer-side assertion would never fire.
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>([]);
+        producerServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>

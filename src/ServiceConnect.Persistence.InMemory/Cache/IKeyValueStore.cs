@@ -3,7 +3,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Defines key-based storage operations used by the in-memory persistence components.
 /// </summary>
-public interface IKeyValueStore
+internal interface IKeyValueStore
 {
     /// <summary>
     /// Adds a value that expires at the specified absolute time.
@@ -47,8 +47,10 @@ public interface IKeyValueStore
     /// Replaces the value stored for an existing key.
     /// </summary>
     /// <exception cref="KeyNotFoundException">
-    /// Thrown when <paramref name="key"/> is not present. Pre-v8 this was a silent
-    /// no-op; v8 throws so callers fail deterministically. Use <see cref="Add{TKey,TValue}(TKey, TValue, DateTimeOffset, CacheItemPriority)"/> to insert new keys.
+    /// Thrown when <paramref name="key"/> is not present, so callers fail deterministically
+    /// rather than silently no-op'ing on a missing key. Use
+    /// <see cref="Add{TKey,TValue}(TKey, TValue, DateTimeOffset, CacheItemPriority)"/> to
+    /// insert new keys.
     /// </exception>
     void Update<TKey, TValue>(TKey key, TValue value);
 }

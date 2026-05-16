@@ -82,8 +82,8 @@ public sealed class ProducerPublishTimeoutResetTests
     {
         ProducerInternals.SetField(producer, "_model", channel);
         ProducerInternals.SetField(producer, "_connected", true);
-        var declared = ProducerInternals.GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declared["SystemObject"] = true;
+        var declared = ProducerInternals.GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declared["SystemObject"] = 0L;
     }
 
     private static int GetResetRequired(Producer producer) =>

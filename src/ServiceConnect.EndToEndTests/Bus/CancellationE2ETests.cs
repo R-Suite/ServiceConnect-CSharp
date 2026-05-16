@@ -17,7 +17,7 @@ public class CancellationE2ETests(MessagingFixture fixture)
     {
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>([]);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>([]);
 
         services.AddServiceConnect(builder =>
         {
@@ -76,6 +76,24 @@ public class CancellationE2ETests(MessagingFixture fixture)
         var requesterQueue = _fixture.GetUniqueQueueName("cancellation-request");
         await using var provider = BuildBus(requesterQueue, out var bus);
         await bus.StartConsumingAsync();
+
+        // Producer now publishes with mandatory:true so unrouted sends surface as
+        // PublishException. The request target ("cancellation-test-never-replied") must
+        // exist as a real queue for the test's "request fires, reply never arrives, CT
+        // wins the race" scenario — otherwise the send itself fails before cancellation
+        // gets a chance to race. The queue stays unconsumed so no reply is ever produced.
+        var factory = new global::RabbitMQ.Client.ConnectionFactory
+        {
+            HostName = _fixture.RabbitMqHostname,
+            Port = _fixture.RabbitMqPort,
+            UserName = _fixture.RabbitMqUsername,
+            Password = _fixture.RabbitMqPassword,
+        };
+        await using (var conn = await factory.CreateConnectionAsync())
+        await using (var ch = await conn.CreateChannelAsync())
+        {
+            await ch.QueueDeclareAsync("cancellation-test-never-replied", durable: false, exclusive: false, autoDelete: true);
+        }
 
         using var cts = new CancellationTokenSource();
 

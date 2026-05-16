@@ -32,7 +32,7 @@ public class CustomHeaderTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddTransient<IMessageHandler<TestMessage>>(_ =>
             new HeaderCaptureHandler(headers => tcs.TrySetResult(headers)));
 
@@ -109,7 +109,7 @@ public class CustomHeaderTests(MessagingFixture fixture)
 
         var responderServices = new ServiceCollection();
         responderServices.AddLogging();
-        responderServices.AddSingleton<IList<HandlerReference>>(responderHandlerReferences);
+        responderServices.AddSingleton<IReadOnlyList<HandlerReference>>(responderHandlerReferences);
         responderServices.AddTransient<IMessageHandler<TestRequest>, HeaderEchoReplyHandler>();
 
         responderServices.AddServiceConnect(builder =>
@@ -137,7 +137,7 @@ public class CustomHeaderTests(MessagingFixture fixture)
 
         var requesterServices = new ServiceCollection();
         requesterServices.AddLogging();
-        requesterServices.AddSingleton<IList<HandlerReference>>(requesterHandlerReferences);
+        requesterServices.AddSingleton<IReadOnlyList<HandlerReference>>(requesterHandlerReferences);
 
         requesterServices.AddServiceConnect(builder =>
         {

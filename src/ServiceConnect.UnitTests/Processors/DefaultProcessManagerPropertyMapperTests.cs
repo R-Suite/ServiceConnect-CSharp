@@ -71,17 +71,20 @@ public class DefaultProcessManagerPropertyMapperTests
     }
 
     [Fact]
-    public void ConfigureMapping_NestedMemberChain_Throws()
+    public void ConfigureMapping_NestedMemberChain_BuildsHierarchyInOuterToInnerOrder()
     {
-        // Chained member access (d => d.Inner.Id) must be rejected. Accepting it
-        // silently would produce an empty PropertiesHierarchy and the saga would
-        // later load the wrong correlation slice at dispatch time.
+        // Chained member access (d => d.Inner.Id) is supported: the mapper walks
+        // the MemberExpression from outer to inner so PropertiesHierarchy carries
+        // both names in the order the persistor's foreach-with-Reverse will need
+        // (Inner first, Id last) to navigate data.Data → .Inner → .Id at dispatch.
         var mapper = new DefaultProcessManagerPropertyMapper();
 
-        var ex = Assert.Throws<ArgumentException>(() =>
-            mapper.ConfigureMapping<FakePmDataWithNested, FakePmMsg>(d => d.Inner.Id, m => m.OrderId));
+        mapper.ConfigureMapping<FakePmDataWithNested, FakePmMsg>(d => d.Inner.Id, m => m.OrderId);
 
-        Assert.Contains("direct property access", ex.Message);
+        var mapping = mapper.Mappings.Single();
+        Assert.Equal(2, mapping.PropertiesHierarchy.Count);
+        Assert.True(mapping.PropertiesHierarchy.ContainsKey("Inner"));
+        Assert.True(mapping.PropertiesHierarchy.ContainsKey("Id"));
     }
 
     [Fact]

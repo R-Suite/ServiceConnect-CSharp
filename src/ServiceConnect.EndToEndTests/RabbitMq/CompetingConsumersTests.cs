@@ -35,7 +35,7 @@ public class CompetingConsumersTests(MessagingFixture fixture)
 
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+            services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
             services.AddTransient<IMessageHandler<TestMessage>>(_ =>
                 new CallbackHandler<TestMessage>(msg =>
                 {
@@ -76,7 +76,7 @@ public class CompetingConsumersTests(MessagingFixture fixture)
         // We need a separate producer bus (its own queue) to send messages
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>([]);
+        producerServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>

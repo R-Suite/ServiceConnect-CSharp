@@ -38,9 +38,9 @@ public class MongoDbTimeoutStoreTests
         var now = new DateTimeOffset(2026, 4, 15, 8, 0, 0, TimeSpan.Zero);
 
         var filter = MongoDbTimeoutStore.BuildDueTimeoutFilter(now);
-        var rendered = filter.Render(
+        var rendered = filter.Render(new RenderArgs<TimeoutData>(
             BsonSerializer.LookupSerializer<TimeoutData>(),
-            BsonSerializer.SerializerRegistry);
+            BsonSerializer.SerializerRegistry));
 
         var json = rendered.ToJson();
 
@@ -140,17 +140,25 @@ public class MongoDbTimeoutStoreTests
 
     private static string RenderFilter(FilterDefinition<TimeoutData> filter)
     {
-        return filter.Render(
+        return filter.Render(new RenderArgs<TimeoutData>(
                 BsonSerializer.LookupSerializer<TimeoutData>(),
-                BsonSerializer.SerializerRegistry)
+                BsonSerializer.SerializerRegistry))
             .ToJson();
     }
 
+    // MongoDB.Driver 3.x always renders Guids in BSON-extended JSON as
+    // { "$binary": { "base64": "...", "subType": "04" } } (UUID subtype 4 / Standard
+    // representation) — substring-matching the Guid's hex form against the rendered JSON
+    // no longer works. This helper returns the base64 string the BSON layer produces for
+    // a given Guid under the Standard representation so tests can assert on it directly.
+    private static string GuidAsStandardBase64(Guid id) =>
+        Convert.ToBase64String(new BsonBinaryData(id, GuidRepresentation.Standard).Bytes);
+
     private static string RenderUpdate(UpdateDefinition<TimeoutData> update)
     {
-        return update.Render(
+        return update.Render(new RenderArgs<TimeoutData>(
                 BsonSerializer.LookupSerializer<TimeoutData>(),
-                BsonSerializer.SerializerRegistry)
+                BsonSerializer.SerializerRegistry))
             .ToJson();
     }
 
@@ -231,10 +239,10 @@ public class MongoDbTimeoutStoreTests
 
         var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", json);
-        Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(id), json, StringComparison.Ordinal);
         Assert.Contains("\"Locked\" : true", json);
         Assert.Contains("\"LockedBy\"", json);
-        Assert.Contains(lockOwner.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(lockOwner), json, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -264,15 +272,15 @@ public class MongoDbTimeoutStoreTests
 
         var filterJson = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", filterJson);
-        Assert.Contains(id.ToString(), filterJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(id), filterJson, StringComparison.Ordinal);
         Assert.Contains("\"Locked\" : true", filterJson);
         Assert.Contains("\"LockedBy\"", filterJson);
-        Assert.Contains(lockOwner.ToString(), filterJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(lockOwner), filterJson, StringComparison.Ordinal);
 
         var updateJson = RenderUpdate(Assert.IsAssignableFrom<UpdateDefinition<TimeoutData>>(capturedUpdate));
         Assert.Contains("\"Locked\" : false", updateJson);
         Assert.Contains("\"LockedBy\"", updateJson);
-        Assert.Contains(Guid.Empty.ToString(), updateJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(Guid.Empty), updateJson, StringComparison.Ordinal);
         Assert.Contains("\"LockExpiresAt\" : null", updateJson);
     }
 
@@ -380,7 +388,7 @@ public class MongoDbTimeoutStoreTests
 
         var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", json);
-        Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(id), json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Locked\"", json);
         Assert.DoesNotContain("\"LockedBy\"", json);
     }
@@ -453,13 +461,16 @@ public class MongoDbTimeoutStoreTests
         Assert.Equal(7, reaped);
         var filterJson = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"Locked\" : true", filterJson);
-        Assert.Contains("\"LockExpiresAt\"", filterJson);
+        // Lease-expired predicate now $$NOW-anchored: { "$expr": { "$lte": [ "$LockExpiresAt", "$$NOW" ] } }
+        Assert.Contains("\"$expr\"", filterJson);
         Assert.Contains("\"$lte\"", filterJson);
+        Assert.Contains("\"$LockExpiresAt\"", filterJson);
+        Assert.Contains("\"$$NOW\"", filterJson);
 
         var updateJson = RenderUpdate(Assert.IsAssignableFrom<UpdateDefinition<TimeoutData>>(capturedUpdate));
         Assert.Contains("\"Locked\" : false", updateJson);
         Assert.Contains("\"LockedBy\"", updateJson);
-        Assert.Contains(Guid.Empty.ToString(), updateJson, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(Guid.Empty), updateJson, StringComparison.Ordinal);
         Assert.Contains("\"LockExpiresAt\" : null", updateJson);
     }
 
@@ -575,7 +586,7 @@ public class MongoDbTimeoutStoreTests
 
         var json = RenderFilter(Assert.IsAssignableFrom<FilterDefinition<TimeoutData>>(capturedFilter));
         Assert.Contains("\"_id\"", json);
-        Assert.Contains(id.ToString(), json, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(GuidAsStandardBase64(id), json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"Locked\"", json);
         Assert.DoesNotContain("\"LockedBy\"", json);
     }

@@ -10,7 +10,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// <param name="transportSettings">The transport settings used to configure the connection factory.</param>
 /// <param name="queueName">The client-provided connection name used by RabbitMQ.</param>
 /// <param name="logger">The logger used for connection lifecycle events.</param>
-public sealed class Connection(ITransportConfiguration transportSettings, string queueName, ILogger logger) : IAsyncDisposable, IServiceConnectConnection
+internal sealed class Connection(ITransportConfiguration transportSettings, string queueName, ILogger logger) : IAsyncDisposable, IServiceConnectConnection
 {
     private IConnection? _connection;
     private readonly SemaphoreSlim _connectionLock = new(1, 1);
@@ -22,7 +22,8 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
     // with the supplied factory. Mirrors ProducerConnection.CreateConnectionForTests.
     internal Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>>? CreateConnectionForTests;
 
-    private readonly string[] _hosts = transportSettings.Host.Split(',');
+    private readonly string[] _hosts = (transportSettings ?? throw new ArgumentNullException(nameof(transportSettings)))
+        .Host?.Split(',') ?? throw new ArgumentException("transportSettings.Host must be set to a non-null comma-separated host list.", nameof(transportSettings));
 
     private async Task ConnectAsync(CancellationToken cancellationToken)
     {
@@ -53,28 +54,32 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         var connector = CreateConnectionForTests ?? ((f, h, n, ct) => f.CreateConnectionAsync(h, n, ct));
         var newConnection = await connector(connectionFactory, _hosts, queueName, cancellationToken).ConfigureAwait(false);
 
-        // Race window: DisposeAsync may have set _disposed and forced teardown (after a lock-wait
+        // Race window 1: DisposeAsync may have set _disposed and forced teardown (after a lock-wait
         // timeout) while we were creating. If so, tear down the just-built connection rather than
         // assigning it to a disposed instance.
         if (Volatile.Read(ref _disposed) != 0)
         {
-            try
-            {
-                if (newConnection.IsOpen)
-                {
-                    await newConnection.CloseAsync().ConfigureAwait(false);
-                }
-                newConnection.Dispose();
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "Error tearing down orphan connection after dispose-during-create race");
-            }
+            await TearDownOrphanAsync(newConnection).ConfigureAwait(false);
             throw new ObjectDisposedException(nameof(Connection),
                 "Connection was disposed while a connection create was in flight; the just-built connection has been torn down.");
         }
 
         _connection = newConnection;
+
+        // Race window 2: DisposeAsync may have timed out on the connection lock between our
+        // check above and the assignment, then read _connection as null (the prior value) and
+        // returned without tearing down. Re-check after assigning and clean up if so — we
+        // exchange to null so our orphan-teardown does not race a DisposeAsync that finally
+        // acquires the lock and sees the assigned-then-nulled value. This mirrors the pattern
+        // in ProducerConnection.CreateConnectionAsync.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            var orphan = Interlocked.Exchange(ref _connection, null);
+            await TearDownOrphanAsync(orphan).ConfigureAwait(false);
+            throw new ObjectDisposedException(nameof(Connection),
+                "Connection was disposed while a connection create was in flight; the just-built connection has been torn down.");
+        }
+
         _lifecycle.Attach(_connection);
         // VirtualHost is set on the ConnectionFactory (and thus the connection) but is not
         // surfaced on AmqpTcpEndpoint. Read it from the transport config — the value the
@@ -90,6 +95,26 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
 
     private ConnectionFactory BuildConnectionFactory() =>
         ConnectionFactoryBuilder.Build(transportSettings, logger);
+
+    private async Task TearDownOrphanAsync(IConnection? orphan)
+    {
+        if (orphan is null)
+        {
+            return;
+        }
+        try
+        {
+            if (orphan.IsOpen)
+            {
+                await orphan.CloseAsync().ConfigureAwait(false);
+            }
+            orphan.Dispose();
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Error tearing down orphan connection after dispose-during-create race");
+        }
+    }
 
     /// <summary>
     /// Determines whether the underlying RabbitMQ connection is open.
@@ -126,21 +151,36 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
         if (conn == null)
         {
             await ConnectAsync(cancellationToken).ConfigureAwait(false);
-            // Re-check _disposed after the await: a concurrent DisposeAsync could have set
-            // _disposed=1 and nulled _connection between ConnectAsync's lock release and our
-            // re-read below. Throwing ObjectDisposedException here surfaces the canonical
-            // signal rather than letting the null-coalesce produce a misleading
-            // InvalidOperationException("Connection was not initialized.").
-            if (Volatile.Read(ref _disposed) != 0)
+            // Read _connection BEFORE re-checking _disposed: a concurrent DisposeAsync sets
+            // _disposed=1 then nulls _connection. Reading _disposed first leaves a window
+            // where the disposal-check passes and the subsequent _connection read returns
+            // null — surfacing a misleading InvalidOperationException instead of the
+            // canonical ObjectDisposedException. Reading _connection first and only
+            // consulting _disposed on the null branch closes the window: a null _connection
+            // post-ConnectAsync can only be the result of an interleaving dispose.
+            conn = Volatile.Read(ref _connection);
+            if (conn is null)
             {
-                throw new ObjectDisposedException(nameof(Connection));
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    throw new ObjectDisposedException(nameof(Connection));
+                }
+                throw new InvalidOperationException("Connection was not initialized.");
             }
-
-            conn = Volatile.Read(ref _connection)
-                ?? throw new InvalidOperationException("Connection was not initialized.");
         }
 
-        return await conn.CreateChannelAsync(options, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return await conn.CreateChannelAsync(options, cancellationToken).ConfigureAwait(false);
+        }
+        catch (ObjectDisposedException) when (Volatile.Read(ref _disposed) != 0)
+        {
+            // Concurrent DisposeAsync tore down the underlying IConnection mid-call. The
+            // RabbitMQ.Client ODE carries ObjectName="IConnection" which leaks the inner
+            // type and breaks ObjectName-based callers; surface this Connection's name so
+            // the "our instance was disposed" signal is consistent across all race paths.
+            throw new ObjectDisposedException(nameof(Connection));
+        }
     }
 
     /// <summary>
@@ -153,6 +193,12 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
             return;
         }
 
+        // Share a single stopwatch budget across lock wait + connection close so the
+        // worst-case dispose latency is bounded by _disposeLockTimeout, not 2x. Without
+        // the shared budget a stalled broker swallowing close frames hangs DisposeAsync
+        // indefinitely after the semaphore wait, breaking container-orchestrated SIGTERM
+        // grace windows.
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         IConnection? conn = null;
         var acquired = await _connectionLock.WaitAsync(_disposeLockTimeout).ConfigureAwait(false);
         try
@@ -186,7 +232,25 @@ public sealed class Connection(ITransportConfiguration transportSettings, string
 
                 if (conn.IsOpen)
                 {
-                    await conn.CloseAsync().ConfigureAwait(false);
+                    var remaining = _disposeLockTimeout - stopwatch.Elapsed;
+                    if (remaining <= TimeSpan.Zero)
+                    {
+                        // Budget exhausted by the lock wait — issue a synchronous close with a
+                        // minimal timeout so we don't hang. The broker may still drop the close
+                        // frame, but we do not wait on the result.
+                        remaining = TimeSpan.FromMilliseconds(100);
+                    }
+                    using var closeCts = new CancellationTokenSource(remaining);
+                    try
+                    {
+                        await conn.CloseAsync(closeCts.Token).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (closeCts.IsCancellationRequested)
+                    {
+                        logger.LogWarning(
+                            "Connection.DisposeAsync timed out closing the connection within the remaining {Remaining} budget; proceeding with disposal.",
+                            remaining);
+                    }
                 }
 
                 conn.Dispose();

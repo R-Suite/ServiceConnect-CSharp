@@ -8,7 +8,7 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Discovers message, process, stream, and aggregator handlers from a set of assemblies.
 /// </summary>
-public static class HandlerScanner
+internal static class HandlerScanner
 {
     /// <summary>
     /// Scans the supplied assemblies and returns handler registrations keyed by handled message type.
@@ -16,11 +16,29 @@ public static class HandlerScanner
     /// <param name="assemblies">The assemblies to inspect.</param>
     /// <param name="logger">Optional logger; when supplied, partial-scan warnings from
     /// <see cref="ReflectionTypeLoadException"/> are reported with assembly name and loader exceptions.
-    /// Pass <see cref="NullLogger.Instance"/> or omit to preserve previous silent behaviour.</param>
+    /// When called from DI registration (where no logger is yet available), pass
+    /// <see cref="NullLogger.Instance"/> and capture warnings via the
+    /// <see cref="ScanForHandlers(IEnumerable{Assembly}, out IReadOnlyList{HandlerScanWarning})"/>
+    /// overload so they can be replayed against the configured logger at startup.</param>
     /// <returns>A list of discovered handler references.</returns>
-    public static IList<HandlerReference> ScanForHandlers(IEnumerable<Assembly> assemblies, ILogger? logger = null)
+    public static IReadOnlyList<HandlerReference> ScanForHandlers(IEnumerable<Assembly> assemblies, ILogger? logger = null)
+        => ScanForHandlersCore(assemblies, logger ?? NullLogger.Instance, warnings: null);
+
+    /// <summary>
+    /// Like the logger-only overload, but additionally captures partial-scan warnings into
+    /// <paramref name="warnings"/> so a caller (typically the DI registration path that has
+    /// no logger yet) can replay them against the configured logger later.
+    /// </summary>
+    public static IReadOnlyList<HandlerReference> ScanForHandlers(IEnumerable<Assembly> assemblies, out IReadOnlyList<HandlerScanWarning> warnings)
     {
-        logger ??= NullLogger.Instance;
+        var collected = new List<HandlerScanWarning>();
+        var result = ScanForHandlersCore(assemblies, NullLogger.Instance, collected);
+        warnings = collected;
+        return result;
+    }
+
+    private static IReadOnlyList<HandlerReference> ScanForHandlersCore(IEnumerable<Assembly> assemblies, ILogger logger, List<HandlerScanWarning>? warnings)
+    {
         var handlerReferences = new List<HandlerReference>();
         var messageHandlerType = typeof(IMessageHandler<>);
         var processHandlerType = typeof(IProcessHandler<,>);
@@ -36,14 +54,20 @@ public static class HandlerScanner
                 // Partial scan — loaded types are still usable. Warn so a misconfigured deploy
                 // doesn't silently drop handlers until a message arrives with no handler.
                 types = ex.Types.Where(t => t != null).ToArray()!;
+                var loaderExceptionMessages = string.Join(" | ", (ex.LoaderExceptions ?? [])
+                    .Where(e => e is not null).Select(e => e!.Message));
                 logger.LogWarning(
                     ex,
                     "Assembly {AssemblyName} threw ReflectionTypeLoadException during handler scan; continuing with partial type list ({LoadedCount}/{RequestedCount}). Loader exceptions: {LoaderExceptionMessages}",
                     assembly.FullName ?? "<unknown>",
                     types.Length,
                     ex.Types.Length,
-                    string.Join(" | ", (ex.LoaderExceptions ?? [])
-                        .Where(e => e is not null).Select(e => e!.Message)));
+                    loaderExceptionMessages);
+                warnings?.Add(new HandlerScanWarning(
+                    assembly.FullName ?? "<unknown>",
+                    nameof(ReflectionTypeLoadException),
+                    $"Partial type list ({types.Length}/{ex.Types.Length}). Loader exceptions: {loaderExceptionMessages}",
+                    ex));
             }
             catch (Exception ex) when (ex is FileNotFoundException
                                        or FileLoadException
@@ -52,15 +76,19 @@ public static class HandlerScanner
             {
                 // GetTypes() can throw any of these for assemblies in the AppDomain that aren't
                 // properly resolvable: missing reference, version drift, mismatched native bitness,
-                // or a type whose dependent assembly is broken. Pre-fix, only ReflectionTypeLoadException
-                // was caught — one of the other four shapes aborted the entire scan and the host
-                // failed to start with no handlers registered. Skip the offending assembly with a
-                // warning instead.
+                // or a type whose dependent assembly is broken. Catch them all here so one broken
+                // assembly doesn't abort the entire scan and leave the host running with no
+                // handlers registered. Skip the offending assembly with a warning instead.
                 logger.LogWarning(
                     ex,
                     "Assembly {AssemblyName} threw {ExceptionType} during handler scan; skipping assembly.",
                     assembly.FullName ?? "<unknown>",
                     ex.GetType().Name);
+                warnings?.Add(new HandlerScanWarning(
+                    assembly.FullName ?? "<unknown>",
+                    ex.GetType().Name,
+                    "Assembly skipped during handler scan.",
+                    ex));
                 types = [];
             }
 

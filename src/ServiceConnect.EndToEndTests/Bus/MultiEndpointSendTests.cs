@@ -36,7 +36,7 @@ public class MultiEndpointSendTests(MessagingFixture fixture)
 
         var consumer1Services = new ServiceCollection();
         consumer1Services.AddLogging();
-        consumer1Services.AddSingleton<IList<HandlerReference>>(consumer1HandlerReferences);
+        consumer1Services.AddSingleton<IReadOnlyList<HandlerReference>>(consumer1HandlerReferences);
         consumer1Services.AddTransient<IMessageHandler<TestMessage>>(_ =>
             new CallbackHandler<TestMessage>(msg => tcs1.TrySetResult(msg)));
 
@@ -71,7 +71,7 @@ public class MultiEndpointSendTests(MessagingFixture fixture)
 
         var consumer2Services = new ServiceCollection();
         consumer2Services.AddLogging();
-        consumer2Services.AddSingleton<IList<HandlerReference>>(consumer2HandlerReferences);
+        consumer2Services.AddSingleton<IReadOnlyList<HandlerReference>>(consumer2HandlerReferences);
         consumer2Services.AddTransient<IMessageHandler<TestMessage>>(_ =>
             new CallbackHandler<TestMessage>(msg => tcs2.TrySetResult(msg)));
 
@@ -98,7 +98,7 @@ public class MultiEndpointSendTests(MessagingFixture fixture)
         // --- Sender bus setup (no handlers) ---
         var senderServices = new ServiceCollection();
         senderServices.AddLogging();
-        senderServices.AddSingleton<IList<HandlerReference>>([]);
+        senderServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
 
         senderServices.AddServiceConnect(builder =>
         {

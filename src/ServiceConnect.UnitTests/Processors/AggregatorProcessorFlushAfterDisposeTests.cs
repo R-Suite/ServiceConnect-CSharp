@@ -59,8 +59,10 @@ public class AggregatorProcessorFlushAfterDisposeTests
         // recovery branch (TryRemove + Dispose after a disposed-mid-GetOrAdd race)
         // is correctness-by-inspection — not exercised here, since the synthetic
         // precondition trips the entry guard before reaching it.
+        // FlushAggregatorAsync signature: (descriptor, ambientScope, minThreshold, cancellationToken).
+        // minThreshold of 1 mirrors the timer-path call; the batch path passes BatchSize.
         var task = (Task)flushMethod.Invoke(processor,
-            [descriptor, null, CancellationToken.None])!;
+            [descriptor, null, 1, CancellationToken.None])!;
 
         await Assert.ThrowsAsync<ObjectDisposedException>(async () => await task);
 

@@ -173,4 +173,5 @@ public sealed class ProducerPublishTimeoutTimingTests
                 new ValueTask(Task.Delay(Timeout.Infinite, ct)));
         return channel;
     }
+
 }

@@ -8,7 +8,7 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// </summary>
 /// <typeparam name="T">The process-manager data type.</typeparam>
 [BsonIgnoreExtraElements]
-public sealed class MongoDbData<T> : IPersistenceData<T>, IVersioned, IIdentified where T : class, IProcessManagerData
+internal sealed class MongoDbData<T> : IPersistenceData<T>, IVersioned, IIdentified where T : class, IProcessManagerData
 {
     /// <summary>
     /// Gets or sets the persistence record identifier.
@@ -16,7 +16,7 @@ public sealed class MongoDbData<T> : IPersistenceData<T>, IVersioned, IIdentifie
     public Guid Id { get; set; }
 
     /// <inheritdoc />
-    public int Version { get; set; }
+    public long Version { get; set; }
 
     /// <inheritdoc />
     public required T Data { get; set; }

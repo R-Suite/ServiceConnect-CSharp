@@ -95,7 +95,12 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
         {
             // Stamp the last-Healthy timestamp on every Healthy observation so the grace
             // window measures from "most recent Healthy" rather than "first ever Healthy".
-            Volatile.Write(ref _recoveryState.LastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
+            // Interlocked.Exchange (not Volatile.Write) because long writes are not atomic
+            // on 32-bit runtimes (.NET Framework x86, some embedded ARM32). A torn 8-byte
+            // write could materialise a half-written ticks value outside DateTimeOffset's
+            // legal range, which the reader's ctor below would AOORE on. The 64-bit fence
+            // costs ~1ns per probe and removes the 32-bit hazard entirely.
+            Interlocked.Exchange(ref _recoveryState.LastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
             return Task.FromResult(HealthCheckResult.Healthy("Bus is consuming."));
         }
 
@@ -125,7 +130,10 @@ public sealed class BusConsumingHealthCheck : IHealthCheck
         // Recovery grace: if we've observed Healthy at some point AND we're within the
         // grace window, return Healthy with a note. Per-bus state survives the per-probe
         // re-alloc so a momentary disconnect does not flip Unhealthy and crash-loop the pod.
-        var lastHealthy = Volatile.Read(ref _recoveryState.LastHealthyTicks);
+        // Interlocked.Read pairs with Interlocked.Exchange above — 8-byte atomic on every
+        // architecture, including 32-bit. Volatile.Read on a long does NOT guarantee atomic
+        // read on 32-bit.
+        var lastHealthy = Interlocked.Read(ref _recoveryState.LastHealthyTicks);
         if (lastHealthy != 0 && _recoveryGraceWindow > TimeSpan.Zero)
         {
             var age = _timeProvider.GetUtcNow() - new DateTimeOffset(lastHealthy, TimeSpan.Zero);

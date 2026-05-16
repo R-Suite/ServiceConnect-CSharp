@@ -119,6 +119,19 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
             return HandledTask; // Handled to prevent infinite requeue
         }
 
+        // Bound packetNumber to the same MaxPacketNumber ceiling enforced on LastPacketNumber.
+        // Without this, an attacker-controlled header `PacketNumber: long.MaxValue` lands in
+        // MessageBusReadStream's packet dictionary at a sparse key, defeating the contiguous-
+        // fill design and forcing a future Read() to iterate from 0 to LastPacketNumber. The
+        // total-size cap still bounds memory per stream, but per-stream slot keying becomes
+        // arbitrary. Reject negatives for the same reason — MessageBusReadStream addresses
+        // packets via a non-negative long index.
+        if (packetNumber is < 0 or > MaxPacketNumber)
+        {
+            _logger.LogWarning("Stream packet PacketNumber {Value} out of range (0..{Max}); discarding", packetNumber, MaxPacketNumber);
+            return HandledTask;
+        }
+
         // Admission gate: the Interlocked counter is the source of truth. We only call
         // GetOrAdd after a successful counter bump, eliminating the residual race where a
         // speculative GetOrAdd → TryRemove rollback briefly admitted a rejected entry that

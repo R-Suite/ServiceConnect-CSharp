@@ -110,7 +110,10 @@ public class RequestReplyTests
 
         var request = new TestRequest(Guid.NewGuid()) { Question = "blocked request" };
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // Filter-stop now surfaces as the typed OutgoingFiltersBlockedException (formerly a
+        // raw InvalidOperationException) so callers can distinguish a deliberate filter
+        // rejection from state-misuse or transport faults.
+        await Assert.ThrowsAsync<ServiceConnect.Interfaces.Exceptions.OutgoingFiltersBlockedException>(() =>
             bus.SendRequestAsync<TestRequest, TestResponse>(
                 request,
                 new RequestOptions { EndPoint = "responder-queue", Timeout = 5000 }));

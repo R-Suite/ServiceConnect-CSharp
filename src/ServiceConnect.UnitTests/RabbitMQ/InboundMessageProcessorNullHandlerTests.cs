@@ -60,7 +60,7 @@ public sealed class InboundMessageProcessorNullHandlerTests
             },
             body: new byte[] { 1 });
 
-        await processor.ProcessAsync(channel.Object, args, CancellationToken.None);
+        await processor.ProcessAsync(channel.Object, args, copiedHeaders: null, CancellationToken.None);
 
         Assert.NotNull(capturedProps);
         Assert.NotNull(capturedProps.Headers);

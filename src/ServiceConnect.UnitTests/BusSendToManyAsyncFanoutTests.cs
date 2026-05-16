@@ -34,7 +34,7 @@ public sealed class BusSendToManyAsyncFanoutTests
     private readonly Mock<ILogger<Bus>> _mockLogger;
     private readonly Mock<IQueueConfiguration> _mockQueueConfig;
     private readonly Mock<IMessageDispatcher> _mockDispatcher;
-    private readonly IList<HandlerReference> _handlerReferences;
+    private readonly IReadOnlyList<HandlerReference> _handlerReferences;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly Bus _bus;

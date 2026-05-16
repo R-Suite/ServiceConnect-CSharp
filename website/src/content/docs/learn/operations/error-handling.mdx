@@ -72,7 +72,7 @@ builder.ConfigureQueues(q =>
 });
 ```
 
-With this on, retries still happen, but exhausted messages are dropped silently instead of going to the error queue. The audit publish path is also bypassed. This is a scalpel — don't use it in a consumer that processes real traffic.
+With this on, retries still happen, but exhausted messages are dropped silently instead of going to the error queue — and so are validator-rejected messages, the no-handler dead-letter branch, AND the error-exchange fallback that normally runs when a retry-queue republish itself fails. Every drop surfaces on the `messaging.serviceconnect.retry.drops` counter with `error.type=errors-disabled` so operators can alert on the drop rate. Auditing is orthogonal: `DisableErrors=true` does NOT suppress audit publishes (those remain gated only by `IQueueConfiguration.AuditingEnabled`). This is a scalpel — don't use it in a consumer that processes real traffic without a working alert on the drop counter.
 
 ## Retry-publish failure modes
 
@@ -125,7 +125,7 @@ Two things to notice:
 - **It is observational.** You cannot change the retry/error-queue decision from inside the callback. That machinery has already run.
 - **It is a callback, not an interceptor.** Use it for metrics, alerting, a Sentry push. If you need to wrap the whole handler call with a `try`/`finally` — opening a span, starting a timer — reach for message-processing middleware instead.
 
-If the callback itself throws, the exception is caught and logged as a warning, so a bug in your error handler doesn't cascade.
+If the callback itself throws, the framework catches and logs at **Error** so a bug in an opt-in user-installed hook is unmissable, and the dispatcher continues — message processing is never blocked by a faulty `ExceptionHandler`. The original dispatch exception is unaffected: it's still attached to the returned `ConsumeEventResult` and drives the retry/error-queue path normally.
 
 <Aside type="note" title="v8 signature change">
   `ExceptionHandler` changed from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?` in v8. See [`IBusConfiguration.ExceptionHandler`](/ServiceConnect-CSharp/reference/bus/ibusconfiguration/#exceptionhandler) for the migration shim.

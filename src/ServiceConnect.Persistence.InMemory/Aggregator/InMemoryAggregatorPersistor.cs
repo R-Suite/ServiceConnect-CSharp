@@ -11,7 +11,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// durable across restarts. Use a durable <see cref="ServiceConnect.Interfaces.IAggregatorPersistor"/>
 /// implementation (e.g. the MongoDB persistor) for production.
 /// </remarks>
-public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposable
+internal sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposable
 {
     private readonly TimeProvider _timeProvider;
     private readonly CacheProvider _provider;
@@ -109,6 +109,13 @@ public sealed class InMemoryAggregatorPersistor : IAggregatorPersistor, IDisposa
         // The Mongo persistor reaches the unresolved branch when a stored document's
         // CLR type is no longer registered or doesn't implement the interface; that
         // branch is exercised by MongoDbAggregatorPersistor's tests.
+        //
+        // No per-snapshot lease is required here: this persistor is per-process and
+        // the AggregatorProcessor serialises flushes per aggregator name via its own
+        // flushLock — the multi-worker dispatch hazard the Mongo lease defends against
+        // doesn't exist in-process. A lease would also break the documented
+        // "handler exception → broker redelivers → re-flush" contract because in-memory
+        // leases have no TTL to release stranded claims after a handler throw.
         lock (_memoryCacheLock)
         {
             if (!_provider.TryGet<string, object>(name, out var sourceObj) || sourceObj is not List<Entry> source)

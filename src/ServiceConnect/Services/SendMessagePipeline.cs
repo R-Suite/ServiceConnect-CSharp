@@ -15,7 +15,7 @@ namespace ServiceConnect.Services;
 /// singletons. Scoped or transient registrations will be silently promoted to
 /// singleton lifetime, which can cause cross-request state leaks.
 /// </remarks>
-public sealed class SendMessagePipeline : ISendMessagePipeline
+internal sealed class SendMessagePipeline : ISendMessagePipeline
 {
     private readonly IProducer _producer;
     private readonly IPipelineConfiguration _pipelineConfig;
@@ -58,8 +58,17 @@ public sealed class SendMessagePipeline : ISendMessagePipeline
     private SendMessageDelegate BuildPublishChain()
     {
         var producer = _producer;
+        // Pass ctx.RoutingKey to the routing-key-aware overload only when a value is supplied.
+        // When the routing key is null/empty, fall back to the legacy 4-arg overload so test
+        // mocks set up against the original signature still see invocations, AND third-party
+        // IProducer implementations that haven't overridden the new DIM overload run their
+        // original publish path rather than the DIM's no-op fallback. The in-tree RabbitMQ
+        // producer's 4-arg overload forwards to the 5-arg one internally, so behaviour is
+        // identical for the common no-routing-key case.
         Task terminal(SendContext ctx, CancellationToken ct) =>
-            producer.PublishAsync(ctx.MessageType, ctx.MessageBytes, ToReadOnly(ctx.Headers), ct);
+            string.IsNullOrEmpty(ctx.RoutingKey)
+                ? producer.PublishAsync(ctx.MessageType, ctx.MessageBytes, ToReadOnly(ctx.Headers), ct)
+                : producer.PublishAsync(ctx.MessageType, ctx.MessageBytes, ctx.RoutingKey, ToReadOnly(ctx.Headers), ct);
         return WrapMiddleware(terminal);
     }
 

@@ -43,7 +43,7 @@ public class MongoDbProcessManagerFinderTests
 
         await Assert.ThrowsAsync<PersistenceException>(() => finder.UpdateDataAsync(versionedData, CancellationToken.None));
 
-        Assert.Equal(7, versionedData.Version);
+        Assert.Equal(7L, versionedData.Version);
     }
 
     [Fact]
@@ -82,7 +82,7 @@ public class MongoDbProcessManagerFinderTests
         await Assert.ThrowsAsync<OperationCanceledException>(
             () => finder.UpdateDataAsync(versionedData, CancellationToken.None));
 
-        Assert.Equal(11, versionedData.Version);
+        Assert.Equal(11L, versionedData.Version);
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public class MongoDbProcessManagerFinderTests
 
         await finder.UpdateDataAsync(versionedData, CancellationToken.None);
 
-        Assert.Equal(5, versionedData.Version);
+        Assert.Equal(5L, versionedData.Version);
     }
 
     [Fact]

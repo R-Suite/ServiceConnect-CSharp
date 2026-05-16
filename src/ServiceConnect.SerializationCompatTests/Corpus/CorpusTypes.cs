@@ -108,7 +108,7 @@ public sealed class ByteArrayMessage : Message
 // neither STJ default nor Newtonsoft with TypeNameHandling.None would carry
 // Dog's `Breed` property across the wire (no $type discriminator), and STJ
 // further refuses to instantiate the abstract Animal on deserialise. If
-// abstract-base polymorphism becomes a supported scenario in v8, add a separate
+// abstract-base polymorphism ever becomes a supported scenario, add a separate
 // corpus item that asserts the chosen $type-discrimination strategy.
 public abstract class Animal
 {

@@ -2,6 +2,11 @@
     <PropertyGroup>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <PackageId>ServiceConnect.Client.RabbitMQ</PackageId>
+        <AssemblyName>ServiceConnect.Client.RabbitMQ</AssemblyName>
+        <Title>ServiceConnect.Client.RabbitMQ</Title>
+        <Description>RabbitMQ transport for ServiceConnect. Implements IProducer and IConsumer over RabbitMQ.Client 7.x with publisher confirms, mandatory routing, broker-cancel handling and per-message TTL retry queues.</Description>
+        <PackageTags>ServiceConnect;RabbitMQ;Transport;Client;MessageBus;Messaging;Message;Bus;Service</PackageTags>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
@@ -10,6 +15,15 @@
     <ItemGroup>
         <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
             <_Parameter1>ServiceConnect.UnitTests</_Parameter1>
+        </AssemblyAttribute>
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>ServiceConnect.EndToEndTests</_Parameter1>
+        </AssemblyAttribute>
+        <!-- Moq (Castle DynamicProxy) needs visibility into internal types to construct
+             proxies for internal IServiceConnectConnection / IChannel etc. The assembly
+             is not strong-named so no public key is required. -->
+        <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+            <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
         </AssemblyAttribute>
     </ItemGroup>
     <ItemGroup>

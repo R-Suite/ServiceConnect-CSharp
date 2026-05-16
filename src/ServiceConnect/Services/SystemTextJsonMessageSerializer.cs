@@ -13,7 +13,7 @@ namespace ServiceConnect.Services;
 /// (relaxed Unicode escaping, ISO 8601 round-trip dates, MaxDepth = 32). Cross-version
 /// behaviour is enforced by the SerializationCompatTests corpus.
 /// </summary>
-public sealed class SystemTextJsonMessageSerializer : IMessageSerializer
+internal sealed class SystemTextJsonMessageSerializer : IMessageSerializer
 {
     private readonly JsonSerializerOptions _options;
 

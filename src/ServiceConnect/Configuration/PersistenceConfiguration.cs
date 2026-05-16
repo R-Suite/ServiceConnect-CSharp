@@ -13,7 +13,7 @@ namespace ServiceConnect.Configuration;
 /// value were a real accident-mode. Legacy callers that depended on the default must update
 /// their <c>ConfigurePersistence(c =&gt; c.ConnectionString = "...")</c> wiring.
 /// </remarks>
-public sealed class PersistenceConfiguration : IPersistenceConfiguration
+internal sealed class PersistenceConfiguration : IPersistenceConfiguration
 {
     /// <summary>
     /// Provider-specific connection string. Required; no default. Misconfiguration

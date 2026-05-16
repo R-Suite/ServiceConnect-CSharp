@@ -57,15 +57,12 @@ await bus.SendAsync(
 
 The `SendOptions.EndPoint` value is the destination queue name. The message travels to exactly that queue. Note the capitalisation — it's `EndPoint`, not `Endpoint`.
 
-Use the plural `EndPoints` to send one message to several queues:
+Use `SendToManyAsync` to send one message to several queues:
 
 ```csharp
-await bus.SendAsync(
+await bus.SendToManyAsync(
     new StockUpdated(correlationId) { Sku = "widget", Quantity = 10 },
-    new SendOptions
-    {
-        EndPoints = new[] { "pricing", "search-index", "reporting" },
-    });
+    new[] { "pricing", "search-index", "reporting" });
 ```
 
 This is still a point-to-point send — one copy of the message lands in each listed queue. It is not pub/sub; the sender decides the fan-out.

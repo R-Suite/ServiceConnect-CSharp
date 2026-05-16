@@ -16,7 +16,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// durable <see cref="ServiceConnect.Interfaces.IProcessManagerFinder"/> implementation (e.g.
 /// the MongoDB finder) for production.
 /// </remarks>
-public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
+internal sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
 {
     private readonly ProcessManagerPredicateCache _cache;
     private readonly InMemoryPersistenceState _state;
@@ -30,7 +30,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
         _state = state ?? throw new ArgumentNullException(nameof(state));
     }
 
-    private const int InitialVersion = 1;
+    private const long InitialVersion = 1L;
 
     /// <summary>
     /// Finds persisted process manager data that matches the supplied message mapping.
@@ -96,14 +96,13 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     /// payload satisfies <paramref name="predicate"/>.
     /// </summary>
     /// <remarks>
-    /// <b>Multi-saga limitation:</b> this implementation iterates every entry in the
+    /// <b>Multi-saga support:</b> this implementation iterates every entry in the
     /// partitioned saga provider, and the keys are bare correlation-id strings (no
-    /// type prefix). A caller that runs multiple saga types through a single finder
-    /// instance will see <see cref="InvalidOperationException"/> from this method as
-    /// soon as the iterator visits a row whose wrapper type does not match
-    /// <typeparamref name="T"/>. For multi-saga topologies, run one finder instance
-    /// per saga type or use the Mongo persistor (which keys by collection-name and
-    /// avoids cross-type scans).
+    /// type prefix). Entries whose wrapper type does not match <typeparamref name="T"/>
+    /// are skipped — hosting multiple saga types through a single finder instance is
+    /// supported, with linear-in-total-rows lookup overhead. For high-row-count
+    /// production deployments use the Mongo persistor instead (per-saga-type
+    /// collections give O(log n) lookup via the unique CorrelationId index).
     /// </remarks>
     private MemoryData<T>? FindMatchingItem<T>(object msgPropValue, Func<MemoryData<T>, object, bool> predicate)
         where T : class, IProcessManagerData
@@ -124,19 +123,13 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     return new MemoryData<T> { Id = typed.Id, Data = DeepClone.Clone(typed.Data), Version = typed.Version };
                 }
             }
-            else
-            {
-                // The stored wrapper type does not match the requested T.  Silently
-                // coercing a MemoryData<A> to MemoryData<B> would mask the caller
-                // passing the wrong saga data type — a programmer error that should
-                // surface immediately rather than produce subtly wrong behaviour.
-                throw new InvalidOperationException(
-                    $"Saga store contains data of type '{value.GetType().FullName}' but " +
-                    $"caller asked for '{typeof(MemoryData<T>).FullName}'. " +
-                    "The InMemory saga store does not support polymorphic data type substitution: " +
-                    "the T in FindDataAsync<T> / UpdateDataAsync<T> / DeleteDataAsync<T> must match " +
-                    "the runtime type of the data passed to InsertDataAsync.");
-            }
+            // Skip entries whose wrapper type doesn't match T. Mongo persists each saga type to
+            // its own collection so a FindData<TA> query never returns TB rows; the InMemory
+            // store uses a single flat dictionary keyed by correlation-id-as-string, so we
+            // simply pass over unrelated saga types. Hosting >1 saga type per worker (a common
+            // dev/test topology) used to throw `InvalidOperationException` here — which is
+            // not a `ConcurrencyException`, so the dispatcher had no retry path and the
+            // worker dispatched permanently-failed messages instead of resolving the saga.
         }
         return null;
     }
@@ -244,6 +237,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
     /// </summary>
     public Task UpdateDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData
     {
+        ArgumentNullException.ThrowIfNull(data);
         cancellationToken.ThrowIfCancellationRequested();
 
         _state.SyncRoot.EnterWriteLock();
@@ -268,7 +262,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed by another saga delete.");
             }
 
-            int currentVersion = storedData is IVersioned versioned
+            long currentVersion = storedData is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(
                     $"Stored item for CorrelationId {key} is of unexpected type {storedData.GetType()} and does not implement IVersioned.");
@@ -344,7 +338,7 @@ public sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
                     $"Concurrency conflict: ProcessManagerData with CorrelationId {key} was concurrently removed by another saga delete.");
             }
 
-            int currentVersion = stored is IVersioned versioned
+            long currentVersion = stored is IVersioned versioned
                 ? versioned.Version
                 : throw new PersistenceException(
                     $"Stored item for CorrelationId {key} is of unexpected type {stored.GetType()} and does not implement IVersioned.");

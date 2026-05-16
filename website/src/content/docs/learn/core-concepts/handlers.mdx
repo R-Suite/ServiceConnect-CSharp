@@ -48,7 +48,7 @@ public interface IConsumeContext
 
     Task ReplyAsync<TReply>(
         TReply message,
-        IDictionary<string, string>? headers = null,
+        ReplyOptions? options = null,
         CancellationToken cancellationToken = default) where TReply : Message;
 }
 ```

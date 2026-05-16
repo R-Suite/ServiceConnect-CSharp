@@ -35,7 +35,7 @@ public class PublishRequestAsyncTests(MessagingFixture fixture)
 
         var responder1Services = new ServiceCollection();
         responder1Services.AddLogging();
-        responder1Services.AddSingleton<IList<HandlerReference>>(responder1HandlerReferences);
+        responder1Services.AddSingleton<IReadOnlyList<HandlerReference>>(responder1HandlerReferences);
         responder1Services.AddTransient<IMessageHandler<TestRequest>, PubReqReplyHandler>();
 
         responder1Services.AddServiceConnect(builder =>
@@ -69,7 +69,7 @@ public class PublishRequestAsyncTests(MessagingFixture fixture)
 
         var responder2Services = new ServiceCollection();
         responder2Services.AddLogging();
-        responder2Services.AddSingleton<IList<HandlerReference>>(responder2HandlerReferences);
+        responder2Services.AddSingleton<IReadOnlyList<HandlerReference>>(responder2HandlerReferences);
         responder2Services.AddTransient<IMessageHandler<TestRequest>, PubReqReplyHandler>();
 
         responder2Services.AddServiceConnect(builder =>
@@ -97,7 +97,7 @@ public class PublishRequestAsyncTests(MessagingFixture fixture)
 
         var requesterServices = new ServiceCollection();
         requesterServices.AddLogging();
-        requesterServices.AddSingleton<IList<HandlerReference>>(requesterHandlerReferences);
+        requesterServices.AddSingleton<IReadOnlyList<HandlerReference>>(requesterHandlerReferences);
 
         requesterServices.AddServiceConnect(builder =>
         {

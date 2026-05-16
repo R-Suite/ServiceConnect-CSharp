@@ -34,7 +34,7 @@ public class AggregatorProcessorResetTimerDisposeTests
             BindingFlags.NonPublic | BindingFlags.Instance)!;
         disposedField.SetValue(processor, 1);
 
-        var timers = (ConcurrentDictionary<string, Timer>)typeof(AggregatorProcessor)
+        var timers = (ConcurrentDictionary<string, ITimer>)typeof(AggregatorProcessor)
             .GetField("_timers", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(processor)!;
 
@@ -78,7 +78,7 @@ public class AggregatorProcessorResetTimerDisposeTests
 
         var resetTimerMethod = typeof(AggregatorProcessor).GetMethod(
             "ResetTimer", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var timers = (ConcurrentDictionary<string, Timer>)typeof(AggregatorProcessor)
+        var timers = (ConcurrentDictionary<string, ITimer>)typeof(AggregatorProcessor)
             .GetField("_timers", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(processor)!;
 

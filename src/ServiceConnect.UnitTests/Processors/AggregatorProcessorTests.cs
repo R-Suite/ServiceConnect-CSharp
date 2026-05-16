@@ -32,7 +32,7 @@ public class AggregatorProcessorTests
     public async Task ProcessAsync_NoAggregator_ReturnsNotHandled()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>([]);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(
@@ -62,7 +62,7 @@ public class AggregatorProcessorTests
             new(Guid.NewGuid()) { Value = "C" },
         };
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestAggregator(tcs);
 
         var insertCount = 0;
@@ -86,7 +86,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -127,7 +127,7 @@ public class AggregatorProcessorTests
             new(Guid.NewGuid()) { Value = "C" },
         };
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestAggregator(tcs);
 
         var insertCount = 0;
@@ -147,7 +147,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -183,7 +183,7 @@ public class AggregatorProcessorTests
         };
 
         var callOrder = new List<string>();
-        var executed = new TaskCompletionSource<IList<AggTestMessage>>();
+        var executed = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new OrderRecordingAggregator(callOrder, executed);
 
         var insertCount = 0;
@@ -204,7 +204,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -243,7 +243,7 @@ public class AggregatorProcessorTests
         persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0);
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestAggregator(tcs);
         var handlerRefs = new List<HandlerReference>
         {
@@ -251,7 +251,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -284,7 +284,7 @@ public class AggregatorProcessorTests
             new(Guid.NewGuid()) { Value = "C" },
         };
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestAggregator(tcs);
 
         var insertCount = 0;
@@ -304,7 +304,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -355,7 +355,7 @@ public class AggregatorProcessorTests
         persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestAggregator(tcs);
         var handlerRefs = new List<HandlerReference>
         {
@@ -363,7 +363,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -392,7 +392,7 @@ public class AggregatorProcessorTests
     public async Task DisposeAsync_CanBeCalledMultipleTimes()
     {
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>([]);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry([], provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
@@ -486,7 +486,7 @@ public class AggregatorProcessorTests
             .Callback<string, IAggregatorSnapshot, CancellationToken>((_, snap, _) => capturedSnapshot = snap)
             .Returns(Task.CompletedTask);
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestAggregator(tcs);
         var handlerRefs = new List<HandlerReference>
         {
@@ -494,7 +494,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -560,7 +560,7 @@ public class AggregatorProcessorTests
         persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestTimedAggregator(tcs);
         var handlerRefs = new List<HandlerReference>
         {
@@ -568,7 +568,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -636,7 +636,7 @@ public class AggregatorProcessorTests
         persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var tcs = new TaskCompletionSource<IList<AggTestMessage>>();
+        var tcs = new TaskCompletionSource<IReadOnlyList<AggTestMessage>>();
         var aggregator = new AggTestTimedAggregator(tcs);
         var handlerRefs = new List<HandlerReference>
         {
@@ -644,7 +644,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
         services.AddSingleton<Aggregator<AggTestMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
@@ -697,9 +697,9 @@ public class AggregatorProcessorTests
             new() { MessageType = typeof(AggTestMessage), HandlerType = typeof(AggTestTimedAggregator) }
         };
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
-        services.AddSingleton<Aggregator<AggTestMessage>>(new AggTestTimedAggregator(new TaskCompletionSource<IList<AggTestMessage>>()));
+        services.AddSingleton<Aggregator<AggTestMessage>>(new AggTestTimedAggregator(new TaskCompletionSource<IReadOnlyList<AggTestMessage>>()));
         var provider = services.BuildServiceProvider();
 
         var registry = new AggregatorRegistry(handlerRefs, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
@@ -749,7 +749,7 @@ public class AggregatorProcessorTests
         };
 
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IAggregatorPersistor>(persistor);
         services.AddSingleton<Aggregator<AggTestMessage>>(throwingAggregator);
         var provider = services.BuildServiceProvider();
@@ -800,7 +800,7 @@ public class AggregatorProcessorTests
 
         var aggregator = new PostDisposeProbeAggregator();
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<Aggregator<PostDisposeProbeMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
 
@@ -850,7 +850,7 @@ public class AggregatorProcessorTests
 
         var aggregator = new ResetTimerProbeAggregator();
         var services = new ServiceCollection();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<Aggregator<ResetTimerProbeMessage>>(aggregator);
         var provider = services.BuildServiceProvider();
 
@@ -881,7 +881,7 @@ public class AggregatorProcessorTests
 
         var timersField = typeof(AggregatorProcessor).GetField("_timers",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        var timers = (System.Collections.Concurrent.ConcurrentDictionary<string, Timer>)timersField!.GetValue(processor)!;
+        var timers = (System.Collections.Concurrent.ConcurrentDictionary<string, ITimer>)timersField!.GetValue(processor)!;
 
         Assert.Single(timers);
     }
@@ -905,12 +905,12 @@ public class AggregatorProcessorTests
         };
 
         var rootServices = new ServiceCollection();
-        rootServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        rootServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         rootServices.AddSingleton<Aggregator<ScopeProbeAggMessage>>(rootAggregator);
         var rootProvider = rootServices.BuildServiceProvider();
 
         var scopedServices = new ServiceCollection();
-        scopedServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        scopedServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         scopedServices.AddSingleton<Aggregator<ScopeProbeAggMessage>>(scopedAggregator);
         var scopedProvider = scopedServices.BuildServiceProvider();
 
@@ -966,12 +966,12 @@ public class AggregatorProcessorTests
         };
 
         var staleServices = new ServiceCollection();
-        staleServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        staleServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         staleServices.AddSingleton<Aggregator<EcCaptureProbeMessage>>(staleAggregator);
         var staleProvider = staleServices.BuildServiceProvider();
 
         var freshServices = new ServiceCollection();
-        freshServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        freshServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         freshServices.AddSingleton<Aggregator<EcCaptureProbeMessage>>(freshAggregator);
         var freshProvider = freshServices.BuildServiceProvider();
 
@@ -1023,7 +1023,7 @@ file sealed class ResetTimerProbeAggregator : Aggregator<ResetTimerProbeMessage>
 {
     public override int BatchSize() => 1000;
     public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(50);
-    public override Task ExecuteAsync(IList<ResetTimerProbeMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<ResetTimerProbeMessage> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
 
@@ -1047,29 +1047,29 @@ file class AggTestMessage(Guid correlationId) : Message(correlationId)
     public string Value { get; set; } = "";
 }
 
-file class AggTestAggregator(TaskCompletionSource<IList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
+file class AggTestAggregator(TaskCompletionSource<IReadOnlyList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
 {
-    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
+    private readonly TaskCompletionSource<IReadOnlyList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
 
-    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(messages);
         return Task.CompletedTask;
     }
 }
 
-file class OrderRecordingAggregator(List<string> order, TaskCompletionSource<IList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
+file class OrderRecordingAggregator(List<string> order, TaskCompletionSource<IReadOnlyList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
 {
     private readonly List<string> _order = order;
-    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
+    private readonly TaskCompletionSource<IReadOnlyList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
 
-    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
         _order.Add("execute");
         _tcs.TrySetResult(messages);
@@ -1077,14 +1077,14 @@ file class OrderRecordingAggregator(List<string> order, TaskCompletionSource<ILi
     }
 }
 
-file class AggTestTimedAggregator(TaskCompletionSource<IList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
+file class AggTestTimedAggregator(TaskCompletionSource<IReadOnlyList<AggTestMessage>> tcs) : Aggregator<AggTestMessage>
 {
-    private readonly TaskCompletionSource<IList<AggTestMessage>> _tcs = tcs;
+    private readonly TaskCompletionSource<IReadOnlyList<AggTestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 10000;
     public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(200);
 
-    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<AggTestMessage> messages, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(messages);
         return Task.CompletedTask;
@@ -1097,7 +1097,7 @@ file sealed class PostDisposeProbeAggregator : Aggregator<PostDisposeProbeMessag
 {
     public override int BatchSize() => 1;
     public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
-    public override Task ExecuteAsync(IList<PostDisposeProbeMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<PostDisposeProbeMessage> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
 
@@ -1109,7 +1109,7 @@ file sealed class ScopeProbeAggregator : Aggregator<ScopeProbeAggMessage>
     public int Hits => Volatile.Read(ref _hits);
     public override int BatchSize() => 1;
     public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
-    public override Task ExecuteAsync(IList<ScopeProbeAggMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<ScopeProbeAggMessage> messages, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _hits);
         return Task.CompletedTask;
@@ -1124,7 +1124,7 @@ file sealed class EcCaptureProbeAggregator : Aggregator<EcCaptureProbeMessage>
     public int Hits => Volatile.Read(ref _hits);
     public override int BatchSize() => 1000;
     public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(50);
-    public override Task ExecuteAsync(IList<EcCaptureProbeMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<EcCaptureProbeMessage> messages, CancellationToken cancellationToken = default)
     {
         Interlocked.Increment(ref _hits);
         return Task.CompletedTask;
@@ -1135,6 +1135,6 @@ file sealed class ThrowingAggregator : Aggregator<AggTestMessage>
 {
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
-    public override Task ExecuteAsync(IList<AggTestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<AggTestMessage> messages, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("handler failure — batch must remain for retry");
 }

@@ -47,7 +47,7 @@ public class StreamOutOfOrderTests(MessagingFixture fixture)
 
         var consumerServices = new ServiceCollection();
         consumerServices.AddLogging();
-        consumerServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        consumerServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         consumerServices.AddSingleton(completed);
         consumerServices.AddSingleton(completed);
         consumerServices.AddTransient<IStreamHandler<TestMessage>, StreamCaptureHandler>();
@@ -76,7 +76,7 @@ public class StreamOutOfOrderTests(MessagingFixture fixture)
         // Producer bus
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>([]);
+        producerServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>

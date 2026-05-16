@@ -44,7 +44,7 @@ public class ProcessManagerMultiMessageLifecycleE2ETests(MessagingFixture fixtur
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton(finished);
         services.AddTransient<IProcessHandler<LifecycleProcessData, ProcessStartedMessage>, LifecycleProcessHandler>();
         services.AddTransient<IProcessHandler<LifecycleProcessData, ProcessResumedMessage>, LifecycleProcessHandler>();

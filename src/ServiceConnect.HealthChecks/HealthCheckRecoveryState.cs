@@ -14,8 +14,10 @@ internal sealed class HealthCheckRecoveryState
 {
     /// <summary>
     /// UTC ticks of the most recent Healthy observation. Zero means never-observed-Healthy
-    /// since this state instance was created. Use <see cref="System.Threading.Volatile"/>
-    /// reads/writes for cross-thread visibility.
+    /// since this state instance was created. Use <c>Interlocked.Exchange</c> and
+    /// <c>Interlocked.Read</c> for cross-thread visibility — long reads/writes are not
+    /// atomic on 32-bit runtimes, so a plain <see cref="System.Threading.Volatile"/> read
+    /// could observe a torn ticks value.
     /// </summary>
     public long LastHealthyTicks;
 }

@@ -27,7 +27,7 @@ public class AggregatorRegistryCaptiveDepsTests
 
         public override int BatchSize() => 5;
         public override TimeSpan Timeout() => TimeSpan.FromSeconds(1);
-        public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     [Fact]
@@ -63,7 +63,7 @@ public class AggregatorRegistryCaptiveDepsTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         public override int BatchSize() => 1;
         public override TimeSpan Timeout() => TimeSpan.FromSeconds(1);
-        public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     [Fact]

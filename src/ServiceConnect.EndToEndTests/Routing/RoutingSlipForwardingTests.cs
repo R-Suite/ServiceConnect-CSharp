@@ -36,7 +36,7 @@ public class RoutingSlipForwardingTests(MessagingFixture fixture)
 
         var step1Services = new ServiceCollection();
         step1Services.AddLogging();
-        step1Services.AddSingleton<IList<HandlerReference>>(step1HandlerRefs);
+        step1Services.AddSingleton<IReadOnlyList<HandlerReference>>(step1HandlerRefs);
         step1Services.AddTransient<IMessageHandler<StepMessage>>(_ =>
             new Step1Handler(() => step1Called.TrySetResult(true)));
 
@@ -75,7 +75,7 @@ public class RoutingSlipForwardingTests(MessagingFixture fixture)
 
         var step2Services = new ServiceCollection();
         step2Services.AddLogging();
-        step2Services.AddSingleton<IList<HandlerReference>>(step2HandlerRefs);
+        step2Services.AddSingleton<IReadOnlyList<HandlerReference>>(step2HandlerRefs);
         step2Services.AddTransient<IMessageHandler<StepMessage>>(_ =>
             new Step2Handler(step => step2Called.TrySetResult(step)));
 

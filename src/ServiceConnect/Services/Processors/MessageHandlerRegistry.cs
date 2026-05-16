@@ -14,7 +14,7 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
     private readonly ILogger<MessageHandlerRegistry> _logger;
 
     internal MessageHandlerRegistry(
-        IList<HandlerReference> handlerReferences,
+        IReadOnlyList<HandlerReference> handlerReferences,
         ILogger<MessageHandlerRegistry> logger)
     {
         ArgumentNullException.ThrowIfNull(handlerReferences);
@@ -74,6 +74,11 @@ internal sealed class MessageHandlerRegistry : IHandlerRegistry
             return descriptor != null;
         }
 
+        // Build a descriptor for any type not seen at construction so users who register
+        // IMessageHandler<T> directly in DI (without going through AddServiceConnect's
+        // scanner) still get their handlers invoked. The cache grows by one entry per
+        // distinct message type observed at runtime — bounded in practice by the bus's
+        // message-type catalogue.
         descriptor = _lazyDescriptors.GetOrAdd(messageType, TryBuild);
         return descriptor != null;
     }

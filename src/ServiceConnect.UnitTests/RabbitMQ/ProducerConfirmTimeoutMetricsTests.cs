@@ -47,11 +47,13 @@ public sealed class ProducerConfirmTimeoutMetricsTests
     }
 
     [Fact]
-    public async Task SendAsync_WhenBasicPublishHangs_RemapTimeoutEmitsConfirmTimeoutCounterWithEmptyDestination()
+    public async Task SendAsync_WhenBasicPublishHangs_RemapTimeoutEmitsConfirmTimeoutCounterWithRoutingKey()
     {
-        // SendAsync passes exchange="" and routes via the queue routing key, so the metric's
-        // messaging.destination.name carries the conventional "<empty>" sentinel.
-        using var collector = new MetricCollector("messaging.destination.name", "<empty>");
+        // SendAsync passes exchange="" and routes via the queue name on routingKey. The metric
+        // now prefers the routingKey when exchange is empty so operators see *which* queue
+        // stalled rather than a placeholder; the prior "<empty>" sentinel obscured per-queue
+        // alerting.
+        using var collector = new MetricCollector("messaging.destination.name", "send-confirm-timeout-q");
 
         await using var producer = BuildProducerWithHangingChannel();
 
@@ -61,7 +63,8 @@ public sealed class ProducerConfirmTimeoutMetricsTests
         var record = Assert.Single(collector.GetLongRecords(MetricNames.PublishConfirmTimeouts));
         Assert.Equal(1, record.Value);
         Assert.Equal("rabbitmq", record.GetTag("messaging.system"));
-        Assert.Equal("<empty>", record.GetTag("messaging.destination.name"));
+        Assert.Equal("publish", record.GetTag("messaging.operation.type"));
+        Assert.Equal("send-confirm-timeout-q", record.GetTag("messaging.destination.name"));
     }
 
     private static Producer BuildProducerWithHangingChannel()

@@ -35,7 +35,7 @@ public class AutoStartConsumingE2ETests(MessagingFixture fixture)
                 services.AddLogging();
 
                 // Register handler references before AddServiceConnect so TryAddSingleton keeps this list
-                services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+                services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 
                 // Register the handler, backed by our TCS callback
                 services.AddTransient<IMessageHandler<TestMessage>>(_ =>
@@ -112,7 +112,7 @@ public class AutoStartConsumingE2ETests(MessagingFixture fixture)
             .ConfigureServices(services =>
             {
                 services.AddLogging();
-                services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+                services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
                 services.AddTransient<IMessageHandler<TestMessage>>(_ =>
                     new CallbackHandler<TestMessage>(msg => receivedTcs.TrySetResult(msg)));
 

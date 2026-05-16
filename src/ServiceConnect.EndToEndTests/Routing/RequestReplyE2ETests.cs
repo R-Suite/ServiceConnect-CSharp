@@ -33,7 +33,7 @@ public class RequestReplyE2ETests(MessagingFixture fixture)
 
         var responderServices = new ServiceCollection();
         responderServices.AddLogging();
-        responderServices.AddSingleton<IList<HandlerReference>>(responderHandlerReferences);
+        responderServices.AddSingleton<IReadOnlyList<HandlerReference>>(responderHandlerReferences);
         responderServices.AddTransient<IMessageHandler<TestRequest>, ReplyHandler>();
 
         responderServices.AddServiceConnect(builder =>
@@ -61,7 +61,7 @@ public class RequestReplyE2ETests(MessagingFixture fixture)
 
         var requesterServices = new ServiceCollection();
         requesterServices.AddLogging();
-        requesterServices.AddSingleton<IList<HandlerReference>>(requesterHandlerReferences);
+        requesterServices.AddSingleton<IReadOnlyList<HandlerReference>>(requesterHandlerReferences);
 
         requesterServices.AddServiceConnect(builder =>
         {

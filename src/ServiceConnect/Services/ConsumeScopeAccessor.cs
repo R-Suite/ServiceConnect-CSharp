@@ -8,11 +8,26 @@ namespace ServiceConnect.Services;
 /// same container scope the dispatcher established for the message. The outbound filter
 /// path in <see cref="Bus"/> pushes a fresh scope around each call for the same reason.
 /// </summary>
-public sealed class ConsumeScopeAccessor
+/// <remarks>
+/// <b>Fire-and-forget reader hazard.</b> The accessor uses <see cref="AsyncLocal{T}"/>,
+/// which propagates writes only along the current <see cref="ExecutionContext"/>. A
+/// handler that starts a fire-and-forget task while the scope is live captures the
+/// ambient context at that point — the captured task continues to see the pushed
+/// scope after the using-block disposes. The dispatcher disposes the underlying DI
+/// scope on return, so a leaked continuation that reads <see cref="Current"/> will
+/// observe an <see cref="IServiceProvider"/> whose backing scope has been disposed;
+/// subsequent <c>GetService</c> calls throw <see cref="ObjectDisposedException"/>.
+/// <para>
+/// <b>Rule for handler authors:</b> never read <see cref="Current"/> from a task that
+/// outlives the handler's awaited completion. Capture any required scoped service
+/// into a local before starting fire-and-forget work.
+/// </para>
+/// </remarks>
+internal sealed class ConsumeScopeAccessor
 {
     // Instance-scoped AsyncLocal so multiple ConsumeScopeAccessor instances in the same
-    // AppDomain (e.g. two Bus instances) maintain independent scopes. Pre-Phase-11 this
-    // was a static field, leaking scopes across bus boundaries.
+    // AppDomain (e.g. two Bus instances) maintain independent scopes. A static AsyncLocal
+    // here would leak scopes across bus boundaries.
     private readonly AsyncLocal<IServiceProvider?> _current = new();
 
     /// <summary>

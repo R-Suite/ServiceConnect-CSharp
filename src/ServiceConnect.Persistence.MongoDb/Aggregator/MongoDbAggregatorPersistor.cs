@@ -12,9 +12,10 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// MongoDB implementation of IAggregatorPersistor.
 /// Supports both standard and SSL connections via MongoDbPersistenceOptions.
 /// </summary>
-public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
+internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
 {
     private readonly IMongoCollection<AggregatorDocument> _collection;
+    private readonly IMongoClient _mongoClient;
     private readonly ILogger<MongoDbAggregatorPersistor> _logger;
     private readonly IMessageTypeRegistry _typeRegistry;
     private readonly TimeProvider _timeProvider;
@@ -49,7 +50,12 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     // minutes is the same horizon MongoDbTimeoutStore uses for its row leases — long
     // enough that a slow but live flush will not be interrupted, short enough that a
     // crashed worker's rows are recoverable in the same operational window.
-    private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(5);
+    internal static readonly TimeSpan DefaultLeaseDuration = TimeSpan.FromMinutes(5);
+
+    // The actual lease window for this instance — defaults to DefaultLeaseDuration; the
+    // internal ctor overload lets E2E tests inject a short window so lease-expiry behaviour
+    // can be exercised against a real broker within seconds.
+    private readonly TimeSpan _leaseDuration;
 
     static MongoDbAggregatorPersistor()
     {
@@ -73,6 +79,22 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     }
 
     /// <summary>
+    /// Test-only ctor that lets E2E tests use the default collection name with a short
+    /// lease duration; production code uses the public ctors which default to
+    /// <see cref="DefaultLeaseDuration"/>.
+    /// </summary>
+    internal MongoDbAggregatorPersistor(
+        IMongoClient mongoClient,
+        MongoDbPersistenceOptions options,
+        ILogger<MongoDbAggregatorPersistor> logger,
+        IMessageTypeRegistry typeRegistry,
+        TimeProvider? timeProvider,
+        TimeSpan? leaseDuration)
+        : this(mongoClient, options, "Aggregator", logger, typeRegistry, timeProvider, leaseDuration)
+    {
+    }
+
+    /// <summary>
     /// Creates a persistor that stores aggregator data in the specified collection.
     /// </summary>
     /// <param name="mongoClient">The MongoDB client.</param>
@@ -82,12 +104,37 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// <param name="typeRegistry">The registry used to resolve stored message types.</param>
     /// <param name="timeProvider">Time source used to stamp aggregator inserts.</param>
     public MongoDbAggregatorPersistor(IMongoClient mongoClient, MongoDbPersistenceOptions options, string collectionName, ILogger<MongoDbAggregatorPersistor> logger, IMessageTypeRegistry typeRegistry, TimeProvider? timeProvider = null)
+        : this(mongoClient, options, collectionName, logger, typeRegistry, timeProvider, leaseDuration: null)
+    {
+    }
+
+    /// <summary>
+    /// Test-only ctor that lets callers override the lease window so lease-expiry behaviour
+    /// can be exercised within seconds. Production code MUST go through the public ctors,
+    /// which default to <see cref="DefaultLeaseDuration"/> — a too-short lease in production
+    /// admits duplicate dispatch when a flush legitimately runs longer than the window.
+    /// </summary>
+    internal MongoDbAggregatorPersistor(
+        IMongoClient mongoClient,
+        MongoDbPersistenceOptions options,
+        string collectionName,
+        ILogger<MongoDbAggregatorPersistor> logger,
+        IMessageTypeRegistry typeRegistry,
+        TimeProvider? timeProvider,
+        TimeSpan? leaseDuration)
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
         ArgumentNullException.ThrowIfNull(logger);
+        if (leaseDuration is { } lease && lease <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(leaseDuration),
+                "Aggregator lease duration must be strictly positive.");
+        }
+        _mongoClient = mongoClient;
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _timeProvider = timeProvider ?? TimeProvider.System;
+        _leaseDuration = leaseDuration ?? DefaultLeaseDuration;
 
         // Aggregator state is correctness-sensitive: w:0 makes RemoveDataAsync's IsAcknowledged
         // gate silently succeed, breaking the documented ConcurrencyException contract on
@@ -145,7 +192,7 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 .SetOnInsert(x => x.Name, name)
                 .SetOnInsert(x => x.IdempotencyKey, idempotencyKey)
                 .SetOnInsert(x => x.DataBson, dataBson)
-                .SetOnInsert(x => x.DataTypeName, dataType.FullName!)
+                .SetOnInsert(x => x.DataTypeName, dataType.FullName ?? dataType.Name)
                 .SetOnInsert(x => x.Version, 1)
                 .SetOnInsert(x => x.InsertedAtTicks, _timeProvider.GetUtcNow().UtcTicks)
                 .SetOnInsert(x => x.InsertSequence, insertSequence);
@@ -182,43 +229,101 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     /// <inheritdoc />
     public async Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
     {
+        IClientSessionHandle? session = null;
         try
         {
             await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
 
-            // Atomically claim every unlocked or stale-lease row for this aggregator by
-            // setting LockedBy and LockExpiresAt to this call's session id and lease
-            // deadline. A clustered second worker running the same UpdateMany sees no
-            // matching rows and claims nothing — the read-back below then returns empty
-            // and that worker's flush is a no-op. The filter accepts pre-migration rows
-            // (LockedBy missing/null) and stale leases (LockExpiresAt <= utcNow) so a
-            // crashed worker's claims are reclaimable without a separate reaper.
+            // Causally-consistent session so the read-back is guaranteed to see the lease-claim
+            // write even when the primary fails over mid-call or the read-back lands on a
+            // secondary that hasn't yet applied the claim. Standalone mongods don't support
+            // sessions — fall back to unsessioned where StartSessionAsync throws NotSupported.
+            // MongoException covers cluster-state errors that surface at session-start time
+            // (e.g. no suitable server for sessions) — degrade to unsessioned rather than
+            // propagating; the lease-claim filter is still correct without a session, just
+            // weaker under failover.
+            try
+            {
+                var startSessionTask = _mongoClient.StartSessionAsync(
+                    new ClientSessionOptions { CausalConsistency = true },
+                    cancellationToken);
+                // Defensive: Mock<IMongoClient> with no StartSessionAsync setup returns null
+                // (Moq's default for reference-type returns). Guard so unit tests using
+                // legacy mocks aren't forced to add an explicit StartSessionAsync setup.
+                if (startSessionTask is not null)
+                {
+                    session = await startSessionTask.ConfigureAwait(false);
+                }
+            }
+            catch (NotSupportedException)
+            {
+                session = null;
+            }
+            catch (MongoException)
+            {
+                session = null;
+            }
+
+            // Atomically claim every unlocked or stale-lease row for this aggregator. The
+            // filter uses $expr with $$NOW so the lease-expiry comparison evaluates against
+            // mongod's clock — the client's clock cannot pull "expired" rows out from under
+            // a peer holding a still-valid lease. The pipeline update writes a fresh
+            // LockExpiresAt as `$$NOW + LeaseDuration`, again server-time-anchored so the
+            // claim never depends on the client clock matching the server clock. Without
+            // this, two workers with skewed clocks could each see a peer's lease as expired
+            // and both claim the same rows — duplicate aggregator dispatch.
             var sessionId = Guid.NewGuid();
-            var utcNow = _timeProvider.GetUtcNow().UtcDateTime;
-            var leaseDeadline = utcNow + LeaseDuration;
-            var claimFilter = Builders<AggregatorDocument>.Filter.And(
-                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
-                Builders<AggregatorDocument>.Filter.Or(
-                    Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, null),
-                    Builders<AggregatorDocument>.Filter.Lte(x => x.LockExpiresAt, utcNow)));
-            var claimUpdate = Builders<AggregatorDocument>.Update
-                .Set(x => x.LockedBy, sessionId)
-                .Set(x => x.LockExpiresAt, leaseDeadline);
+            var leaseMs = (long)_leaseDuration.TotalMilliseconds;
+            var claimFilter = new BsonDocumentFilterDefinition<AggregatorDocument>(new BsonDocument
+            {
+                { "Name", name },
+                {
+                    "$expr",
+                    new BsonDocument("$or", new BsonArray
+                    {
+                        new BsonDocument("$eq", new BsonArray { "$LockedBy", BsonNull.Value }),
+                        new BsonDocument("$lte", new BsonArray { "$LockExpiresAt", "$$NOW" }),
+                    })
+                },
+            });
+            var setStage = new BsonDocument("$set", new BsonDocument
+            {
+                { "LockedBy", new BsonBinaryData(sessionId, GuidRepresentation.Standard) },
+                {
+                    "LockExpiresAt",
+                    new BsonDocument("$add", new BsonArray { "$$NOW", leaseMs })
+                },
+            });
+            var claimUpdate = new PipelineUpdateDefinition<AggregatorDocument>(
+                new BsonDocumentStagePipelineDefinition<AggregatorDocument, AggregatorDocument>([setStage]));
 
             var leaseClaimed = false;
             List<AggregatorDocument> docs;
             try
             {
-                await _collection.UpdateManyAsync(claimFilter, claimUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+                if (session is not null)
+                {
+                    await _collection.UpdateManyAsync(session, claimFilter, claimUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await _collection.UpdateManyAsync(claimFilter, claimUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
                 leaseClaimed = true;
 
-                // Read back exactly the rows this session just claimed. The LockExpiresAt > utcNow
-                // guard rejects rows whose lease expired between the claim and read in pathological
-                // clock-jump cases.
-                var filter = Builders<AggregatorDocument>.Filter.And(
-                    Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
-                    Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, sessionId),
-                    Builders<AggregatorDocument>.Filter.Gt(x => x.LockExpiresAt, utcNow));
+                // Read back exactly the rows this session just claimed. The LockExpiresAt > $$NOW
+                // guard (still server-anchored) rejects rows whose lease expired between the
+                // claim and read in pathological clock-jump cases — same $$NOW source as above
+                // so client clock skew cannot poison this leg either.
+                var readBackFilter = new BsonDocumentFilterDefinition<AggregatorDocument>(new BsonDocument
+                {
+                    { "Name", name },
+                    { "LockedBy", new BsonBinaryData(sessionId, GuidRepresentation.Standard) },
+                    {
+                        "$expr",
+                        new BsonDocument("$gt", new BsonArray { "$LockExpiresAt", "$$NOW" })
+                    },
+                });
                 // Sort by InsertedAtTicks (insertion-order), then InsertSequence (per-process
                 // monotonic counter for same-tick ties), then Id as a final stable tie-break
                 // for cross-process ties. Without an explicit sort MongoDB returns documents
@@ -227,7 +332,9 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                     .Ascending(x => x.InsertedAtTicks)
                     .Ascending(x => x.InsertSequence)
                     .Ascending(x => x.Id);  // final tie-break for cross-process ties
-                docs = await _collection.Find(filter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false);
+                docs = session is not null
+                    ? await _collection.Find(session, readBackFilter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false)
+                    : await _collection.Find(readBackFilter).Sort(sort).ToListAsync(cancellationToken).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -315,6 +422,10 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         {
             throw new PersistenceException($"Failed to get aggregator data for '{name}'.", ex);
         }
+        finally
+        {
+            session?.Dispose();
+        }
     }
 
     /// <inheritdoc />
@@ -327,22 +438,37 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
                 Builders<AggregatorDocument>.Filter.Eq("DataBson.CorrelationId", new BsonBinaryData(correlationId, GuidRepresentation.Standard))
             );
-            // Name + CorrelationId is effectively unique; DeleteOneAsync avoids a full
-            // collection scan after the first match.
-            var result = await _collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
-            // IsAcknowledged is false under w:0 — we can't detect no-op then, so don't throw.
-            // When acknowledged, DeletedCount==0 means the row wasn't there. We distinguish two
-            // sub-cases: (a) no rows at all for this Name — structural mismatch, the caller used
-            // the wrong aggregator name or all rows were already removed via RemoveAllAsync; and
-            // (b) the Name bucket has rows but none matched this CorrelationId — a concurrency
-            // race where another consumer won the delete, or the caller passed a mismatched key.
-            if (result.IsAcknowledged && result.DeletedCount == 0)
+            // FindOneAndDelete returns the deleted document so we can inspect LockedBy /
+            // LockExpiresAt — atomic delete-with-readback in one round-trip. Without the
+            // readback, a peer holding an active lease on this row gets the row deleted out
+            // from under their RemoveSnapshotAsync, which then warns "lease rotated" with no
+            // useful diagnostic about who removed it. RemoveDataAsync is a public IAggregatorPersistor
+            // surface that bypasses the snapshot lease by contract (callers explicitly say
+            // "remove this specific row"); when a lease violation occurs we log a Warning so
+            // operators can correlate the snapshot-rotation warning to the RemoveDataAsync
+            // call without inferring it from timing.
+            var deleted = await _collection.FindOneAndDeleteAsync(filter, cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (deleted is not null
+                && deleted.LockedBy is not null
+                && (deleted.LockExpiresAt is null || deleted.LockExpiresAt > DateTime.UtcNow))
             {
+                _logger.LogWarning(
+                    "RemoveDataAsync deleted aggregator row for Name='{Name}', CorrelationId='{CorrelationId}' while an active lease (session={LockedBy}, expiresAt={Expires}) was held; a concurrent RemoveSnapshotAsync may surface a lease-rotation warning for the same session.",
+                    name, correlationId, deleted.LockedBy, deleted.LockExpiresAt);
+            }
+            if (deleted is null)
+            {
+                // IAggregatorPersistor.RemoveDataAsync contract: throw ConcurrencyException
+                // for any "row could not be located" outcome — the empty-bucket case
+                // (Name has no rows) and the wrong-key case (Name has rows but none match)
+                // are both shapes of "concurrent state changed under us" or "caller passed
+                // a mismatched key". A separate KeyNotFoundException would break InMemory
+                // parity and break callers relying on the single contracted exception type.
                 var nameOnly = Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name);
                 var nameCount = await _collection.CountDocumentsAsync(nameOnly, cancellationToken: cancellationToken).ConfigureAwait(false);
                 if (nameCount == 0)
                 {
-                    throw new KeyNotFoundException(
+                    throw new ConcurrencyException(
                         $"Aggregator has no rows for Name='{name}'. Caller may have used the wrong " +
                         $"aggregator name or the rows were already removed (RemoveAllAsync) by another path.");
                 }
@@ -428,6 +554,42 @@ public sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         catch (MongoException ex)
         {
             throw new PersistenceException($"Failed to remove snapshot aggregator data for '{name}'.", ex);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task ReleaseSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        // Only LeasedAggregatorSnapshot rows hold a server-side lease; legacy snapshot
+        // shapes (or empty snapshots) have no lease to release.
+        if (snapshot is not LeasedAggregatorSnapshot leased || snapshot.ResolvedIds.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await EnsureIndexesAsync(cancellationToken).ConfigureAwait(false);
+            // Clear LockedBy / LockExpiresAt for any row still locked under THIS snapshot's
+            // session. Matching on sessionId means a row whose lease has already rotated to
+            // a different worker (the at-least-once delivery scenario logged in
+            // RemoveSnapshotAsync) is left untouched — that worker now owns it.
+            var releaseFilter = Builders<AggregatorDocument>.Filter.And(
+                Builders<AggregatorDocument>.Filter.Eq(x => x.Name, name),
+                Builders<AggregatorDocument>.Filter.Eq(x => x.LockedBy, leased.LeaseSessionId));
+            var releaseUpdate = Builders<AggregatorDocument>.Update
+                .Set(x => x.LockedBy, (Guid?)null)
+                .Set(x => x.LockExpiresAt, (DateTime?)null);
+            await _collection.UpdateManyAsync(releaseFilter, releaseUpdate, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException($"Failed to release snapshot aggregator lease for '{name}'.", ex);
+        }
+        catch (MongoException ex)
+        {
+            throw new PersistenceException($"Failed to release snapshot aggregator lease for '{name}'.", ex);
         }
     }
 

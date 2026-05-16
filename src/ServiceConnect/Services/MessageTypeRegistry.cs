@@ -8,7 +8,7 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Stores known message CLR types by their full and assembly-qualified names for dispatch-time lookup.
 /// </summary>
-public sealed class MessageTypeRegistry : IMessageTypeRegistry
+internal sealed class MessageTypeRegistry : IMessageTypeRegistry
 {
     private readonly ConcurrentDictionary<string, Type> _registeredTypes = new(StringComparer.Ordinal);
     private FrozenDictionary<string, Type>? _types;
@@ -65,14 +65,61 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
         // whichever was registered last, which is load-order dependent. Reject the
         // collision with a clear signal. Re-registering the exact same Type is
         // idempotent.
-        if (type.AssemblyQualifiedName is not null)
+        //
+        // Pre-validate BOTH keys before committing either — without this, an AQN-add
+        // success followed by a FullName-collision throw would leave the AQN entry
+        // committed but the version unbumped and the cache un-invalidated, so a stale
+        // cached snapshot would miss the AQN entry and TryResolve(AQN) would report
+        // the type as unregistered despite the dict containing it. The pre-check costs
+        // two ContainsKey lookups; this method runs once per type at startup so the
+        // throughput is irrelevant.
+        if (type.AssemblyQualifiedName is { } aqn
+            && _registeredTypes.TryGetValue(aqn, out var existingByAqn)
+            && existingByAqn != type)
         {
-            AddOrReject(type.AssemblyQualifiedName, type);
+            throw new InvalidOperationException(
+                $"Message type registration collision on key '{aqn}': already registered as '{existingByAqn.AssemblyQualifiedName}', cannot re-register as '{type.AssemblyQualifiedName}'.");
+        }
+        if (type.FullName is { } fullName
+            && _registeredTypes.TryGetValue(fullName, out var existingByFullName)
+            && existingByFullName != type)
+        {
+            throw new InvalidOperationException(
+                $"Message type registration collision on key '{fullName}': already registered as '{existingByFullName.AssemblyQualifiedName}', cannot re-register as '{type.AssemblyQualifiedName}'.");
         }
 
-        if (type.FullName is not null)
+        // Commit both keys with rollback on FullName failure. The pre-validate above narrows
+        // the race window but is not atomic — a concurrent Register can land a colliding
+        // FullName between our pre-check and the AddOrReject below. Without rollback, the
+        // AQN commit succeeds while FullName throws, leaving the registry half-populated
+        // and the cache un-invalidated (so a stale snapshot misses the committed AQN entry).
+        var aqnCommitted = false;
+        try
         {
-            AddOrReject(type.FullName, type);
+            if (type.AssemblyQualifiedName is not null)
+            {
+                AddOrReject(type.AssemblyQualifiedName, type);
+                aqnCommitted = true;
+            }
+
+            if (type.FullName is not null)
+            {
+                AddOrReject(type.FullName, type);
+            }
+        }
+        catch
+        {
+            // Rollback the AQN entry if we committed it before the FullName collision. Use
+            // KVP-based TryRemove so a concurrent re-Register of the SAME type (idempotent —
+            // AddOrReject is a no-op when existing == type) doesn't get its entry removed
+            // by our rollback. Best-effort: if rollback fails (extremely unlikely under
+            // ConcurrentDictionary), the registry remains in the same partial state as
+            // before this fix; we re-throw the original collision either way.
+            if (aqnCommitted && type.AssemblyQualifiedName is not null)
+            {
+                _registeredTypes.TryRemove(new KeyValuePair<string, Type>(type.AssemblyQualifiedName, type));
+            }
+            throw;
         }
 
         // Bump version first so a racing TryResolve that has already taken its snapshot
@@ -96,6 +143,9 @@ public sealed class MessageTypeRegistry : IMessageTypeRegistry
         var existing = _registeredTypes.GetOrAdd(key, type);
         if (existing != type)
         {
+            // Defence-in-depth: a concurrent Register for a colliding type that lost the
+            // pre-validation race ends up here. Pre-validation closes the common path; this
+            // throw covers the cross-thread race window.
             throw new InvalidOperationException(
                 $"Message type registration collision on key '{key}': already registered as '{existing.AssemblyQualifiedName}', cannot re-register as '{type.AssemblyQualifiedName}'.");
         }

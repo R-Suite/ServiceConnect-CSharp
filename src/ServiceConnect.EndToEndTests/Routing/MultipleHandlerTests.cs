@@ -38,7 +38,7 @@ public class MultipleHandlerTests(MessagingFixture fixture)
         var services = new ServiceCollection();
         services.AddLogging();
 
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddSingleton(bag);
         services.AddSingleton(tcs);
         services.AddTransient<IMessageHandler<TestMessage>, TaggedHandlerA>();

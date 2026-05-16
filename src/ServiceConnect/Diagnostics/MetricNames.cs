@@ -40,4 +40,9 @@ public static class MetricNames
 
     /// <summary>UpDownCounter — current count of in-flight (dispatched but not acked) consumer messages.</summary>
     public const string InFlightMessages = "messaging.serviceconnect.process.messages.inflight";
+
+    /// <summary>Counter — number of outgoing operations aborted because an outgoing filter
+    /// returned <c>FilterAction.Stop</c>. No publish/send span is emitted for blocked operations,
+    /// so this counter is the operator-visible signal for filter-suppressed deliveries.</summary>
+    public const string OutgoingFiltersBlocked = "messaging.serviceconnect.outgoing_filters.blocked";
 }

@@ -8,7 +8,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <remarks>
 /// Initializes a new <see cref="CacheProvider"/> using the supplied clock.
 /// </remarks>
-public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICacheProvider, IKeyValueStore, IDisposable
+internal sealed class CacheProvider(TimeProvider? timeProvider = null) : ICacheProvider, IKeyValueStore, IDisposable
 {
     private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
     private readonly ConcurrentDictionary<object, CacheItem> _cache = new();
@@ -286,9 +286,9 @@ public sealed class CacheProvider(TimeProvider? timeProvider = null) : ICachePro
             {
                 // Either the key was never present, or another thread removed it during
                 // the CAS retry. Either way the caller's optimistic-update contract is
-                // violated — throw so the caller can react deterministically.
-                // Pre-Phase-10 this was a silent no-op — which let aggregator's optimistic-
-                // concurrency loop advance Version against a phantom row.
+                // violated — throw so the caller can react deterministically. Silently
+                // no-op'ing here would let the aggregator's optimistic-concurrency loop
+                // advance Version against a phantom row.
                 throw new KeyNotFoundException(
                     $"Cannot Update key '{key}' — key not present. Use Add to insert new keys.");
             }

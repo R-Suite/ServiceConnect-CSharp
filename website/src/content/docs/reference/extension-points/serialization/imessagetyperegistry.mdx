@@ -20,20 +20,16 @@ See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the con
 ### `TryResolve`
 
 ```csharp
-bool TryResolve(string typeName, out Type type);
+bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type);
 ```
 
 Attempts to locate a previously registered CLR `Type` by its wire name.
 
 **Parameters**
 - `typeName` — the wire name as it appears in the message header or payload. The format is implementation-defined; the framework passes whatever string was embedded in the incoming message without transformation.
-- `type` — receives the resolved `Type` if the method returns `true`; the value is undefined when the method returns `false`.
+- `type` — receives the resolved `Type` if the method returns `true`; `null` when the method returns `false`. The `[MaybeNullWhen(false)]` attribute lets implementations write `type = null` on the not-found branch without a nullable-context warning.
 
 **Returns.** `true` if a type was found; `false` if `typeName` is unknown. Do not throw for the not-found case — the caller (the bus dispatch pipeline) decides how to react, typically by routing the message to the error queue.
-
-<Aside type="caution">
-The `out` parameter is declared as `out Type` (non-nullable) to match the source interface. An implementation must still assign a value to the parameter in the `false` branch — assign `type = null!` or `type = typeof(object)` as a placeholder when returning `false`.
-</Aside>
 
 ---
 
@@ -49,6 +45,20 @@ Adds `type` to the registry so it can be resolved by name on inbound messages.
 - `type` — the CLR type to register; must be a `Message` subclass. The implementation derives the wire name from `type` according to its naming scheme (full name, simple name, a custom attribute value, and so on).
 
 **Remarks.** Implementations should fail loudly at registration time when two CLR types share the same wire name rather than silently overwriting the prior entry. A silent overwrite means the first type becomes permanently unreachable and produces hard-to-diagnose deserialization failures at runtime.
+
+---
+
+### `AllRegisteredTypeNames`
+
+```csharp
+IReadOnlyCollection<string> AllRegisteredTypeNames();
+```
+
+Returns a point-in-time snapshot of every registered type-name key. The default implementation (the framework's own `MessageTypeRegistry`) emits both the `Type.FullName` and `Type.AssemblyQualifiedName` keys for each registered type — third-party implementations choosing a different keying scheme should return whatever set of strings `TryResolve` accepts.
+
+**Returns.** The currently-registered type-name keys, detached from the registry. Subsequent `Register` calls do not retroactively appear in a previously returned snapshot.
+
+**Used by.** Persistors that want to filter stored records to those whose CLR type is currently resolvable — for example, the Mongo aggregator persistor uses this set to build a `$in` filter on its `CountResolvedAsync` query so it does not materialise and discard documents that would deserialise to a now-missing type. A registry that returns an unstable, growing snapshot will produce surprising flush-gate behaviour: implementations should cache the snapshot until the next `Register` call.
 
 ## Implementing
 
@@ -81,14 +91,15 @@ The registry is a singleton. `TryResolve` is called on the inbound message hot p
 
 ```csharp
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using ServiceConnect.Interfaces;
 
 public sealed class WireNameMessageTypeRegistry : IMessageTypeRegistry
 {
     private readonly ConcurrentDictionary<string, Type> _map = new();
 
-    public bool TryResolve(string typeName, out Type type)
-        => _map.TryGetValue(typeName, out type!);
+    public bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type)
+        => _map.TryGetValue(typeName, out type);
 
     public void Register(Type type)
     {
@@ -97,6 +108,8 @@ public sealed class WireNameMessageTypeRegistry : IMessageTypeRegistry
         // if (!_map.TryAdd(wireName, type))
         //     throw new InvalidOperationException(...);
     }
+
+    public IReadOnlyCollection<string> AllRegisteredTypeNames() => _map.Keys.ToArray();
 }
 ```
 
@@ -108,6 +121,7 @@ The following example implements a registry that resolves compact wire names (e.
 
 ```csharp
 using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using ServiceConnect.Interfaces;
 
@@ -128,8 +142,8 @@ public sealed class WireNameMessageTypeRegistry : IMessageTypeRegistry
 {
     private readonly ConcurrentDictionary<string, Type> _map = new(StringComparer.Ordinal);
 
-    public bool TryResolve(string typeName, out Type type)
-        => _map.TryGetValue(typeName, out type!);
+    public bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type)
+        => _map.TryGetValue(typeName, out type);
 
     public void Register(Type type)
     {
@@ -143,6 +157,8 @@ public sealed class WireNameMessageTypeRegistry : IMessageTypeRegistry
                 $"Wire name '{attr.Name}' is already registered as '{_map[attr.Name].FullName}'. " +
                 $"Cannot also register '{type.FullName}'. Resolve the naming conflict.");
     }
+
+    public IReadOnlyCollection<string> AllRegisteredTypeNames() => _map.Keys.ToArray();
 }
 ```
 

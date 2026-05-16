@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IMessageSerializer` is the interface the framework calls to turn a CLR `Message` object into bytes on the way out and back into a typed object on the way in. The shipped default is JSON-based. Replace it when you need a binary wire format (Protobuf, MessagePack) or a custom serialization scheme that the default implementation does not support.
+`IMessageSerializer` is the interface the framework calls to turn a CLR `Message` object into bytes on the way out and back into a typed object on the way in. The shipped default is JSON-based (`SystemTextJsonMessageSerializer`, internal to the framework). Replace it when you need a binary wire format (Protobuf, MessagePack) or a custom serialization scheme that the default implementation does not support.
 
 A serializer is typically paired with an `IMessageTypeRegistry`. Some transports embed the CLR type name in a message header and call `Deserialize(data, Type)` directly, so the serializer never needs to discover the type from the payload. Other wire formats encode the type name inside the payload itself — in those cases the serializer calls `IMessageTypeRegistry.TryResolve` to map the wire name back to a CLR type.
 
@@ -15,142 +15,78 @@ See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the con
 
 ## Reference
 
+```csharp
+public interface IMessageSerializer
+{
+    void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message;
+    T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message;
+    object Deserialize(ReadOnlyMemory<byte> data, Type type);
+    object Deserialize(in ReadOnlySequence<byte> data, Type type);
+}
+```
+
+The interface has four members — three abstract and one default-interface method. The `ReadOnlySequence<byte>` deserialize is implemented in terms of `Deserialize(ReadOnlyMemory<byte>, Type)` by default and only needs to be overridden when zero-copy handling of multi-segment sequences is required.
+
+---
+
 ### `Serialize<T>`
 
 ```csharp
-byte[] Serialize<T>(T message) where T : Message;
+void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message;
 ```
 
-Serializes `message` into a newly allocated byte array.
+Serializes `message` directly into `output`. Implementations should write without allocating an intermediate `byte[]`.
 
 **Parameters**
 - `message` — the message to serialize; constrained to `Message` subclasses.
-
-**Returns.** A byte array containing the full serialized payload. The array is owned by the caller; the implementation must not retain a reference to it.
-
----
-
-### `Serialize<T>` (buffer-writer overload)
-
-```csharp
-void Serialize<T>(T message, System.Buffers.IBufferWriter<byte> output) where T : Message;
-```
-
-Serializes `message` directly into `output`, avoiding the intermediate array allocation. Prefer this overload on hot paths where the destination buffer is already available (for example, when writing directly to a network transport pipe).
-
-**Parameters**
-- `message` — the message to serialize.
-- `output` — the destination `IBufferWriter<byte>`. The implementation calls `output.GetSpan` / `output.Advance` or equivalent to write without copying.
+- `output` — the destination buffer writer. Caller owns its lifetime; the implementation calls `output.GetSpan` / `output.Advance` (or equivalent) to write without copying.
 
 ---
 
-### `Deserialize<T>` (byte array)
+### `Deserialize<T>`
 
 ```csharp
-T Deserialize<T>(byte[] data) where T : Message;
+T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message;
 ```
 
-Deserializes `data` into an instance of `T`.
+Deserializes a memory block into an instance of `T`. Used on the request/reply path where the caller has the static type at the call site.
 
 **Parameters**
-- `data` — the raw serialized payload.
+- `data` — the serialized payload.
 
 **Returns.** A fully populated `T` instance.
 
 ---
 
-### `Deserialize<T>` (ReadOnlySpan)
+### `Deserialize(ReadOnlyMemory<byte>, Type)`
 
 ```csharp
-T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message;
+object Deserialize(ReadOnlyMemory<byte> data, Type type);
 ```
 
-Deserializes a span of bytes into an instance of `T`. Prefer this overload when the caller already holds a span and no heap allocation is needed for the input.
+Deserializes a memory block into the CLR type specified by `type`. The dispatch path resolves the runtime type from the message header (via `IMessageTypeRegistry`) and calls this overload directly.
 
 **Parameters**
-- `data` — a read-only span over the raw payload bytes.
-
-**Returns.** A fully populated `T` instance.
-
----
-
-### `Deserialize` (byte array, Type)
-
-```csharp
-object Deserialize(byte[] data, Type type);
-```
-
-Deserializes `data` into the CLR type specified by `type`. The transport calls this overload when it has already resolved the target type from a message header.
-
-**Parameters**
-- `data` — the raw serialized payload.
-- `type` — the CLR type to deserialize into; must be a `Message` subclass.
+- `data` — the serialized payload.
+- `type` — the destination CLR type; must be a `Message` subclass.
 
 **Returns.** The deserialized object, typed as `object`.
 
 ---
 
-### `Deserialize` (ReadOnlySpan, Type)
+### `Deserialize(in ReadOnlySequence<byte>, Type)`
 
 ```csharp
-object Deserialize(ReadOnlySpan<byte> data, Type type);
+object Deserialize(in ReadOnlySequence<byte> data, Type type);
 ```
 
-Deserializes a span of bytes into the CLR type specified by `type`.
+Default-interface method. Deserializes a (possibly multi-segment) `ReadOnlySequence<byte>` into the CLR type specified by `type`. Used by the streaming path where buffered packets arrive as segmented sequences rather than copied into a contiguous buffer.
+
+**Default implementation.** Flattens the sequence into a `byte[]` via `BuffersExtensions.ToArray` before delegating to `Deserialize(ReadOnlyMemory<byte>, Type)`. Implementations that can read across segments without flattening — e.g. via `System.Text.Json.Utf8JsonReader` on a sequence — should override to avoid the allocation on multi-segment input.
 
 **Parameters**
-- `data` — a read-only span over the raw payload bytes.
-- `type` — the CLR type to deserialize into.
-
-**Returns.** The deserialized object, typed as `object`.
-
----
-
-### `Deserialize` (ReadOnlyMemory, Type)
-
-```csharp
-object Deserialize(ReadOnlyMemory<byte> data, Type type)
-    => Deserialize(data.ToArray(), type);
-```
-
-Deserializes a `ReadOnlyMemory<byte>` block into the CLR type specified by `type`. The default implementation delegates to `Deserialize(byte[], Type)` via `data.ToArray()`, so implementors do not need to override this method unless they can provide a more efficient path.
-
-**Parameters**
-- `data` — the memory block containing the serialized payload.
-- `type` — the CLR type to deserialize into.
-
-**Returns.** The deserialized object, typed as `object`.
-
----
-
-### `Deserialize<T>` (ReadOnlyMemory)
-
-```csharp
-T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
-    => (T)Deserialize(data, typeof(T));
-```
-
-Deserializes a `ReadOnlyMemory<byte>` block into an instance of `T`. The default implementation delegates to `Deserialize(ReadOnlyMemory<byte>, Type)` and casts the result, so implementors do not need to override this method unless a more efficient path is available.
-
-**Parameters**
-- `data` — the memory block containing the serialized payload.
-
-**Returns.** A fully populated `T` instance.
-
----
-
-### `Deserialize` (ReadOnlySequence, Type)
-
-```csharp
-object Deserialize(in System.Buffers.ReadOnlySequence<byte> data, Type type)
-    => Deserialize(System.Buffers.BuffersExtensions.ToArray(data), type);
-```
-
-Deserializes a segmented `ReadOnlySequence<byte>` into the CLR type specified by `type`. The default implementation delegates to `Deserialize(byte[], Type)` by materializing the sequence via `BuffersExtensions.ToArray`, so implementors do not need to override this method unless zero-copy handling of multi-segment sequences is required.
-
-**Parameters**
-- `data` — the sequence of bytes constituting the serialized payload; may span multiple segments.
-- `type` — the CLR type to deserialize into.
+- `data` — the serialized payload, possibly spanning multiple segments.
+- `type` — the destination CLR type.
 
 **Returns.** The deserialized object, typed as `object`.
 
@@ -189,41 +125,24 @@ using ServiceConnect.Interfaces;
 
 public sealed class ProtobufMessageSerializer : IMessageSerializer
 {
-    // Required members — implement using Google.Protobuf or protobuf-net.
-
-    public byte[] Serialize<T>(T message) where T : Message
-    {
-        throw new NotImplementedException();
-    }
-
     public void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message
     {
         throw new NotImplementedException();
     }
 
-    public T Deserialize<T>(byte[] data) where T : Message
+    public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
     {
         throw new NotImplementedException();
     }
 
-    public T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message
+    public object Deserialize(ReadOnlyMemory<byte> data, Type type)
     {
         throw new NotImplementedException();
     }
 
-    public object Deserialize(byte[] data, Type type)
-    {
-        throw new NotImplementedException();
-    }
-
-    public object Deserialize(ReadOnlySpan<byte> data, Type type)
-    {
-        throw new NotImplementedException();
-    }
-
-    // The three ReadOnlyMemory / ReadOnlySequence overloads have default
-    // interface implementations that delegate to Deserialize(byte[], Type).
-    // Override them only if you need a zero-copy fast path.
+    // Deserialize(in ReadOnlySequence<byte>, Type) has a default implementation
+    // on the interface that flattens to a byte[] before delegating. Override only
+    // if you can read multi-segment sequences without copying (e.g. Utf8JsonReader).
 }
 ```
 
@@ -235,7 +154,6 @@ The following example implements the **header-based strategy**: the type name tr
 
 ```csharp
 using System.Buffers;
-using System.Buffers.Binary;
 using Google.Protobuf;
 using ServiceConnect.Interfaces;
 
@@ -245,13 +163,6 @@ using ServiceConnect.Interfaces;
 /// </summary>
 public sealed class ProtobufMessageSerializer : IMessageSerializer
 {
-    public byte[] Serialize<T>(T message) where T : Message
-    {
-        var proto = (IMessage)message;
-        var payload = proto.ToByteArray();
-        return payload;
-    }
-
     public void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message
     {
         var proto = (IMessage)message;
@@ -261,20 +172,16 @@ public sealed class ProtobufMessageSerializer : IMessageSerializer
         output.Advance(payload.Length);
     }
 
-    public T Deserialize<T>(byte[] data) where T : Message
+    public T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message
         => (T)Deserialize(data, typeof(T));
 
-    public T Deserialize<T>(ReadOnlySpan<byte> data) where T : Message
-        => (T)Deserialize(data, typeof(T));
-
-    public object Deserialize(byte[] data, Type type)
+    public object Deserialize(ReadOnlyMemory<byte> data, Type type)
     {
         var parser = (MessageParser)type.GetProperty("Parser")!.GetValue(null)!;
-        return parser.ParseFrom(data);
+        // Protobuf parsers expect a span/array; the framework guarantees the memory
+        // is contiguous and stable for the duration of this call.
+        return parser.ParseFrom(data.Span);
     }
-
-    public object Deserialize(ReadOnlySpan<byte> data, Type type)
-        => Deserialize(data.ToArray(), type);
 }
 ```
 

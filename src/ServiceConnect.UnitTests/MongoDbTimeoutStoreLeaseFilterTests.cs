@@ -66,9 +66,9 @@ public class MongoDbTimeoutStoreLeaseFilterTests
     }
 
     private static string Render(FilterDefinition<TimeoutData> filter) =>
-        filter.Render(
+        filter.Render(new RenderArgs<TimeoutData>(
             BsonSerializer.LookupSerializer<TimeoutData>(),
-            BsonSerializer.SerializerRegistry).ToJson();
+            BsonSerializer.SerializerRegistry)).ToJson();
 
     [Fact]
     public async Task RemoveDispatchedTimeout_FilterIncludesLockExpiresAtPredicate()
@@ -84,8 +84,11 @@ public class MongoDbTimeoutStoreLeaseFilterTests
 
         Assert.NotNull(captured);
         var json = Render(captured!);
-        Assert.Contains("\"LockExpiresAt\"", json);
+        // $$NOW-anchored predicate: { "$expr": { "$gt": [ "$LockExpiresAt", "$$NOW" ] } }
+        Assert.Contains("\"$expr\"", json);
         Assert.Contains("\"$gt\"", json);
+        Assert.Contains("\"$LockExpiresAt\"", json);
+        Assert.Contains("\"$$NOW\"", json);
     }
 
     [Fact]
@@ -107,8 +110,11 @@ public class MongoDbTimeoutStoreLeaseFilterTests
 
         Assert.NotNull(captured);
         var json = Render(captured!);
-        Assert.Contains("\"LockExpiresAt\"", json);
+        // $$NOW-anchored predicate: { "$expr": { "$gt": [ "$LockExpiresAt", "$$NOW" ] } }
+        Assert.Contains("\"$expr\"", json);
         Assert.Contains("\"$gt\"", json);
+        Assert.Contains("\"$LockExpiresAt\"", json);
+        Assert.Contains("\"$$NOW\"", json);
     }
 
     [Fact]
@@ -157,7 +163,10 @@ public class MongoDbTimeoutStoreLeaseFilterTests
 
         Assert.NotNull(readBackFilter);
         var json = Render(readBackFilter!);
-        Assert.Contains("\"LockExpiresAt\"", json);
+        // $$NOW-anchored predicate: { "$expr": { "$gt": [ "$LockExpiresAt", "$$NOW" ] } }
+        Assert.Contains("\"$expr\"", json);
         Assert.Contains("\"$gt\"", json);
+        Assert.Contains("\"$LockExpiresAt\"", json);
+        Assert.Contains("\"$$NOW\"", json);
     }
 }

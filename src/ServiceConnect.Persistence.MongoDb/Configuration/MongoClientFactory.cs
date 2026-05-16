@@ -7,7 +7,11 @@ using MongoDB.Driver;
 namespace ServiceConnect.Persistence.MongoDb;
 
 /// <summary>
-/// Factory that builds MongoClient with or without SSL based on configuration options.
+/// Factory that builds <see cref="MongoClient"/> instances configured the same way the
+/// bundled MongoDB persistors do. Public so out-of-band tooling (admin endpoints, migration
+/// scripts, sidecar services that share the same MongoDB instance for ops dashboards) can
+/// construct a client that matches the persistors' SSL/cert handling and Guid-serializer
+/// registration without reimplementing the wiring.
 /// </summary>
 public static class MongoClientFactory
 {

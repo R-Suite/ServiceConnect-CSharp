@@ -6,15 +6,22 @@
     <RootNamespace>ServiceConnect.Persistence.InMemory</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <GenerateAssemblyConfigurationAttribute>false</GenerateAssemblyConfigurationAttribute>
-    <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
-    <GenerateAssemblyProductAttribute>false</GenerateAssemblyProductAttribute>
-    <Version>7.0.0</Version>
+    <Title>ServiceConnect.Persistence.InMemory</Title>
+    <Description>In-memory process manager, aggregator and timeout persistence for ServiceConnect. Intended for development and test scenarios; data does not survive process restart.</Description>
+    <PackageTags>ServiceConnect;Persistence;InMemory;MessageBus;Messaging;Message;Bus;Service</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>ServiceConnect.UnitTests</_Parameter1>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ServiceConnect.EndToEndTests</_Parameter1>
+    </AssemblyAttribute>
+    <!-- Moq (Castle DynamicProxy) needs visibility into internal types to construct
+         proxies for the internal cache and persistor types. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
 
@@ -24,7 +31,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MongoDB.Bson" Version="2.23.1" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
   </ItemGroup>

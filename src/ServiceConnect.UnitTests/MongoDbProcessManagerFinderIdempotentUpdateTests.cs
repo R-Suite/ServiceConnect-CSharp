@@ -48,7 +48,7 @@ public class MongoDbProcessManagerFinderIdempotentUpdateTests
 
         // Caller's version must reflect the bump because the write was acknowledged
         // and the row was found at the expected version.
-        Assert.Equal(5, versionedData.Version);
+        Assert.Equal(5L, versionedData.Version);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class MongoDbProcessManagerFinderIdempotentUpdateTests
             () => finder.UpdateDataAsync(versionedData, CancellationToken.None));
 
         // Version must NOT have been bumped on a failed update.
-        Assert.Equal(4, versionedData.Version);
+        Assert.Equal(4L, versionedData.Version);
     }
 
     private static MongoDbProcessManagerFinder CreateFinder(

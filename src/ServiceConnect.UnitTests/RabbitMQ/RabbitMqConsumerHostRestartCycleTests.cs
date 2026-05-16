@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using RabbitMQ.Client;
@@ -11,30 +10,27 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies that PrepareAsync resets _disposeStarted so a Prepare→Dispose→Prepare→Dispose
-/// cycle runs the full DisposeAsync teardown on each Dispose rather than short-circuiting
-/// at the CAS guard after the first cycle.
+/// Verifies the host's single-use contract: <c>PrepareAsync</c> may be called at most once
+/// per instance. A second call throws <see cref="InvalidOperationException"/> rather than
+/// silently latching the admission gate into a permanent reject-everything state (the prior
+/// implementation reset <c>_disposeStarted</c> and rotated CTSes but left
+/// <c>_admissionGate.IsShuttingDown</c>, <c>_stopStarted</c>, and
+/// <c>_consumerCancelledByBroker</c> latched — so the second cycle's deliveries were dropped).
+/// Multi-consumer scenarios allocate a fresh host per <c>StartConsumingAsync</c> call.
 /// </summary>
 public sealed class RabbitMqConsumerHostRestartCycleTests
 {
     [Fact]
-    public async Task PrepareAsync_AfterPriorDispose_ResetsDisposeStartedFlag()
+    public async Task PrepareAsync_SecondCall_ThrowsInvalidOperationException()
     {
-        // Drive Prepare → Dispose, then read _disposeStarted via reflection. After the first
-        // DisposeAsync the flag is 1 (its CAS-set); the next PrepareAsync must reset it to 0
-        // so a subsequent DisposeAsync runs the full teardown rather than CAS-short-circuiting.
         var host = BuildHost();
 
         await host.PrepareAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "restart-q");
-        await host.DisposeAsync();
 
-        var disposeStartedField = typeof(RabbitMqConsumerHost).GetField(
-            "_disposeStarted", BindingFlags.Instance | BindingFlags.NonPublic);
-        Assert.Equal(1, (int)disposeStartedField!.GetValue(host)!);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            host.PrepareAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "restart-q"));
 
-        // The fix: a second Prepare resets the flag.
-        await host.PrepareAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "restart-q");
-        Assert.Equal(0, (int)disposeStartedField.GetValue(host)!);
+        Assert.Contains("single-use", ex.Message);
 
         await host.DisposeAsync();
     }
@@ -60,8 +56,6 @@ public sealed class RabbitMqConsumerHostRestartCycleTests
         busConfig.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
         busConfig.SetupGet(b => b.DeadLetterUnhandledMessages).Returns(false);
 
-        // Each call to PrepareAsync creates new consumer + publish channels. Loose mock so
-        // any call not explicitly set up returns a default rather than throwing.
         var channel = new Mock<IChannel>(MockBehavior.Loose);
         channel.SetupGet(c => c.IsOpen).Returns(true);
         channel.Setup(c => c.BasicQosAsync(
@@ -70,7 +64,6 @@ public sealed class RabbitMqConsumerHostRestartCycleTests
         channel.Setup(c => c.CloseAsync(
                 It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
-        // ChannelShutdownAsync subscription happens in PrepareAsync; unsubscription in DisposeAsync.
         channel.SetupAdd(c => c.ChannelShutdownAsync += It.IsAny<AsyncEventHandler<ShutdownEventArgs>>());
         channel.SetupRemove(c => c.ChannelShutdownAsync -= It.IsAny<AsyncEventHandler<ShutdownEventArgs>>());
 

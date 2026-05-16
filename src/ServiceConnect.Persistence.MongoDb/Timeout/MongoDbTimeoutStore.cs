@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
@@ -9,7 +10,7 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// <summary>
 /// MongoDB implementation of timeout persistence and lock-aware timeout leasing.
 /// </summary>
-public sealed class MongoDbTimeoutStore : ITimeoutStore
+internal sealed class MongoDbTimeoutStore : ITimeoutStore
 {
     private readonly IMongoClient _mongoClient;
     private readonly IMongoDatabase _mongoDatabase;
@@ -163,11 +164,12 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             }
 
             var sessionId = Guid.NewGuid();
-            var dueUnlockedFilter = BuildDueTimeoutFilter(utcNow);
-            var lockUpdate = Builders<TimeoutData>.Update
-                .Set(x => x.Locked, true)
-                .Set(x => x.LockedBy, sessionId)
-                .Set(x => x.LockExpiresAt, utcNow.Add(_lockLeaseDuration));
+            // Due-filter anchored on mongod's `$$NOW` so cross-host clock skew between
+            // workers does not let one host see a lease as still-held while another sees
+            // it as expired. The CLAIM update below also writes LockExpiresAt as
+            // `$$NOW + leaseDuration` (pipeline-style update) for the same reason.
+            var dueUnlockedFilter = BuildDueTimeoutFilterServerTime();
+            var lockUpdate = BuildLeaseClaimUpdate(sessionId);
 
             // Two-step claim: pull up to the effective batch cap candidate ids (UpdateMany
             // has no .Limit()), then UpdateMany filtered to those ids — still guarded by
@@ -210,9 +212,12 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
                 // The LockExpiresAt > utcNow guard prevents a race where the lease expired between
                 // the UpdateMany claim and this read-back; without it, a stale claim could return
                 // rows the reaper has already unlocked and re-assigned to another worker.
+                // LockExpiresAt > $$NOW evaluated server-side — matches the server-time
+                // claim above. A client-clock comparison here could race a clock-skewed
+                // worker into seeing the lease as expired between claim and read-back.
                 var ownedFilter = Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, sessionId)
                                 & Builders<TimeoutData>.Filter.Eq(x => x.Locked, true)
-                                & Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
+                                & LeaseHeldFilter();
                 // Sort by (Time, Id) — same shape as the candidate-id pass — so dispatch
                 // order within a batch matches Time order. Without this, MongoDB's natural
                 // cursor order does not respect insertion-time semantics.
@@ -282,10 +287,11 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             FilterDefinition<TimeoutData> filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id);
             if (lockOwner is { } owner)
             {
-                var utcNow = _timeProvider.GetUtcNow();
+                // Lease-still-held evaluated server-side against $$NOW — see BuildLeaseClaimUpdate
+                // for the symmetric write side.
                 filter &= Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
                           Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner) &
-                          Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
+                          LeaseHeldFilter();
             }
             result = await collection.DeleteOneAsync(filter, cancellationToken).ConfigureAwait(false);
         }
@@ -318,10 +324,10 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
             FilterDefinition<TimeoutData> filter = Builders<TimeoutData>.Filter.Eq(x => x.Id, id);
             if (lockOwner is { } owner)
             {
-                var utcNow = _timeProvider.GetUtcNow();
+                // Lease-still-held evaluated server-side against $$NOW — see BuildLeaseClaimUpdate.
                 filter &= Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
                           Builders<TimeoutData>.Filter.Eq(x => x.LockedBy, owner) &
-                          Builders<TimeoutData>.Filter.Gt(x => x.LockExpiresAt, utcNow);
+                          LeaseHeldFilter();
             }
 
             var update = Builders<TimeoutData>.Update
@@ -357,10 +363,12 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         {
             var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
             await EnsureTimeoutIndexAsync(collection, cancellationToken).ConfigureAwait(false);
-            var utcNow = _timeProvider.GetUtcNow();
 
+            // Expired-lease filter anchored on $$NOW so the reap decision is consistent
+            // with the claim's server-time write. A client-clock comparison here could
+            // reap a still-valid lease under cross-host skew, admitting duplicate dispatch.
             var filter = Builders<TimeoutData>.Filter.Eq(x => x.Locked, true) &
-                         Builders<TimeoutData>.Filter.Lte(x => x.LockExpiresAt, utcNow);
+                         LeaseExpiredFilter();
             var update = Builders<TimeoutData>.Update
                 .Set(x => x.Locked, false)
                 .Set(x => x.LockedBy, Guid.Empty)
@@ -374,13 +382,82 @@ public sealed class MongoDbTimeoutStore : ITimeoutStore
         }
     }
 
+    // The lease-time predicates and the lease-claim update all anchor on mongod's `$$NOW`
+    // server-side aggregation variable rather than the caller's clock. NTP-bounded skew
+    // (sub-second) on a single host is fine, but active-active deployments with
+    // unsynchronized clocks would otherwise let one worker see a lease as still-held
+    // while another sees it as expired — admitting duplicate dispatch of the same timeout.
+    // Anchoring both writes (`$add: ["$$NOW", leaseMs]`) and reads (`$lte/$gt against $$NOW`)
+    // on the database server's monotonic-within-mongod clock removes that hazard.
+
+    /// <summary>
+    /// Returns a filter equivalent to <c>Locked == false OR LockExpiresAt &lt;= $$NOW</c>.
+    /// </summary>
+    private static FilterDefinition<TimeoutData> LeaseExpiredOrUnlockedFilter() =>
+        new BsonDocumentFilterDefinition<TimeoutData>(
+            new BsonDocument("$expr",
+                new BsonDocument("$or", new BsonArray
+                {
+                    new BsonDocument("$eq", new BsonArray { "$Locked", false }),
+                    new BsonDocument("$lte", new BsonArray { "$LockExpiresAt", "$$NOW" }),
+                })));
+
+    /// <summary>
+    /// Returns a filter equivalent to <c>Time &lt;= $$NOW</c>.
+    /// </summary>
+    private static FilterDefinition<TimeoutData> DueByServerTimeFilter() =>
+        new BsonDocumentFilterDefinition<TimeoutData>(
+            new BsonDocument("$expr",
+                new BsonDocument("$lte", new BsonArray { "$Time", "$$NOW" })));
+
+    /// <summary>
+    /// Returns a filter equivalent to <c>LockExpiresAt &gt; $$NOW</c> (lease still held).
+    /// </summary>
+    private static FilterDefinition<TimeoutData> LeaseHeldFilter() =>
+        new BsonDocumentFilterDefinition<TimeoutData>(
+            new BsonDocument("$expr",
+                new BsonDocument("$gt", new BsonArray { "$LockExpiresAt", "$$NOW" })));
+
+    /// <summary>
+    /// Returns a filter equivalent to <c>LockExpiresAt &lt;= $$NOW</c> (lease expired).
+    /// </summary>
+    private static FilterDefinition<TimeoutData> LeaseExpiredFilter() =>
+        new BsonDocumentFilterDefinition<TimeoutData>(
+            new BsonDocument("$expr",
+                new BsonDocument("$lte", new BsonArray { "$LockExpiresAt", "$$NOW" })));
+
+    /// <summary>
+    /// Builds a pipeline-style update that stamps <c>Locked = true</c>, <c>LockedBy = sessionId</c>,
+    /// and <c>LockExpiresAt = $$NOW + leaseDurationMs</c> — all on the server's clock so the value
+    /// is comparable against later `$$NOW` reads without inter-host skew.
+    /// </summary>
+    private UpdateDefinition<TimeoutData> BuildLeaseClaimUpdate(Guid sessionId)
+    {
+        var leaseMs = (long)_lockLeaseDuration.TotalMilliseconds;
+        var stage = new BsonDocument("$set", new BsonDocument
+        {
+            { "Locked", true },
+            { "LockedBy", new BsonBinaryData(sessionId, GuidRepresentation.Standard) },
+            { "LockExpiresAt", new BsonDocument("$add", new BsonArray { "$$NOW", leaseMs }) },
+        });
+        var pipeline = new BsonDocumentStagePipelineDefinition<TimeoutData, TimeoutData>([stage]);
+        return new PipelineUpdateDefinition<TimeoutData>(pipeline);
+    }
+
     internal static FilterDefinition<TimeoutData> BuildDueTimeoutFilter(DateTimeOffset utcNow)
     {
+        // Backward-compatible signature used by a unit test. The production poll path
+        // calls BuildDueTimeoutFilterServerTime() so lease evaluation anchors on $$NOW;
+        // this overload preserves the historic shape for tests that render the filter
+        // into JSON to assert on its structure.
         var unlocked = Builders<TimeoutData>.Filter.Eq(x => x.Locked, false);
         var expiredLease = Builders<TimeoutData>.Filter.Lte(x => x.LockExpiresAt, utcNow);
         var due = Builders<TimeoutData>.Filter.Lte(x => x.Time, utcNow);
         return due & (unlocked | expiredLease);
     }
+
+    private static FilterDefinition<TimeoutData> BuildDueTimeoutFilterServerTime() =>
+        DueByServerTimeFilter() & LeaseExpiredOrUnlockedFilter();
 
     private static async Task<List<Guid>> FindAsync(
         IMongoCollection<TimeoutData> collection,

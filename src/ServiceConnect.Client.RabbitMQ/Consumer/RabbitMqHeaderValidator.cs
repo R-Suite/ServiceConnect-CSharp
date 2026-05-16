@@ -55,7 +55,26 @@ internal sealed class RabbitMqHeaderValidator(
         static bool HasNonNullValue(IDictionary<string, object?> h, string key)
             => h.TryGetValue(key, out var v) && v is not null;
 
-        // Rule 1: missing type-name header
+        // Rule 1: oversized body. This runs FIRST so subsequent rules (which copy args.Body
+        // to the error exchange via HandleTerminalFailureAsync → PublishErrorAsync) cannot be
+        // tricked into copying an adversarial multi-MB body. Without this ordering, a flood
+        // of "oversized + missing type-name" messages would each cause a full-body publish via
+        // the missing-type-name rule before the size cap was consulted, defeating
+        // _maxInboundMessageSize as a DoS mitigation.
+        if (args.Body.Length > _maxInboundMessageSize)
+        {
+            await _retryHandler.HandleTerminalFailureAsync(
+                publishChannel,
+                args,
+                copiedHeaders,
+                new InvalidOperationException(
+                    $"Inbound message size {args.Body.Length} bytes exceeds configured limit {_maxInboundMessageSize} bytes."),
+                _shutdownPublishTokenFactory()).ConfigureAwait(false);
+            return HeaderValidationResult.Reject("oversized body");
+        }
+
+        // Rule 2: missing type-name header. Body size is now known to be within the cap, so
+        // HandleTerminalFailureAsync can safely publish args.Body to the error exchange.
         if (args.BasicProperties.Headers == null ||
             (!HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.TypeName) &&
              !HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.FullTypeName)))
@@ -67,19 +86,6 @@ internal sealed class RabbitMqHeaderValidator(
                 new InvalidOperationException("Message headers must contain type name."),
                 _shutdownPublishTokenFactory()).ConfigureAwait(false);
             return HeaderValidationResult.Reject("missing type-name header");
-        }
-
-        // Rule 2: oversized body
-        if (args.Body.Length > _maxInboundMessageSize)
-        {
-            await _retryHandler.HandleTerminalFailureAsync(
-                publishChannel,
-                args,
-                copiedHeaders,
-                new InvalidOperationException(
-                    $"Inbound message size {args.Body.Length} bytes exceeds configured limit {_maxInboundMessageSize} bytes."),
-                _shutdownPublishTokenFactory()).ConfigureAwait(false);
-            return HeaderValidationResult.Reject("oversized body");
         }
 
         // Rule 3: too many headers
@@ -113,6 +119,23 @@ internal sealed class RabbitMqHeaderValidator(
             long aggregate = 0;
             foreach (var kvp in inboundHeaders)
             {
+                // Count the key bytes too — without this, an adversary can pack
+                // _maxHeaderCount keys at AMQP shortstr max length (255 bytes each)
+                // and bypass roughly _maxHeaderCount × 255 bytes of "free" header
+                // weight against the message-size budget.
+                aggregate += Encoding.UTF8.GetByteCount(kvp.Key);
+                if (aggregate > _maxInboundMessageSize)
+                {
+                    await _retryHandler.HandleTerminalFailureAsync(
+                        publishChannel,
+                        args,
+                        copiedHeaders,
+                        new InvalidOperationException(
+                            $"Inbound header aggregate size {aggregate} bytes exceeds the message-size budget of {_maxInboundMessageSize} bytes."),
+                        _shutdownPublishTokenFactory()).ConfigureAwait(false);
+                    return HeaderValidationResult.Reject("oversized header aggregate");
+                }
+
                 var cost = ComputeHeaderValueByteCost(kvp.Value, _maxHeaderValueBytes);
                 if (cost is null)
                 {

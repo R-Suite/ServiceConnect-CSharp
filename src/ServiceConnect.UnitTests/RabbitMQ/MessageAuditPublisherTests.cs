@@ -34,7 +34,6 @@ public class MessageAuditPublisherRoutingKeyTests
     /// <summary>
     /// When <c>AuditRoutingKey</c> is set to a non-empty value the publish MUST still
     /// use <c>routingKey=""</c> because the audit direct exchange is bound with an empty key.
-    /// A non-empty routing key would be unroutable with <c>mandatory=false</c> → silent drop.
     /// </summary>
     [Fact]
     public async Task PublishAuditIfEnabledAsync_WithNonEmptyRoutingKey_UsesEmptyRoutingKey()
@@ -51,11 +50,13 @@ public class MessageAuditPublisherRoutingKeyTests
 
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
 
-        // routingKey must be "" regardless of AuditRoutingKey configuration.
+        // routingKey must be "" regardless of AuditRoutingKey configuration. mandatory=true
+        // so a misconfigured audit binding raises PublishException visible on the audit-drops
+        // counter, instead of being silently swallowed by the broker.
         channel.Verify(c => c.BasicPublishAsync(
             "audit",
-            string.Empty, // forced to empty to match audit exchange binding
-            false,
+            string.Empty,
+            true,
             It.IsAny<BasicProperties>(),
             It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);

@@ -114,7 +114,7 @@ internal sealed class HandlerProcessor(
                 // propagates so cooperative shutdown is unaffected.
                 try
                 {
-                    await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, cancellationToken).ConfigureAwait(false);
+                    await ForwardRoutingSlipAsync(message, messageType, headers, resolvedBus, busConfig, queueConfig, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
@@ -188,7 +188,7 @@ internal sealed class HandlerProcessor(
     /// </remarks>
     private static async Task ForwardRoutingSlipAsync(
         object message, Type messageType, IDictionary<string, object> headers,
-        IBus bus, IBusConfiguration busConfig,
+        IBus bus, IBusConfiguration busConfig, IQueueConfiguration queueConfig,
         CancellationToken cancellationToken)
     {
         if (!busConfig.EnableRoutingSlipProcessing)
@@ -208,17 +208,45 @@ internal sealed class HandlerProcessor(
             return;
         }
 
+        // Cap hop count BEFORE per-destination iteration. Without this, a hostile inbound
+        // RoutingSlip header crafted to maximise entries within the per-value header byte
+        // budget (~900 entries at 8 KiB) drives ~900 handler invocations per delivered
+        // message — direct amplification DoS. The cap converges with the per-destination
+        // validator (length, charset, no `amq.*`) and the local-queue self-loop rejection.
+        var maxHops = busConfig.MaxRoutingSlipHops;
+        if (maxHops <= 0)
+        {
+            // Misconfigured cap — treat as routing-slip disabled rather than unbounded.
+            return;
+        }
+
         var destinations = new List<string>();
+        var localQueue = queueConfig.QueueName;
         foreach (var raw in routingSlip.Split(',', StringSplitOptions.RemoveEmptyEntries))
         {
             var trimmed = raw.Trim();
             if (!IsValidRoutingSlipDestination(trimmed))
             {
                 throw new InvalidOperationException(
-                    $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {RoutingSlipDestinationValidator.MaxDestinationLength} characters, and must not contain AMQP wildcards or control characters.");
+                    $"Invalid routing-slip destination '{trimmed}'. Destinations must be non-empty, at most {RoutingSlipDestinationValidator.MaxDestinationLength} characters, and must not contain AMQP wildcards, control characters, or `amq.*` reserved names.");
+            }
+
+            // Reject self-loops in the slip — a malformed or hostile inbound header
+            // containing the local queue (e.g. `victim-q,victim-q,…`) would otherwise drive
+            // per-hop handler re-invocation against the same queue indefinitely.
+            if (!string.IsNullOrEmpty(localQueue) && string.Equals(trimmed, localQueue, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Routing-slip destination '{trimmed}' matches the local queue name '{localQueue}'; self-loop rejected.");
             }
 
             destinations.Add(trimmed);
+
+            if (destinations.Count > maxHops)
+            {
+                throw new InvalidOperationException(
+                    $"Routing-slip exceeds the configured MaxRoutingSlipHops cap of {maxHops}; slip rejected.");
+            }
         }
 
         if (destinations.Count == 0)

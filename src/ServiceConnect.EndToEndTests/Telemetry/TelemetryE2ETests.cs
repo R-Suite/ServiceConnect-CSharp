@@ -67,7 +67,7 @@ public class TelemetryE2ETests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddSingleton(consumed);
         services.AddTransient<IMessageHandler<TraceTestMessage>, TraceTestHandler>();
 

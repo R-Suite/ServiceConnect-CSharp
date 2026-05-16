@@ -36,7 +36,7 @@ public class ProcessManagerTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton(secondHandled);
         services.AddTransient<IProcessHandler<TestProcessData, TestMessage>, CounterProcessHandler>();
 

@@ -14,7 +14,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
     private readonly FrozenDictionary<Type, AggregatorDescriptor> _descriptors;
 
     internal AggregatorRegistry(
-        IList<HandlerReference> handlerReferences,
+        IReadOnlyList<HandlerReference> handlerReferences,
         IServiceScopeFactory scopeFactory,
         ILogger<AggregatorRegistry> logger)
     {
@@ -182,7 +182,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         var ctParam = Expression.Parameter(typeof(CancellationToken), "cancellationToken");
 
         var aggCast = Expression.Convert(aggParam, aggregatorBaseType);
-        var listCast = Expression.Convert(listParam, typeof(IList<>).MakeGenericType(messageType));
+        var listCast = Expression.Convert(listParam, typeof(IReadOnlyList<>).MakeGenericType(messageType));
 
         var method = aggregatorBaseType.GetMethod(nameof(Aggregator<Message>.ExecuteAsync))!;
         var call = Expression.Call(aggCast, method, listCast, ctParam);

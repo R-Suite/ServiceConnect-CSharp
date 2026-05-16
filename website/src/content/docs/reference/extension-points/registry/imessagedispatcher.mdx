@@ -25,13 +25,13 @@ See [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) for the bro
 
 ## Reference
 
-### `Dispatch`
+### `DispatchAsync`
 
 ```csharp
-Task<ConsumeEventResult> Dispatch(
+Task<ConsumeEventResult> DispatchAsync(
     ReadOnlyMemory<byte> messageBytes,
     string messageType,
-    IDictionary<string, object> headers,
+    IReadOnlyDictionary<string, object> headers,
     CancellationToken cancellationToken = default);
 ```
 
@@ -64,7 +64,7 @@ A custom `IMessageDispatcher` must preserve the default order of operations. The
 
 ### Error-handling contract
 
-Exceptions thrown inside `Dispatch` should be caught and surfaced via `ConsumeEventResult { Success = false, Exception = ex }`. The transport layer reads `Success` and `Exception` to decide the ack/nack outcome; if an exception escapes the method entirely, the transport has no structured way to act on it and may crash the consumer loop. Catch at the outermost boundary and convert.
+Exceptions thrown inside `DispatchAsync` should be caught and surfaced via `ConsumeEventResult { Success = false, Exception = ex }`. The transport layer reads `Success` and `Exception` to decide the ack/nack outcome; if an exception escapes the method entirely, the transport has no structured way to act on it and may crash the consumer loop. Catch at the outermost boundary and convert.
 
 ### After-filter guarantee
 
@@ -97,10 +97,10 @@ public sealed class CustomMessageDispatcher : IMessageDispatcher
         _serializer   = serializer;
     }
 
-    public async Task<ConsumeEventResult> Dispatch(
+    public async Task<ConsumeEventResult> DispatchAsync(
         ReadOnlyMemory<byte> messageBytes,
         string messageType,
-        IDictionary<string, object> headers,
+        IReadOnlyDictionary<string, object> headers,
         CancellationToken cancellationToken = default)
     {
         try
@@ -135,10 +135,10 @@ public sealed class TracingMessageDispatcher : IMessageDispatcher
     public TracingMessageDispatcher(IMessageDispatcher inner)
         => _inner = inner;
 
-    public async Task<ConsumeEventResult> Dispatch(
+    public async Task<ConsumeEventResult> DispatchAsync(
         ReadOnlyMemory<byte> messageBytes,
         string messageType,
-        IDictionary<string, object> headers,
+        IReadOnlyDictionary<string, object> headers,
         CancellationToken cancellationToken = default)
     {
         using var root = Source.StartActivity(
@@ -150,7 +150,7 @@ public sealed class TracingMessageDispatcher : IMessageDispatcher
         ConsumeEventResult result;
         try
         {
-            result = await _inner.Dispatch(messageBytes, messageType, headers, cancellationToken);
+            result = await _inner.DispatchAsync(messageBytes, messageType, headers, cancellationToken);
         }
         catch (Exception ex)
         {

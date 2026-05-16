@@ -18,27 +18,28 @@ See [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) fo
 ### `InsertDataAsync`
 
 ```csharp
-Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default);
+Task InsertDataAsync(IHasCorrelationId data, string name, string idempotencyKey, CancellationToken cancellationToken = default);
 ```
 
-Persists a single message payload for the named aggregator instance.
+Persists a single message payload for the named aggregator instance, idempotent on `idempotencyKey` within the aggregator's active row set.
 
 **Parameters**
-- `data` — the deserialised message object to store; implementations should serialise it to bytes or JSON before writing.
+- `data` — the message payload to store. Must implement `IHasCorrelationId` (the `Message` base class does, so any concrete `Message` works).
 - `name` — the logical aggregator name (for example, the saga type name such as `"ShippingAggregator"`). Used as a partition key — all operations for one aggregator are scoped to this value.
+- `idempotencyKey` — a stable per-message identifier (typically the broker-side `MessageId`) used to reject re-inserts of the same delivery. A retry-queue redelivery between Insert and the dispatcher's broker ack will re-enter `InsertDataAsync` with the same key while the prior insert's row is still buffered; the persistor must skip the second write so the aggregator's `Execute` sees each delivery exactly once. Once the row has been removed (snapshot dispatched), the key is no longer tracked.
 - `cancellationToken` — cancels the storage operation.
 
-**Remarks.** Each call corresponds to one message delivery. The store must be able to hold multiple records under the same `name`, distinguishable by a per-record identifier (typically the correlation id embedded in the message).
+**Remarks.** Each call corresponds to one message delivery. The store must be able to hold multiple records under the same `name`, distinguishable by a per-record identifier (typically the correlation id embedded in the message). The idempotency-key contract makes the operation safe under at-least-once redelivery.
 
 ---
 
 ### `GetDataAsync`
 
 ```csharp
-Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default);
+Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(string name, CancellationToken cancellationToken = default);
 ```
 
-Returns every buffered record for the named aggregator as a list of deserialised objects.
+Returns every buffered record for the named aggregator as a list of deserialised payloads.
 
 **Parameters**
 - `name` — the logical aggregator name to load.
@@ -75,10 +76,10 @@ Returns a snapshot of the buffered records, separating those that deserialised s
 ### `IAggregatorSnapshot.ResolvedMessages`
 
 ```csharp
-IReadOnlyList<object> ResolvedMessages { get; }
+IReadOnlyList<IHasCorrelationId> ResolvedMessages { get; }
 ```
 
-The deserialised message objects for all records that could be hydrated. The aggregator callback receives this list.
+The deserialised message payloads for all records that could be hydrated. The aggregator callback receives this list. Every element implements `IHasCorrelationId` (the `Message` base class does); cast to the concrete saga type when consuming.
 
 ---
 
@@ -114,6 +115,8 @@ Removes a single buffered record by its correlation id.
 - `name` — the logical aggregator name.
 - `correlationId` — the correlation id of the record to remove.
 - `cancellationToken` — cancels the operation.
+
+**Throws** `ConcurrencyException` when the `(name, correlationId)` row cannot be located — either because another writer concurrently removed it, or because the caller supplied a mismatched key. All first-party persistors raise this contract on no-op delete; third-party implementations should match it so callers can distinguish a concurrent-removal race from a structural persistence failure.
 
 **Remarks.** Used by compensating or administrative flows that need to evict one specific message from the buffer without triggering aggregation.
 
@@ -170,6 +173,26 @@ Returns the number of buffered records currently held for the named aggregator.
 
 ---
 
+### `CountResolvedAsync`
+
+```csharp
+Task<int> CountResolvedAsync(string name, CancellationToken cancellationToken = default);
+```
+
+Default-interface method (added in v7) that counts persisted messages whose CLR type is currently resolvable. Drives the batch-size flush gate so unresolved-only batches do not trigger flushes that would produce no work.
+
+**Parameters**
+- `name` — the logical aggregator name.
+- `cancellationToken` — cancels the operation.
+
+**Returns.** The number of stored records whose CLR type is currently resolvable.
+
+**Default implementation.** Delegates to `CountAsync` — correct for any persistor whose stored records are always type-resolvable (e.g. an in-memory store that holds deserialised `IHasCorrelationId` instances) and for any deployment where every registered type still has a live CLR mapping. Safe but not optimal: a persistor with a meaningful resolved/unresolved split (e.g. Mongo across a type-rename rollout) should override with a cheap typed predicate to avoid flushing on rows that would only count toward the gate.
+
+**Implementers MUST NOT override with a method that mutates state.** This method runs on every `InsertDataAsync` as the batch-size flush gate; an implementation that claims a lease (e.g. by delegating to `GetSnapshotAsync` on a snapshot-claims-lease persistor) would rotate the lease on every insert and break the per-flush lease invariant.
+
+---
+
 ## Implementing
 
 ### Concurrency
@@ -194,10 +217,10 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
     public PostgresAggregatorPersistor(string connectionString)
         => _connectionString = connectionString;
 
-    public Task InsertDataAsync(object data, string name, CancellationToken cancellationToken = default)
+    public Task InsertDataAsync(IHasCorrelationId data, string name, string idempotencyKey, CancellationToken cancellationToken = default)
         => throw new NotImplementedException();
 
-    public Task<IList<object>> GetDataAsync(string name, CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(string name, CancellationToken cancellationToken = default)
         => throw new NotImplementedException();
 
     public Task<IAggregatorSnapshot> GetSnapshotAsync(string name, CancellationToken cancellationToken = default)
@@ -214,6 +237,10 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
 
     public Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
         => throw new NotImplementedException();
+
+    // CountResolvedAsync has a default implementation on the interface that delegates
+    // to CountAsync — override here if you want a cheaper "type-resolvable rows only"
+    // predicate (matters under type renames).
 }
 ```
 
@@ -246,26 +273,30 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
     }
 
     public async Task InsertDataAsync(
-        object data,
+        IHasCorrelationId data,
         string name,
+        string idempotencyKey,
         CancellationToken cancellationToken = default)
     {
-        // Aggregator payloads derive from Message; the cast surfaces the correlation id.
-        var correlationId = ((Message)data).CorrelationId;
+        var correlationId = data.CorrelationId;
         var typeName      = data.GetType().AssemblyQualifiedName!;
-        var payload       = JsonSerializer.Serialize(data, _jsonOptions);
+        var payload       = JsonSerializer.Serialize(data, data.GetType(), _jsonOptions);
 
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
 
+        // idempotencyKey is unique within the active row set: insert is suppressed if
+        // the same key already exists for the same (name) partition. ON CONFLICT
+        // DO NOTHING gives the at-least-once-redelivery-safe contract the interface
+        // requires.
         await conn.ExecuteAsync(
-            @"INSERT INTO aggregator_messages (id, name, payload, type_name)
-              VALUES (@id, @name, @payload::jsonb, @typeName)
-              ON CONFLICT (id, name) DO NOTHING",
-            new { id = correlationId, name, payload, typeName });
+            @"INSERT INTO aggregator_messages (id, name, payload, type_name, idempotency_key)
+              VALUES (@id, @name, @payload::jsonb, @typeName, @idempotencyKey)
+              ON CONFLICT (name, idempotency_key) DO NOTHING",
+            new { id = correlationId, name, payload, typeName, idempotencyKey });
     }
 
-    public async Task<IList<object>> GetDataAsync(
+    public async Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(
         string name,
         CancellationToken cancellationToken = default)
     {
@@ -277,7 +308,7 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
             new { name });
 
         return rows
-            .Select(r => JsonSerializer.Deserialize(r.Payload, Type.GetType(r.TypeName)!, _jsonOptions)!)
+            .Select(r => (IHasCorrelationId)JsonSerializer.Deserialize(r.Payload, Type.GetType(r.TypeName)!, _jsonOptions)!)
             .ToList();
     }
 
@@ -292,7 +323,7 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
             "SELECT id, payload::text, type_name FROM aggregator_messages WHERE name = @name ORDER BY created_at",
             new { name });
 
-        var resolved   = new List<object>();
+        var resolved   = new List<IHasCorrelationId>();
         var resolvedIds = new List<Guid>();
         var unresolved = 0;
 
@@ -304,7 +335,7 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
                 unresolved++;
                 continue;
             }
-            var obj = JsonSerializer.Deserialize(row.Payload, type, _jsonOptions);
+            var obj = JsonSerializer.Deserialize(row.Payload, type, _jsonOptions) as IHasCorrelationId;
             if (obj is null)
             {
                 unresolved++;
@@ -372,7 +403,7 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
 
     // Minimal snapshot value type used above.
     private sealed record AggregatorSnapshot(
-        IReadOnlyList<object> ResolvedMessages,
+        IReadOnlyList<IHasCorrelationId> ResolvedMessages,
         IReadOnlyList<Guid> ResolvedIds,
         int UnresolvedCount) : IAggregatorSnapshot;
 }

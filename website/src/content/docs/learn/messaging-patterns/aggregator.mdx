@@ -43,7 +43,7 @@ public sealed class TelemetrySliceAggregator : Aggregator<TelemetrySlice>
     public override int BatchSize() => 100;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(10);
 
-    public override Task ExecuteAsync(IList<TelemetrySlice> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<TelemetrySlice> messages, CancellationToken cancellationToken = default)
     {
         var total = messages.Sum(m => m.Value);
         Console.WriteLine($"rolled up {messages.Count} slices, total {total}");

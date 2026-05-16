@@ -7,7 +7,7 @@ public class AggregatorTimeoutSentinelTests
 {
     public sealed class TestAggregator : Aggregator<Message>
     {
-        public override Task ExecuteAsync(IList<Message> messages, CancellationToken cancellationToken = default)
+        public override Task ExecuteAsync(IReadOnlyList<Message> messages, CancellationToken cancellationToken = default)
             => Task.CompletedTask;
     }
 

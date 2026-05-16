@@ -3,7 +3,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// <summary>
 /// Provides asynchronous retry helpers used by the RabbitMQ transport implementation.
 /// </summary>
-public static class Retry
+internal static class Retry
 {
     // Non-generic overload delegates to the generic one to avoid duplicated retry
     // body logic. We produce a uniform return type by wrapping the void action.

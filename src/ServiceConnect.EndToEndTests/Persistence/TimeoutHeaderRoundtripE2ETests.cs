@@ -58,7 +58,7 @@ public class TimeoutHeaderRoundtripE2ETests(MessagingFixture fixture)
             .ConfigureServices(services =>
             {
                 services.AddLogging();
-                services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+                services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
                 services.AddSingleton(headersCaptured);
                 services.AddTransient<IProcessHandler<TimeoutHeaderData, TestMessage>, TimeoutHeaderPmHandler>();
                 services.AddTransient<IProcessHandler<TimeoutHeaderData, TimeoutMessage>, TimeoutHeaderPmHandler>();

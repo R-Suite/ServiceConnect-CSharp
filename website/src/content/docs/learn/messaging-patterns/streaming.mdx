@@ -68,19 +68,20 @@ A stream handler implements `IStreamHandler<TMessage>`. It's slightly different 
 // Receiver/DocumentUploadedHandler.cs
 public sealed class DocumentUploadedHandler : IStreamHandler<DocumentUploaded>
 {
-    public IMessageBusReadStream Stream { get; set; } = null!;
-
-    public async Task ExecuteAsync(DocumentUploaded message, CancellationToken cancellationToken = default)
+    public async Task ExecuteAsync(
+        DocumentUploaded message,
+        IMessageBusReadStream stream,
+        CancellationToken cancellationToken = default)
     {
-        var bytes = Stream.Read();
+        var bytes = stream.Read();
         await File.WriteAllBytesAsync(message.FileName, bytes, cancellationToken);
     }
 }
 ```
 
-- **`Stream` is a property, not a parameter.** The dispatcher sets it before calling `ExecuteAsync`. This is the same pattern as `IConsumeContext` on a normal handler — framework-populated.
+- **`stream` is a parameter, not a property.** The dispatcher hands the reassembled stream to `ExecuteAsync` directly. (Pre-v7 used an ambient `Stream { get; set; }` property — that shape is gone.)
 - **`ExecuteAsync` lets you await the full reassembled stream.** By the time it is called, every packet has arrived and been reassembled in memory; the I/O-bound wait for the wire is over. The supplied `CancellationToken` flows through from the dispatcher, so long writes to disk or downstream services can be cancelled — but *don't* make that work slow, because it serialises against the next stream's reassembly.
-- **`Stream.Read()` returns the whole byte array.** The reassembly is complete by the time the handler fires; no packet-by-packet processing is expected. For very large payloads where holding everything in memory is painful, `Stream.ReadSequence()` returns a `ReadOnlySequence<byte>` you can stream through.
+- **`stream.Read()` returns the whole byte array.** The reassembly is complete by the time the handler fires; no packet-by-packet processing is expected. For very large payloads where holding everything in memory is painful, `stream.ReadSequence()` returns a `ReadOnlySequence<byte>` you can stream through.
 
 Register the handler the same way you register any consumer — a `HandlerReference` and a DI registration — except the interface is `IStreamHandler<T>`:
 

@@ -2,6 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
@@ -13,7 +14,7 @@ namespace ServiceConnect.Persistence.MongoDb;
 /// Supports both standard and SSL connections via MongoDbPersistenceOptions.
 /// Uses locking mechanism for timeout batch retrieval to prevent duplicate dispatch.
 /// </summary>
-public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
+internal sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
 {
     private readonly IMongoDatabase _mongoDatabase;
     private readonly ILogger<MongoDbProcessManagerFinder> _logger;
@@ -57,6 +58,8 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
     {
         ArgumentNullException.ThrowIfNull(mongoClient);
         ArgumentNullException.ThrowIfNull(logger);
+        // Reserved for future time-dependent behavior (e.g. lease-based document locks).
+        _ = timeProvider;
         _logger = logger;
 
         try
@@ -170,6 +173,24 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
             throw new PersistenceException(
                 $"Failed to find process manager data for message type '{message.GetType().Name}'.", ex);
         }
+        catch (BsonException ex)
+        {
+            // Schema drift: a stored saga document cannot be materialised into the v7 CLR type
+            // (e.g. a property's stored BSON type is incompatible with the declared property
+            // type, or a missing required field). Wrap as PersistenceException so the caller's
+            // catch surface is consistent; the dispatcher will surface this as a permanent
+            // dispatch failure rather than NACK-looping the broker.
+            throw new PersistenceException(
+                $"Schema drift: failed to deserialise saga document for message type '{message.GetType().Name}'. A stored document is incompatible with the current CLR shape.", ex);
+        }
+        catch (FormatException ex)
+        {
+            // BsonClassMapSerializer throws bare FormatException when a property's stored
+            // BSON type cannot be coerced to the CLR property type (e.g. string-in-BSON when
+            // the CLR property is int). Same poison-row mitigation as the BsonException catch.
+            throw new PersistenceException(
+                $"Schema drift: failed to deserialise saga document for message type '{message.GetType().Name}'. A stored property's BSON type is incompatible with the current CLR shape.", ex);
+        }
     }
 
     /// <inheritdoc />
@@ -225,6 +246,13 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
         {
             throw new PersistenceException(
                 $"Failed to insert process manager data with CorrelationId '{data.CorrelationId}'.", ex);
+        }
+        catch (BsonException ex)
+        {
+            // BSON serialisation failure (e.g. a CLR property cannot be represented in BSON).
+            // Surface as PersistenceException so the caller's catch surface is consistent.
+            throw new PersistenceException(
+                $"BSON serialisation failure inserting saga with CorrelationId '{data.CorrelationId}'.", ex);
         }
     }
 
@@ -324,7 +352,7 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
 
         var collectionName = GetCollectionName<T>();
         var versionData = (MongoDbData<T>)persistenceData;
-        int currentVersion = versionData.Version;
+        long currentVersion = versionData.Version;
 
         // Build a separate write record so the caller's versionData is not mutated
         // by the bump until we see a confirmed success. Any failure path (including
@@ -383,6 +411,17 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
             throw new PersistenceException(
                 $"Failed to update process manager data with CorrelationId '{persistenceData.Data.CorrelationId}'.", ex);
         }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException(
+                $"BSON serialisation failure updating saga with CorrelationId '{persistenceData.Data.CorrelationId}'.", ex);
+        }
+        catch (FormatException ex)
+        {
+            // BsonClassMapSerializer FormatException — see FindDataAsync catch for rationale.
+            throw new PersistenceException(
+                $"Schema drift updating saga with CorrelationId '{persistenceData.Data.CorrelationId}'.", ex);
+        }
     }
 
     /// <inheritdoc />
@@ -412,6 +451,16 @@ public sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinder
         {
             throw new PersistenceException(
                 $"Failed to delete process manager data with CorrelationId '{correlationId}'.", ex);
+        }
+        catch (BsonException ex)
+        {
+            throw new PersistenceException(
+                $"BSON failure deleting saga with CorrelationId '{correlationId}'.", ex);
+        }
+        catch (FormatException ex)
+        {
+            throw new PersistenceException(
+                $"Schema drift deleting saga with CorrelationId '{correlationId}'.", ex);
         }
 
         if (result.IsAcknowledged && result.DeletedCount == 0)

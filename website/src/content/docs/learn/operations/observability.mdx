@@ -73,7 +73,7 @@ There are also two opt-in headers:
 
 ## Tracing (OpenTelemetry)
 
-The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbing for distributed tracing. It exposes a single source — `"ServiceConnect.Bus"` (`ServiceConnectActivitySource.ActivitySourceName`) — that emits publish, send, and consume spans, each tagged with the OTel messaging semantic conventions (`messaging.system`, `messaging.destination.name`, `messaging.rabbitmq.destination.routing_key`, `messaging.message.id`, `messaging.message.conversation_id`). For RabbitMQ, `messaging.destination.name` carries the broker-side destination — the exchange name for publishes and the queue name for sends — and `messaging.rabbitmq.destination.routing_key` carries the publish routing key when present. Pub/sub and point-to-point traffic are distinguished by the `messaging.operation` tag (`publish` vs `send`) so backends aggregate each shape separately.
+The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbing for distributed tracing. It exposes a single source — `"ServiceConnect.Bus"` (`ServiceConnectActivitySource.ActivitySourceName`) — that emits publish, send, and consume spans, each tagged with the OTel messaging semantic conventions (`messaging.system`, `messaging.destination.name`, `messaging.rabbitmq.destination.routing_key`, `messaging.message.id`, `messaging.message.conversation_id`). For RabbitMQ, `messaging.destination.name` carries the broker-side destination — the exchange name for publishes and the queue name for sends — and `messaging.rabbitmq.destination.routing_key` carries the publish routing key when present. Operation classification follows the OTel messaging semconv 1.x attributes: `messaging.operation.type` is `publish` for the producer side (sends and publishes alike) and `process` for the consumer side, and `messaging.operation.name` mirrors that with `publish` / `receive`. Backends can aggregate each shape separately by filtering on `messaging.operation.type`.
 
 ```bash
 dotnet add package ServiceConnect.Telemetry
@@ -111,6 +111,21 @@ builder.AddTelemetry(opts =>
 ```
 
 W3C `traceparent`/`tracestate` propagation is unaffected by the enable flags — headers are injected and extracted regardless of whether ServiceConnect emits its own span for that direction.
+
+### Pipeline ordering — user outgoing filters run before the telemetry span starts
+
+`TelemetrySendMiddleware` is registered at the **outermost** position on the send-message middleware pipeline so its activity brackets every other middleware on the way out and on the way back. User outgoing filters, however, are a separate pipeline stage that runs **before** the send-message middleware on the outgoing path. The order is:
+
+```
+user code → outgoing filters → send-message middleware (telemetry span starts here) → producer
+```
+
+Two consequences worth knowing:
+
+- **Outgoing filters do not see the new publish/send span's `traceparent`.** The telemetry span is started inside the send-message middleware, after the filters have already run. Filters that need a parent trace context observe `Activity.Current` from the *caller's* ambient context (typically the inbound consume span for handlers that publish, or the application's root span for app code) — not the publish/send span ServiceConnect is about to create.
+- **A filter that returns `FilterAction.Stop` (or throws) aborts the call before the telemetry middleware runs.** No publish/send span is created for the blocked delivery. The `OutgoingFiltersBlockedException` thrown to the caller carries the user-visible signal; observability backends will see the absence of a span where one was expected.
+
+If you want a span that brackets the entire `IBus` call — including the filter stage — start one in your application code around the `PublishAsync` / `SendAsync` invocation. The framework's own publish/send span is scoped narrowly to the wire path.
 
 ### Enrichment
 
@@ -167,8 +182,9 @@ Tags follow the [OpenTelemetry messaging-metrics conventions](https://openteleme
 | `messaging.client.consumed.messages` | Counter | \{message\} | Messages consumed; tagged `messaging.outcome=success\|error\|retry` |
 | `messaging.serviceconnect.retry.attempts` | Counter | \{attempt\} | Header-counter retry increments |
 | `messaging.serviceconnect.retry.drops` | Counter | \{drop\} | Messages dropped because retry publishing failed |
-| `messaging.serviceconnect.publish.confirm_timeouts` | Counter | \{timeout\} | Publishes that exceeded the configured publish timeout |
+| `messaging.serviceconnect.publish.confirm_timeouts` | Counter | \{timeout\} | Publishes that exceeded the configured publish timeout. Tagged with `messaging.system`, `messaging.operation.type=publish`, and `messaging.destination.name` (the exchange name, or the routing key when exchange is empty — `SendAsync` routes through the default exchange so the routing key carries the real per-queue destination). |
 | `messaging.serviceconnect.audit.drops` | Counter | \{drop\} | Audit messages that failed to publish |
+| `messaging.serviceconnect.outgoing_filters.blocked` | Counter | \{message\} | Outgoing operations aborted because an outgoing filter returned `FilterAction.Stop`. No publish/send span is emitted for blocked operations, so this counter is the operator-visible signal for filter-suppressed deliveries. Tagged with `messaging.system=serviceconnect` and (when known) `messaging.message.type`. |
 | `messaging.serviceconnect.process.messages.inflight` | UpDownCounter | \{message\} | Currently-dispatched, not-yet-acked messages |
 
 The `error.type` tag is added on failure paths via an allow-list mapper (`OperationCanceledException → cancelled`, `TimeoutException → timeout`, fallback to the exception type's short name). Exception messages are never used as tags — they're unbounded cardinality.

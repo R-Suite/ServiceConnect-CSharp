@@ -6,8 +6,8 @@ namespace ServiceConnect.Telemetry;
 /// <remarks>
 /// Constants follow the OTel messaging spec at
 /// <see href="https://opentelemetry.io/docs/specs/semconv/messaging/messaging-spans/"/>.
-/// As of v8, the deprecated <c>messaging.operation</c> attribute is no longer emitted;
-/// callers should read <c>messaging.operation.type</c> and <c>messaging.operation.name</c> instead.
+/// The deprecated <c>messaging.operation</c> attribute is not emitted; callers should read
+/// <c>messaging.operation.type</c> and <c>messaging.operation.name</c> instead.
 /// </remarks>
 public static class MessagingAttributes
 {

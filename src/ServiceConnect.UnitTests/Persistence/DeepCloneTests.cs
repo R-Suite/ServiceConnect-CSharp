@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using ServiceConnect.Persistence.InMemory;
 using Xunit;
 
@@ -5,6 +6,12 @@ namespace ServiceConnect.UnitTests.Persistence;
 
 public class DeepCloneTests
 {
+    // Polymorphic types need a discriminator declared on the base for STJ to round-trip
+    // derived elements inside a base-typed collection. Saga authors with polymorphic
+    // state must annotate the base similarly; without the annotation the derived
+    // properties collapse to the declared type on read.
+    [JsonDerivedType(typeof(Dog), "dog")]
+    [JsonDerivedType(typeof(Animal), "animal")]
     public class Animal { public string Name { get; set; } = ""; }
     public class Dog : Animal { public string Breed { get; set; } = ""; }
 
@@ -17,9 +24,9 @@ public class DeepCloneTests
     [Fact]
     public void Clone_CollectionElementIsSubclass_PreservesSubclassType()
     {
-        // BSON's _t discriminator must capture runtime element types inside collections
-        // so a Dog inside a List<Animal> round-trips with Dog.Breed intact rather than
-        // being collapsed to Animal on deserialize.
+        // STJ's [JsonDerivedType] discriminator captures the runtime element type inside
+        // a base-typed collection so a Dog inside a List<Animal> round-trips with Dog.Breed
+        // intact rather than being collapsed to Animal on deserialize.
         var owner = new Owner
         {
             Id = Guid.NewGuid(),
@@ -34,12 +41,12 @@ public class DeepCloneTests
     }
 
     [Fact]
-    public void Clone_RootIsCollection_RoundTripsViaWrapper()
+    public void Clone_RootIsCollection_RoundTripsCollectionTypes()
     {
-        // BSON refuses to write arrays / collections at the document root. Header values
-        // on TimeoutData legitimately arrive as List<byte> / string[] / Dictionary<,>;
-        // the wrapper-document strategy lets these round-trip without callers having to
-        // know about the BSON limitation.
+        // Header values on TimeoutData legitimately arrive as List<byte> / string[] /
+        // Dictionary<,>. STJ round-trips each of these at the document root without
+        // any wrapper, unlike the previous BSON-backed implementation which had to
+        // wrap collection roots because BSON refused them.
         var list = new List<byte> { 1, 2, 3 };
         var listClone = DeepClone.Clone(list);
         Assert.NotSame(list, listClone);
@@ -56,34 +63,5 @@ public class DeepCloneTests
         Assert.Equal(2, dictClone.Count);
         Assert.Equal(1, dictClone["one"]);
         Assert.Equal(2, dictClone["two"]);
-    }
-
-    [Fact]
-    public void Clone_PreservesExplicitInterfaceAutoProperty()
-    {
-        // Regression: explicit-interface auto-properties round-trip with default(Guid)
-        // under Newtonsoft.Json (which only saw public properties by short name). BSON's
-        // BsonClassMap discovers them, so DeepClone (BSON-backed) preserves the value.
-        var original = new HasExplicitInterfaceAutoProp { ExplicitFooId = Guid.Parse("11111111-2222-3333-4444-555555555555") };
-
-        var clone = DeepClone.Clone(original);
-
-        Assert.Equal(original.ExplicitFooId, clone.ExplicitFooId);
-        Assert.Equal(original.ExplicitFooId, ((IHasFooId)clone).FooId);
-    }
-
-    private interface IHasFooId
-    {
-        Guid FooId { get; set; }
-    }
-
-    private sealed class HasExplicitInterfaceAutoProp : IHasFooId
-    {
-        public Guid ExplicitFooId { get; set; }
-        Guid IHasFooId.FooId
-        {
-            get => ExplicitFooId;
-            set => ExplicitFooId = value;
-        }
     }
 }

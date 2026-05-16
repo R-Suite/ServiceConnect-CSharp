@@ -14,11 +14,11 @@ The four send-shaped methods cover distinct routing patterns:
 - `PublishAsync` — pub/sub fan-out. The broker routes the message to every subscriber bound to the message type. Use this when `OrderService` publishes `OrderPlaced` and multiple downstream services each receive a copy.
 - `SendAsync(Type, ...)` — auto-routed point-to-point. The **producer** receives a `Type`, looks up `IQueueConfiguration.QueueMappings` itself to resolve the destination queue or queues, and sends to each. The caller does not need to know the destination — the producer owns the mapping lookup.
 - `SendAsync(string, Type, ...)` — explicit destination point-to-point. The **caller** has already resolved the endpoint and supplies it directly. The producer sends to that address without consulting any configuration.
-- `SendBytesAsync(string, Type, byte[], ...)` — raw-bytes delivery to an explicit endpoint. Used by control-plane channels (stream writers, reply-to envelopes) when the caller has already framed the payload. The `Type` parameter carries the logical message type for header stamping only.
+- `SendBytesAsync(string, Type, ReadOnlyMemory<byte>, ...)` — raw-bytes delivery to an explicit endpoint. Used by control-plane channels (stream writers, reply-to envelopes) when the caller has already framed the payload. The `Type` parameter carries the logical message type for header stamping only.
 
 `MaximumMessageSize` lets the pipeline pre-check payload size before attempting a send, avoiding a roundtrip to the broker for a message that will be rejected.
 
-Note the header asymmetry: outgoing headers are `IDictionary<string, string>` (string values only) because transport headers are stringified on the wire. On the receive side, `ConsumerEventHandler` receives `IDictionary<string, object>` because some broker clients restore typed values (integers, timestamps) during deserialisation. See [`IConsumer`](./iconsumer/) for the receiving contract.
+Note the header asymmetry: outgoing headers are `IReadOnlyDictionary<string, string>?` (string values only) because transport headers are stringified on the wire. On the receive side, `ConsumerEventHandler` receives `IDictionary<string, object>` because some broker clients restore typed values (integers, timestamps) during deserialisation. See [`IConsumer`](./iconsumer/) for the receiving contract.
 
 See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for how the producer fits into the full message pipeline.
 
@@ -44,17 +44,17 @@ See the [envelope headers reference](/ServiceConnect-CSharp/reference/envelope/)
 ```csharp
 Task PublishAsync(
     Type type,
-    byte[] message,
-    IDictionary<string, string>? headers = null,
+    ReadOnlyMemory<byte> body,
+    IReadOnlyDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
-Publishes `message` to all subscribers registered for `type`. The broker routes the delivery using whatever fan-out mechanism the transport supports (exchange/binding for RabbitMQ, topic for Kafka, topic with multiple subscriptions for Azure Service Bus).
+Publishes `body` to all subscribers registered for `type`. The broker routes the delivery using whatever fan-out mechanism the transport supports (exchange/binding for RabbitMQ, topic for Kafka, topic with multiple subscriptions for Azure Service Bus).
 
 **Parameters**
 
 - `type` — the CLR type of the message; used to derive the routing key, topic name, or exchange binding.
-- `message` — the serialised payload bytes.
+- `body` — the serialised payload bytes.
 - `headers` — optional string-valued transport headers to attach to the delivery (for example, `"CorrelationId"`, `"MessageId"`).
 - `cancellationToken` — cancels the in-progress send.
 
@@ -67,17 +67,17 @@ Publishes `message` to all subscribers registered for `type`. The broker routes 
 ```csharp
 Task SendAsync(
     Type type,
-    byte[] message,
-    IDictionary<string, string>? headers = null,
+    ReadOnlyMemory<byte> body,
+    IReadOnlyDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
-Sends `message` to the destination queue (or queues) mapped for `type`. The transport implementation receives the `Type` and looks up `IQueueConfiguration.QueueMappings` itself — keyed on the type's fully qualified name — to resolve the destination. If no mapping exists, the producer should throw rather than silently drop the message. This is the overload to use when queue-mapping configuration fully controls routing and the caller does not need to name the destination.
+Sends `body` to the destination queue (or queues) mapped for `type`. The transport implementation receives the `Type` and looks up `IQueueConfiguration.QueueMappings` itself — keyed on the type's fully qualified name — to resolve the destination. If no mapping exists, the producer should throw rather than silently drop the message. This is the overload to use when queue-mapping configuration fully controls routing and the caller does not need to name the destination.
 
 **Parameters**
 
 - `type` — the CLR type of the message.
-- `message` — the serialised payload bytes.
+- `body` — the serialised payload bytes.
 - `headers` — optional string-valued transport headers.
 - `cancellationToken` — cancels the in-progress send.
 
@@ -95,18 +95,18 @@ Sends `message` to the destination queue (or queues) mapped for `type`. The tran
 Task SendAsync(
     string endPoint,
     Type type,
-    byte[] message,
-    IDictionary<string, string>? headers = null,
+    ReadOnlyMemory<byte> body,
+    IReadOnlyDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
-Sends `message` to `endPoint` directly. The producer does not consult queue mappings — it trusts the caller and sends to the given address.
+Sends `body` to `endPoint` directly. The producer does not consult queue mappings — it trusts the caller and sends to the given address.
 
 **Parameters**
 
 - `endPoint` — the queue name, topic, or address to send to.
 - `type` — the CLR type of the message; carried in headers for the receiver to resolve.
-- `message` — the serialised payload bytes.
+- `body` — the serialised payload bytes.
 - `headers` — optional string-valued transport headers.
 - `cancellationToken` — cancels the in-progress send.
 
@@ -118,8 +118,8 @@ Sends `message` to `endPoint` directly. The producer does not consult queue mapp
 Task SendBytesAsync(
     string endPoint,
     Type type,
-    byte[] packet,
-    IDictionary<string, string>? headers = null,
+    ReadOnlyMemory<byte> packet,
+    IReadOnlyDictionary<string, string>? headers = null,
     CancellationToken cancellationToken = default);
 ```
 
@@ -147,13 +147,40 @@ Return `long.MaxValue` if the transport imposes no practical limit. Return the b
 
 ---
 
-### `DisconnectAsync`
+### `IsHealthy`
 
 ```csharp
-Task DisconnectAsync(CancellationToken cancellationToken = default);
+bool IsHealthy { get; }
 ```
 
-Closes the underlying broker connection gracefully. Called during bus shutdown before `DisposeAsync`. Implementations should flush any pending in-flight sends before closing.
+Returns `true` when the producer is currently connected and ready to publish or send. Returns `false` before the first publish/send call (the producer connects lazily) and after a connection drop until the next reconnect. Mirrors `IConsumer.IsConnected`.
+
+---
+
+### `HasAttemptedConnection`
+
+```csharp
+bool HasAttemptedConnection { get; }
+```
+
+Returns `false` for a freshly-constructed producer that has not yet been asked to publish or send. Once a publish/send call begins (whether or not it succeeds), this becomes `true` and stays `true` for the producer's lifetime. The producer health check uses this to distinguish *"lazy, not yet tried"* (Healthy) from *"tried and currently disconnected"* (Unhealthy).
+
+---
+
+### `GetHealthSnapshot`
+
+```csharp
+ProducerHealthSnapshot GetHealthSnapshot()
+    => new(IsHealthy, HasAttemptedConnection);
+```
+
+Default-interface method that returns a single-snapshot read of `IsHealthy` and `HasAttemptedConnection`. Health-check probes that need both values must use this method rather than reading the two properties separately — the pair admits a race where a publish-success transition lands between the reads and the probe sees stale state. First-party producers (RabbitMQ) override the default with a truly-atomic snapshot read.
+
+---
+
+### Lifecycle
+
+`IProducer` extends `IAsyncDisposable`. Lifecycle is owned exclusively by `DisposeAsync` — there is no separate `DisconnectAsync` method. Implementations should flush any pending in-flight sends before closing the underlying broker connection inside `DisposeAsync`.
 
 ---
 
@@ -194,8 +221,8 @@ public sealed class BrokerProducer : IProducer
 
     public Task PublishAsync(
         Type type,
-        byte[] message,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var topic = DeriveTopicFromType(type);
@@ -204,8 +231,8 @@ public sealed class BrokerProducer : IProducer
 
     public Task SendAsync(
         Type type,
-        byte[] message,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         // Resolve the destination queue from IQueueConfiguration.QueueMappings.
@@ -216,8 +243,8 @@ public sealed class BrokerProducer : IProducer
     public Task SendAsync(
         string endPoint,
         Type type,
-        byte[] message,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         return PublishToBrokerAsync(endPoint, message, headers, cancellationToken);
@@ -226,30 +253,28 @@ public sealed class BrokerProducer : IProducer
     public Task SendBytesAsync(
         string endPoint,
         Type type,
-        byte[] packet,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> packet,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         // Stamp type headers from `type` (server-authoritative) then publish.
         return PublishToBrokerAsync(endPoint, packet, headers, cancellationToken);
     }
 
-    public Task DisconnectAsync(CancellationToken cancellationToken = default)
-    {
-        // Close broker connection cleanly.
-        return Task.CompletedTask;
-    }
+    public long MaximumMessageSize => 1_048_576;
+    public bool IsHealthy => /* read connection state */ false;
+    public bool HasAttemptedConnection => /* set when first send begins */ false;
 
     public ValueTask DisposeAsync()
     {
-        // Dispose broker client.
+        // Flush any pending in-flight sends, then close + dispose the broker client.
         return ValueTask.CompletedTask;
     }
 
     // Broker-specific helpers — implement using your broker client.
     private string DeriveTopicFromType(Type type) => throw new NotImplementedException();
     private Task PublishToBrokerAsync(string destination, byte[] payload,
-        IDictionary<string, string>? headers, CancellationToken ct) => throw new NotImplementedException();
+        IReadOnlyDictionary<string, string>? headers, CancellationToken ct) => throw new NotImplementedException();
 }
 ```
 
@@ -276,8 +301,8 @@ public sealed class KafkaProducer : IProducer
 
     public async Task PublishAsync(
         Type type,
-        byte[] message,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var topic    = type.FullName!.Replace('.', '-').ToLowerInvariant();
@@ -287,8 +312,8 @@ public sealed class KafkaProducer : IProducer
 
     public async Task SendAsync(
         Type type,
-        byte[] message,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         // Resolve the destination from IQueueConfiguration.QueueMappings, then
@@ -299,8 +324,8 @@ public sealed class KafkaProducer : IProducer
     public async Task SendAsync(
         string endPoint,
         Type type,
-        byte[] message,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> body,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var kafkaMsg = BuildMessage(type.FullName!, message, headers);
@@ -310,27 +335,30 @@ public sealed class KafkaProducer : IProducer
     public async Task SendBytesAsync(
         string endPoint,
         Type type,
-        byte[] packet,
-        IDictionary<string, string>? headers = null,
+        ReadOnlyMemory<byte> packet,
+        IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
         var kafkaMsg = BuildMessage(key: string.Empty, packet, headers);
         await _inner.ProduceAsync(endPoint, kafkaMsg, cancellationToken);
     }
 
-    public Task DisconnectAsync(CancellationToken cancellationToken = default)
-    {
-        var remaining = _inner.Flush(cancellationToken);
-        if (remaining > 0)
-        {
-            // Some messages were not acknowledged by the broker before the flush timeout.
-            // The caller decides whether to treat this as an error; here we accept best-effort delivery.
-        }
-        return Task.CompletedTask;
-    }
+    public long MaximumMessageSize => 1_048_576; // 1MB Kafka default; raise to match broker config
+
+    // IProducer 7.x: lifecycle is owned exclusively by DisposeAsync. Health probes (IsHealthy +
+    // HasAttemptedConnection) are exposed via dedicated properties + GetHealthSnapshot.
+    public bool IsHealthy => _inner is not null;
+    public bool HasAttemptedConnection { get; private set; }
 
     public ValueTask DisposeAsync()
     {
+        // Flush any in-flight produces before disposing the underlying client so the broker
+        // gets a chance to ack every send the bus has handed off.
+        var remaining = _inner.Flush(TimeSpan.FromSeconds(5));
+        if (remaining > 0)
+        {
+            // Caller decides whether unacked messages are an error; here we accept best-effort.
+        }
         _inner.Dispose();
         return ValueTask.CompletedTask;
     }
@@ -338,7 +366,7 @@ public sealed class KafkaProducer : IProducer
     private static Message<string, byte[]> BuildMessage(
         string key,
         byte[] value,
-        IDictionary<string, string>? headers)
+        IReadOnlyDictionary<string, string>? headers)
     {
         var kafkaHeaders = new Headers();
         if (headers is not null)
@@ -373,5 +401,4 @@ When `PaymentProcessor` publishes a `PaymentAuthorised` message, the pipeline se
 ## See also
 
 - [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) — how the producer fits into the message pipeline
-- [`IServiceConnectConnection`](./iserviceconnectconnection/) — RabbitMQ-specific connection abstraction
 - [`IConsumer`](./iconsumer/) — the inbound counterpart

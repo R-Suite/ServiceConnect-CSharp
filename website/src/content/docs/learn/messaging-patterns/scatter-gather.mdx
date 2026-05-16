@@ -39,12 +39,22 @@ A `Source` field on the reply is a convention worth borrowing — the requester 
 
 ## The requester
 
-Scatter-Gather uses `SendRequestMultiAsync<TRequest, TReply>`. You supply a list of destination queues in `RequestOptions.EndPoints`, and you receive a `List<TReply>`:
+Scatter-Gather uses `SendRequestMultiAsync<TRequest, TReply>`. The destination queues come from the queue mapping configured at startup — register the request type against the responder queues and ServiceConnect fans the request out to all of them on every call. You receive a `List<TReply>`:
 
 ```csharp
 // Requester/Program.cs
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { /* … */ });
+    builder.ConfigureQueues(q =>
+    {
+        q.QueueName = "search-requester";
+        q.AddQueueMapping(typeof(SearchRequest), new[] { "catalog-a", "catalog-b" });
+    });
+});
 
 await bus.StartConsumingAsync();   // required — replies land on our queue
 
@@ -52,7 +62,6 @@ var replies = await bus.SendRequestMultiAsync<SearchRequest, SearchResponse>(
     new SearchRequest(Guid.NewGuid()) { Query = "widgets" },
     new RequestOptions
     {
-        EndPoints = new[] { "catalog-a", "catalog-b" },
         ExpectedReplyCount = 2,
         Timeout = 30_000,
     });
@@ -63,8 +72,8 @@ foreach (var reply in replies)
 
 Two things to notice:
 
-- **`ExpectedReplyCount`** controls when the call completes. With a positive value (here, `2`), `SendRequestMultiAsync` returns as soon as that many replies arrive **or** the timeout elapses — whichever comes first. Leave it unset and ServiceConnect defaults to `EndPoints.Count`, which is usually what you want: "I sent to two, I'd like two replies back."
-- **`Timeout`** is in milliseconds. It is not optional for safety reasons — a missing responder would leave the caller waiting forever otherwise. At the timeout, `SendRequestMultiAsync` returns whatever replies have actually arrived; it does not throw unless **no** replies arrive. That's what makes partial-result semantics the default.
+- **`ExpectedReplyCount`** controls when the call completes. With a positive value (here, `2`), `SendRequestMultiAsync` throws `RequestTimeoutException` if fewer replies arrive before the timeout; the partials are available on `RequestTimeoutException.PartialReplies`. With a positive value met, the call returns as soon as that many replies have arrived. Leave it unset (or zero/negative) and ServiceConnect waits the full timeout and returns every reply received during the window — the silent-partial-return mode.
+- **`Timeout`** is in milliseconds. It is not optional for safety reasons — a missing responder would leave the caller waiting forever otherwise.
 
 ## The responders
 
@@ -90,23 +99,22 @@ public sealed class SearchRequestHandler : IMessageHandler<SearchRequest>
 
 The responders don't know each other. They don't coordinate. Each one sees a `SearchRequest`, runs its own search, and replies. The requester is the only place that knows there are multiple responders.
 
-Run as many as you want — add catalog-c later and just include `"catalog-c"` in `EndPoints` when you call. The responder side doesn't change.
+Run as many as you want — add catalog-c later and just include `"catalog-c"` in the queue mapping when you start the requester. The responder side doesn't change.
 
 ## Reply-count semantics
 
 `ExpectedReplyCount` is the knob that defines "done":
 
-- **Positive value** — wait for that many replies or the timeout, whichever is first.
-- **Zero or negative** — wait the full timeout and return every reply received.
-- **`null`** (default) — fall back to `EndPoints.Count` if `EndPoints` is set; otherwise behave as the negative case.
-
-The "wait the full timeout" case is useful when you don't know how many responders are listening — say, the set of catalogs is dynamic. You accept a fixed wait in exchange for not having to count responders.
+- **Positive value N** — the call completes as soon as `N` replies have arrived. If fewer than `N` arrive before the timeout, `RequestTimeoutException` is thrown with the partials available on `PartialReplies`.
+- **Zero, negative, or `null`** (default) — the call waits the full timeout and returns every reply received. Useful when you don't know how many responders are listening — say, the set of catalogs is dynamic. You accept a fixed wait in exchange for not having to count responders.
 
 ## When a reply doesn't come back
 
-Nothing bad happens. The response list comes back short, the call returns cleanly, and it is your job to decide what that means — "no results from catalog-b", a health alert, a fallback, nothing at all. The requester sees exactly the replies that arrived; the ones that didn't are simply absent.
+With `ExpectedReplyCount` unset, the response list comes back short, the call returns cleanly, and it is your job to decide what that means — "no results from catalog-b", a health alert, a fallback, nothing at all. The requester sees exactly the replies that arrived; the ones that didn't are simply absent.
 
-If you need to log specifically *which* responders failed to reply, compare the `Source` tags on the replies to the `EndPoints` list you sent. ServiceConnect doesn't surface this for you, and on purpose: the pattern's whole appeal is that the call site doesn't have to reason about per-responder failure.
+With a positive `ExpectedReplyCount`, under-delivery is a typed exception (`RequestTimeoutException`) carrying the partials, so you can choose to recover them or fail the whole call.
+
+If you need to log specifically *which* responders failed to reply, compare the `Source` tags on the replies to the queue-mapping list you configured. ServiceConnect doesn't surface this for you, and on purpose: the pattern's whole appeal is that the call site doesn't have to reason about per-responder failure.
 
 ## What comes next
 

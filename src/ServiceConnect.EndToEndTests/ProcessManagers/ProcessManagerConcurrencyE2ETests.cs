@@ -42,7 +42,7 @@ public class ProcessManagerConcurrencyE2ETests(PersistenceFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton(bothHandled);
         services.AddSingleton(gate);
         services.AddTransient<IProcessHandler<ConcurrentCounterData, TestMessage>, ConcurrentIncrementHandler>();

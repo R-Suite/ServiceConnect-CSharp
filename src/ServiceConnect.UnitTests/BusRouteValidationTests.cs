@@ -72,7 +72,7 @@ public sealed class BusRouteValidationTests
         pipelineConfig.Setup(p => p.OutgoingFilters).Returns([]);
 
         var dispatcher = new Mock<IMessageDispatcher>();
-        IList<HandlerReference> handlerReferences = [];
+        IReadOnlyList<HandlerReference> handlerReferences = [];
         var scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
         var scopeAccessor = new ConsumeScopeAccessor();
 

@@ -35,6 +35,13 @@ public static class HealthChecksBuilderExtensions
     /// Convenience wrapper over the factory overload for hosts using
     /// <see cref="ServiceProviderKeyedServiceExtensions"/>.
     /// </summary>
+    /// <remarks>
+    /// Threads the same <paramref name="serviceKey"/> through to the broker-cancelled
+    /// short-circuit's <see cref="IConsumer"/> resolution so multi-bus hosts (where both
+    /// <see cref="IBus"/> and <see cref="IConsumer"/> are keyed) get the right consumer.
+    /// Without this, the keyed bus probes against the unkeyed default consumer and the
+    /// short-circuit fires for the wrong transport.
+    /// </remarks>
     public static IHealthChecksBuilder AddServiceConnectBus(
         this IHealthChecksBuilder builder,
         string name,
@@ -44,7 +51,12 @@ public static class HealthChecksBuilderExtensions
         TimeSpan? timeout = null)
         => builder.AddServiceConnectBus(name,
             sp => sp.GetRequiredKeyedService<IBus>(serviceKey),
-            failureStatus, tags, timeout);
+            recoveryGraceWindow: TimeSpan.FromSeconds(30),
+            timeProvider: null,
+            consumerFactory: sp => sp.GetKeyedService<IConsumer>(serviceKey),
+            failureStatus,
+            tags,
+            timeout);
 
     /// <summary>
     /// Registers a bus-consuming health check resolving the bus via a factory function.

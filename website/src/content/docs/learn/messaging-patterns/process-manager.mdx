@@ -142,6 +142,15 @@ Without a persistence provider, the process manager has nowhere to put state and
 
 Every call to `FindDataAsync<T>` must return a **fresh** `IPersistenceData<T>.Data` reference. Two successive loads for the same correlation id must produce independent objects — mutations to one must not affect the other. Both built-in providers comply: the InMemory provider deep-clones on every read; MongoDB deserialises a new object from the wire. Custom implementations (Postgres, SQL Server, Redis, …) must do the same. See [`IProcessManagerFinder`](/ServiceConnect-CSharp/reference/extension-points/persistence/iprocessmanagerfinder/#findDataAsync) for details.
 
+### InMemory deep-clone limitations
+
+The InMemory provider's deep-clone uses `System.Text.Json` to round-trip saga data, which covers the regular-public-property shape every saga in this codebase uses but does not match the BSON layer's introspection. Two specific shapes are unsupported by the InMemory persistor and will silently lose state through the round-trip:
+
+- **Polymorphic nested values.** A property declared as a base type or interface that holds a derived runtime instance round-trips as the declared type, losing the derived properties. Annotate the base with `[JsonDerivedType(typeof(Derived), "discriminator")]` to teach STJ about the polymorphism, or store the runtime type as a discriminator field and reconstruct on read.
+- **Explicit-interface auto-properties.** A property declared as an explicit-interface implementation (`Guid IFoo.FooId { get; set; }`) is invisible to STJ and round-trips as the field default. Expose the backing field as a public property if you need it preserved through InMemory.
+
+The MongoDB provider has neither limitation — BSON's `_t` discriminator handles polymorphism, and `BsonClassMap` discovers explicit-interface auto-properties. Use the MongoDB provider for any saga that depends on these shapes.
+
 ## Handler registration
 
 Each message type needs its own DI registration, because the bus resolves per message:

@@ -28,7 +28,7 @@ public class QueueMappingTests(MessagingFixture fixture)
         };
         var consumerServices = new ServiceCollection();
         consumerServices.AddLogging();
-        consumerServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        consumerServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         consumerServices.AddTransient<IMessageHandler<TestMessage>>(_ => new CallbackHandler<TestMessage>(msg => tcs.TrySetResult(msg)));
         consumerServices.AddServiceConnect(builder =>
         {
@@ -49,7 +49,7 @@ public class QueueMappingTests(MessagingFixture fixture)
         // Sender with QueueMapping configured (no explicit endpoint)
         var senderServices = new ServiceCollection();
         senderServices.AddLogging();
-        senderServices.AddSingleton<IList<HandlerReference>>([]);
+        senderServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         senderServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>

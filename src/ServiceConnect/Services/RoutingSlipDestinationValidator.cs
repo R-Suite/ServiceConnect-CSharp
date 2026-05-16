@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.CompilerServices;
 
 namespace ServiceConnect.Services;
@@ -13,8 +14,12 @@ internal static class RoutingSlipDestinationValidator
     public const int MaxDestinationLength = 128;
 
     // Characters either structural in AMQP routing (`*`, `#` are wildcards on topic
-    // exchanges) or common injection vectors (`\0`, `\r`, `\n`, `\t`, quotes).
-    public static readonly char[] ForbiddenChars = ['*', '#', '\0', '\r', '\n', '\t', '"', '\''];
+    // exchanges) or common injection vectors (`\0`, `\r`, `\n`, `\t`, quotes). Wrapped
+    // in a SearchValues so the set is genuinely immutable — a mutable char[] exposed as
+    // `static readonly` only guards the reference; elements could be rewritten via
+    // reflection or direct indexing to silently weaken the global validation surface.
+    private static readonly SearchValues<char> ForbiddenChars =
+        SearchValues.Create(['*', '#', '\0', '\r', '\n', '\t', '"', '\'']);
 
     /// <summary>
     /// Returns the failure reason as a string when invalid, or <see langword="null"/>
@@ -32,9 +37,17 @@ internal static class RoutingSlipDestinationValidator
         {
             return $"destination exceeds the {MaxDestinationLength}-character cap";
         }
-        if (destination.IndexOfAny(ForbiddenChars) >= 0)
+        if (destination.AsSpan().IndexOfAny(ForbiddenChars) >= 0)
         {
             return "destination contains a reserved character (one of *, #, NUL, CR, LF, TAB, \", ')";
+        }
+        // Reject the AMQP `amq.*` reserved namespace as defence in depth: a hostile inbound
+        // RoutingSlip header could otherwise route messages to broker-internal queues
+        // (e.g. `amq.rabbitmq.trace`) or to another tenant's auto-generated `amq.gen-*`
+        // exclusive queue if the consumer's vhost permissions allow it.
+        if (destination.StartsWith("amq.", StringComparison.OrdinalIgnoreCase))
+        {
+            return "destination is in the AMQP reserved 'amq.*' namespace";
         }
         return null;
     }

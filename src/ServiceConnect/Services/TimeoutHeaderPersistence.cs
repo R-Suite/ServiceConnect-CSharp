@@ -20,6 +20,12 @@ internal static class TimeoutHeaderPersistence
         HeaderKeys.ResponseMessageId,
         HeaderKeys.RoutingKey,
         HeaderKeys.RoutingSlip,
+        // Strip the inbound hop counter so a saga's timeout starts fresh at hops=0.
+        // Without this, a saga that received a near-end-of-slip message would persist
+        // the inbound counter into the timeout row; when the timeout fires the
+        // dispatched message would carry the stale counter and the saga's first
+        // RouteAsync after a timeout could be refused by the per-hop cap.
+        HeaderKeys.RoutingSlipHopsCompleted,
         HeaderKeys.Publish,
         HeaderKeys.SequenceId,
         HeaderKeys.PacketNumber,

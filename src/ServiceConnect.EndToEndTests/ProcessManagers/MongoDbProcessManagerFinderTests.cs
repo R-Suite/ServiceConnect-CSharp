@@ -136,7 +136,7 @@ public class MongoDbProcessManagerFinderTests(PersistenceFixture fixture)
         var updated = collection.Find(Builders<MongoDbData<TestData>>.Filter.Eq(x => x.Data.CorrelationId, correlationId)).FirstOrDefault();
         Assert.NotNull(updated);
         Assert.Equal("Updated", updated.Data.Name);
-        Assert.Equal(2, updated.Version);
+        Assert.Equal(2L, updated.Version);
     }
 
     [Fact]

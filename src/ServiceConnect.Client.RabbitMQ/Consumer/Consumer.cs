@@ -10,7 +10,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// <summary>
 /// RabbitMQ-backed implementation of <see cref="IConsumer"/> for ServiceConnect.
 /// </summary>
-public sealed class Consumer : IConsumer
+internal sealed class Consumer : IConsumer
 {
     private IChannel? _model;
     private IServiceConnectConnection? _connection;
@@ -25,6 +25,14 @@ public sealed class Consumer : IConsumer
     private readonly ConcurrentBag<IAsyncDisposable> _clients = [];
     private int _started; // 0 = not started, 1 = started; access only via Interlocked
     private int _stopped; // 0 = active, 1 = stopped or disposed; latched for IsStopped readers
+    // Serialises StartConsumingAsync against DisposeAsync. Without this, a DisposeAsync
+    // that lands while StartConsumingAsync is still inside the topology-provision /
+    // setup-channel section (between `_model = setupChannel` and the finally that nulls
+    // it) can close and dispose the in-flight setup channel from under the running
+    // start path. Both lifecycle methods acquire this semaphore; Dispose's wait is
+    // bounded by BusConfiguration.DisposeTimeout so a wedged broker handshake cannot
+    // block container shutdown indefinitely.
+    private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
     private readonly bool _durable;
     private readonly int _retryDelay;
     private readonly bool _exclusive;
@@ -112,6 +120,13 @@ public sealed class Consumer : IConsumer
         // DisposeAsync) must report the freshly-started consumer as not-stopped.
         Interlocked.Exchange(ref _stopped, 0);
 
+        // Acquire the lifecycle lock for the duration of setup. A concurrent DisposeAsync
+        // waits here (bounded by its own deadline) so it cannot tear down the in-flight
+        // setup channel from under us. Honour the caller's cancellation: a wedged dispose
+        // holding the lock past the caller's CT cancellation should release us with an OCE.
+        await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var lifecycleHeld = true;
+
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -193,7 +208,12 @@ public sealed class Consumer : IConsumer
             for (int i = 0; i < clientCount; i++)
             {
                 var retryHandler = new MessageRetryHandler(
-                    _transportConfiguration.MaxRetries, _queueConfiguration.ErrorQueueName, _queueConfiguration.QueueName, _logger);
+                    _transportConfiguration.MaxRetries,
+                    _queueConfiguration.ErrorQueueName,
+                    _queueConfiguration.QueueName,
+                    _logger,
+                    timeProvider: null,
+                    errorsDisabled: _queueConfiguration.DisableErrors);
                 var auditPublisher = new MessageAuditPublisher(_queueConfiguration);
                 var admissionGate = new RabbitMqAdmissionGate(_queueConfiguration.QueueName);
                 RabbitMqConsumerHost client = new(
@@ -221,28 +241,53 @@ public sealed class Consumer : IConsumer
         {
             // Reset _started so a subsequent StartConsumingAsync can retry; without this, a
             // failure mid-setup leaves the consumer in a half-built "already consuming" state
-            // requiring an explicit DisposeAsync to recover. Best-effort dispose any hosts that
-            // were added to _clients before the failure (the for-loop adds each host before
-            // BeginConsumingAsync; a later iteration's failure leaks earlier ones).
+            // requiring an explicit DisposeAsync to recover.
             Interlocked.Exchange(ref _started, 0);
-            while (_clients.TryTake(out var partial))
-            {
-                try { await partial.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception disposeEx) { _logger.LogWarning(disposeEx, "Error disposing partial host during StartConsumingAsync failure recovery"); }
-            }
-            // If this startup created the connection (the consumer was constructed without
-            // one) and the startup failed, dispose the connection too. The catch otherwise
-            // leaves the owned connection live with no path to release it short of an
-            // explicit DisposeAsync — the caller's "retry the start" expectation should
-            // not require a manual DisposeAsync between attempts.
+
+            // Snapshot and detach the owned connection BEFORE releasing the lifecycle
+            // semaphore (see RecoverStartFailureAsync for the race rationale).
+            IServiceConnectConnection? connectionToDispose = null;
             if (_ownsConnection && _connection != null)
             {
-                try { await _connection.DisposeAsync().ConfigureAwait(false); }
-                catch (Exception connEx) { _logger.LogWarning(connEx, "Error disposing owned connection during StartConsumingAsync failure recovery"); }
+                connectionToDispose = _connection;
                 _connection = null;
                 _ownsConnection = false;
             }
+
+            if (lifecycleHeld)
+            {
+                _lifecycleSemaphore.Release();
+                lifecycleHeld = false;
+            }
+
+            await RecoverStartFailureAsync(connectionToDispose).ConfigureAwait(false);
             throw;
+        }
+        finally
+        {
+            if (lifecycleHeld)
+            {
+                _lifecycleSemaphore.Release();
+            }
+        }
+    }
+
+    // Recovery cleanup for StartConsumingAsync's catch path. Drains _clients (in case the
+    // for-loop added hosts before the failure) and disposes the owned connection captured
+    // before the lifecycle semaphore was released. Idempotent against Consumer.DisposeAsync's
+    // own _clients.Clear() / connection dispose — both use TryTake and IAsyncDisposable
+    // patterns that tolerate the second invocation.
+    private async Task RecoverStartFailureAsync(IServiceConnectConnection? connectionToDispose)
+    {
+        while (_clients.TryTake(out var partial))
+        {
+            try { await partial.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception disposeEx) { _logger.LogWarning(disposeEx, "Error disposing partial host during StartConsumingAsync failure recovery"); }
+        }
+        if (connectionToDispose is not null)
+        {
+            try { await connectionToDispose.DisposeAsync().ConfigureAwait(false); }
+            catch (Exception connEx) { _logger.LogWarning(connEx, "Error disposing owned connection during StartConsumingAsync failure recovery"); }
         }
     }
 
@@ -292,6 +337,22 @@ public sealed class Consumer : IConsumer
         // consumer as permanently stopped rather than waiting out the recovery-grace window.
         Interlocked.Exchange(ref _stopped, 1);
 
+        // Wait for any in-flight StartConsumingAsync to complete its setup section before
+        // tearing down _model / _connection. Without this, dispose-during-startup can close
+        // and dispose the setup channel from under the running start path, producing an
+        // opaque AlreadyClosedException / ObjectDisposedException out of topology declares.
+        // Bounded by DisposeTimeout so a wedged start cannot hang container shutdown.
+        var lifecycleTimeout = _busConfiguration.DisposeTimeout > TimeSpan.Zero
+            ? _busConfiguration.DisposeTimeout
+            : TimeSpan.FromSeconds(30);
+        var lifecycleAcquired = await _lifecycleSemaphore.WaitAsync(lifecycleTimeout).ConfigureAwait(false);
+        if (!lifecycleAcquired)
+        {
+            _logger.LogWarning(
+                "Consumer.DisposeAsync timed out waiting for in-flight StartConsumingAsync after {Timeout}; forcing teardown.",
+                lifecycleTimeout);
+        }
+
         // Each host's DisposeAsync is independently bounded by its own gracefulShutdownTimeout.
         // Sequential disposal made aggregate latency O(N * timeout); parallel makes it O(timeout).
         // Per-host failures (including any OCE — this dispose path is fire-and-forget cleanup)
@@ -337,6 +398,16 @@ public sealed class Consumer : IConsumer
 
         // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
         Interlocked.Exchange(ref _started, 0);
+
+        if (lifecycleAcquired)
+        {
+            // The semaphore is intentionally NOT disposed: a concurrent late-arriving Start
+            // (e.g. test harness restart) would otherwise observe ObjectDisposedException
+            // out of WaitAsync. Leaving it un-disposed costs only the un-allocated lazy
+            // WaitHandle (we never call AvailableWaitHandle) which is reclaimed with the
+            // Consumer instance.
+            _lifecycleSemaphore.Release();
+        }
     }
 
     private static Dictionary<string, object?> CoerceToQueueArgs(IReadOnlyDictionary<string, object> settings, string key)

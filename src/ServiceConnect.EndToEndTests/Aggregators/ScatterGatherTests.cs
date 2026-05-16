@@ -34,7 +34,7 @@ public class ScatterGatherTests(MessagingFixture fixture)
 
         var responder1Services = new ServiceCollection();
         responder1Services.AddLogging();
-        responder1Services.AddSingleton<IList<HandlerReference>>(responder1HandlerReferences);
+        responder1Services.AddSingleton<IReadOnlyList<HandlerReference>>(responder1HandlerReferences);
         responder1Services.AddTransient<IMessageHandler<TestRequest>>(_ => new ScatterReplyHandler("Resp1"));
 
         responder1Services.AddServiceConnect(builder =>
@@ -68,7 +68,7 @@ public class ScatterGatherTests(MessagingFixture fixture)
 
         var responder2Services = new ServiceCollection();
         responder2Services.AddLogging();
-        responder2Services.AddSingleton<IList<HandlerReference>>(responder2HandlerReferences);
+        responder2Services.AddSingleton<IReadOnlyList<HandlerReference>>(responder2HandlerReferences);
         responder2Services.AddTransient<IMessageHandler<TestRequest>>(_ => new ScatterReplyHandler("Resp2"));
 
         responder2Services.AddServiceConnect(builder =>
@@ -96,7 +96,7 @@ public class ScatterGatherTests(MessagingFixture fixture)
 
         var requesterServices = new ServiceCollection();
         requesterServices.AddLogging();
-        requesterServices.AddSingleton<IList<HandlerReference>>(requesterHandlerReferences);
+        requesterServices.AddSingleton<IReadOnlyList<HandlerReference>>(requesterHandlerReferences);
 
         requesterServices.AddServiceConnect(builder =>
         {

@@ -37,7 +37,7 @@ public sealed class UnroutableRetryPublishE2ETests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddTransient<IMessageHandler<UnroutableRetryProbe>>(_ =>
             new AlwaysThrowsHandler(callState));
 

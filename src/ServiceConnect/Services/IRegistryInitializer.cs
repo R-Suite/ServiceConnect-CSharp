@@ -1,11 +1,11 @@
-namespace ServiceConnect.Interfaces;
+namespace ServiceConnect.Services;
 
 /// <summary>
 /// Eagerly initializes internal handler registries at startup to validate
 /// handler configurations before the bus processes any messages.
 /// Implementations perform registry resolution to trigger construction and validation.
 /// </summary>
-public interface IRegistryInitializer
+internal interface IRegistryInitializer
 {
     /// <summary>
     /// Initializes all handler registries, triggering eager validation of handler configurations.

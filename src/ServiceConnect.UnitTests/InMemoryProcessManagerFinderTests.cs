@@ -21,12 +21,11 @@ public class TestData : IProcessManagerData
 public class NonJsonRoundTrippableTestData : IProcessManagerData
 {
     public Guid CorrelationId { get; set; }
-    // Type has no parameterless ctor that BSON's BsonClassMap can call (the runtime
-    // RuntimeType ctor is not invokable), and Newtonsoft.Json (the prior DeepClone
-    // backing) had a custom converter that special-cased it. Mark it BsonIgnore so
-    // the saga's other fields still round-trip; saga authors with reflection types
-    // in state must apply the same opt-out (or store a name/string surrogate).
-    [MongoDB.Bson.Serialization.Attributes.BsonIgnore]
+    // System.Type is not round-trippable through System.Text.Json — there's no built-in
+    // converter for RuntimeType. Saga authors who keep reflection types in state must
+    // mark them [JsonIgnore] (or store a name/string surrogate). The persistor's deep
+    // clone uses STJ, so the same opt-out applies as for any other STJ-unsupported type.
+    [System.Text.Json.Serialization.JsonIgnore]
     public Type ValueType { get; set; } = typeof(object);
 }
 
@@ -738,18 +737,18 @@ public class InMemoryProcessManagerFinderTests
         Assert.NotNull(found);
 
         // Initial version after Insert is 1; the caller's handle reflects that on Find.
-        Assert.Equal(1, ((MemoryData<TestData>)found!).Version);
+        Assert.Equal(1L, ((MemoryData<TestData>)found!).Version);
 
         // First update — store goes 1 → 2; caller's handle must move in lockstep.
         found.Data.Name = "v1";
         await finder.UpdateDataAsync(found, CancellationToken.None);
-        Assert.Equal(2, ((MemoryData<TestData>)found).Version);
+        Assert.Equal(2L, ((MemoryData<TestData>)found).Version);
 
         // Second update on the same handle — must not throw because the caller's
         // Version was incremented to match what the store now holds.
         found.Data.Name = "v2";
         await finder.UpdateDataAsync(found, CancellationToken.None);
-        Assert.Equal(3, ((MemoryData<TestData>)found).Version);
+        Assert.Equal(3L, ((MemoryData<TestData>)found).Version);
 
         // Confirm the second write was persisted.
         var reloaded = await finder.FindDataAsync<TestData>(mapper, new Message(correlationId), CancellationToken.None);

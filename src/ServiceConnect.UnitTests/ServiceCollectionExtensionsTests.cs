@@ -495,7 +495,7 @@ public sealed class H5Handler : IMessageHandler<H5Msg>
 
 public sealed class H5Aggregator : Aggregator<H5Msg>
 {
-    public override Task ExecuteAsync(IList<H5Msg> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
+    public override Task ExecuteAsync(IReadOnlyList<H5Msg> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
 /// <summary>

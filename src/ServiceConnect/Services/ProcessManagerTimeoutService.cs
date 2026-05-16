@@ -9,7 +9,7 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Hosted service that polls timeout storage and dispatches due process-manager timeout messages.
 /// </summary>
-public sealed class ProcessManagerTimeoutService(
+internal sealed class ProcessManagerTimeoutService(
     IBusConfiguration config,
     Lazy<IBus> bus,
     ITimeoutStore? finder,
@@ -80,23 +80,51 @@ public sealed class ProcessManagerTimeoutService(
         try { await cts.CancelAsync().ConfigureAwait(false); }
         catch (ObjectDisposedException) { }
 
+        var pollingCompleted = false;
         if (_pollingTask != null)
         {
 #pragma warning disable VSTHRD003 // _pollingTask was started by StartAsync on this instance.
-            try { await _pollingTask.WaitAsync(cancellationToken).ConfigureAwait(false); }
-            catch (OperationCanceledException) { }
+            try
+            {
+                await _pollingTask.WaitAsync(cancellationToken).ConfigureAwait(false);
+                pollingCompleted = true;
+            }
+            catch (OperationCanceledException)
+            {
+                // Host grace token fired before the poll loop finished draining. The poll
+                // loop is still running and may read cts.Token on its next iteration —
+                // disposing the CTS now would surface as ObjectDisposedException out of the
+                // PeriodicTimer's WaitForNextTickAsync and bubble through PollLoop's broad
+                // catch as "poll loop terminated unexpectedly". Skip the Dispose; the
+                // CancellationTokenSource holds no unmanaged state beyond the lazy WaitHandle
+                // and the poll task carries its own reference so the source is GC-reclaimable
+                // once the poll task completes.
+            }
 #pragma warning restore VSTHRD003
         }
 
-        cts.Dispose();
-        _pollingTask = null;
+        if (pollingCompleted)
+        {
+            cts.Dispose();
+            _pollingTask = null;
+        }
+        else
+        {
+            // Attach a fault observer so any post-grace exception from the abandoned
+            // polling task is observed rather than firing TaskScheduler.UnobservedTaskException.
+            _ = _pollingTask?.ContinueWith(
+                static t => _ = t.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
     }
 
-    internal async Task PollOnceAsync(CancellationToken cancellationToken = default)
+    internal async Task<int> PollOnceAsync(CancellationToken cancellationToken = default)
     {
         if (_finder == null)
         {
-            return;
+            return 0;
         }
 
         try
@@ -104,9 +132,15 @@ public sealed class ProcessManagerTimeoutService(
             var batch = await _finder.GetTimeoutsBatchAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
             if (batch.DueTimeouts == null || batch.DueTimeouts.Count == 0)
             {
-                return;
+                return 0;
             }
 
+            // Count only rows where SendAsync was actually attempted. Skips (margin gate
+            // and post-send lease-expiry) MUST NOT count toward the catch-up "did we
+            // dispatch a non-empty batch" signal — otherwise the catch-up loop keeps
+            // re-polling against a backlog of skip-eligible rows whose lease another
+            // worker has already re-claimed, burning DB roundtrips on a phantom queue.
+            var dispatchedCount = 0;
             foreach (var timeout in batch.DueTimeouts)
             {
                 try
@@ -160,6 +194,7 @@ public sealed class ProcessManagerTimeoutService(
                     // timeout "dispatched but not removed" — next poll redispatches, consistent with
                     // the existing at-least-once timeout semantics.
                     await _finder.RemoveDispatchedTimeoutAsync(timeout.Id, lockOwner, cancellationToken).ConfigureAwait(false);
+                    dispatchedCount++;
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -176,37 +211,59 @@ public sealed class ProcessManagerTimeoutService(
                     }
                 }
             }
+
+            return dispatchedCount;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // The shutdown CT cancelled us; clean exit. Pre-fix the catch was
-            // `when (ex is not OperationCanceledException)`, which let any non-loop OCE
-            // escape silently (e.g., a Bus.SendAsync's internal cancellation that doesn't
-            // share our token). Distinguish: this branch handles the legitimate shutdown
-            // OCE; the next branch handles any other OCE.
-            return;
+            // The shutdown CT cancelled us; clean exit. This branch handles the legitimate
+            // shutdown OCE; the next branch handles any other OCE (e.g., a Bus.SendAsync's
+            // internal cancellation that doesn't share our token) so it doesn't escape silently.
+            return 0;
         }
         catch (OperationCanceledException ex)
         {
             logger.LogWarning(ex, "Unexpected OperationCanceledException polling for process manager timeouts (not the shutdown token).");
+            return 0;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error polling for process manager timeouts");
+            return 0;
         }
     }
+
+    // Per-tick catch-up cap. After a multi-hour outage the timeout store can hold a large
+    // backlog; without a catch-up loop, drain rate is `BatchSize / PollInterval` (e.g.
+    // 500/30s ≈ 16/s for default config — a 1 M backlog takes ~17 h to clear). When a poll
+    // returns a non-empty batch we re-poll immediately up to this cap before waiting for
+    // the next tick, so the steady-state continues to back off while a backlog drains
+    // quickly. 32 iterations × default 500 batch = 16k timeouts processed per outer tick
+    // before yielding to the next scheduled poll.
+    private const int MaxCatchUpIterationsPerTick = 32;
 
     private async Task PollLoop(TimeSpan interval, CancellationToken cancellationToken)
     {
         // Use the TimeProvider-aware PeriodicTimer overload so tests with FakeTimeProvider
-        // can drive the loop. Pre-fix `new PeriodicTimer(interval)` ignored the injected
-        // _timeProvider — only TimeProvider.System could fire the timer.
+        // can drive the loop. The parameterless `new PeriodicTimer(interval)` ignores the
+        // injected _timeProvider — only TimeProvider.System would fire the timer, leaving
+        // time-controlled tests unable to advance the loop.
         using var timer = new PeriodicTimer(interval, _timeProvider);
         try
         {
             while (await timer.WaitForNextTickAsync(cancellationToken).ConfigureAwait(false))
             {
-                await PollOnceAsync(cancellationToken).ConfigureAwait(false);
+                // Catch-up loop: while the previous batch was non-empty, immediately
+                // re-poll without waiting for the next tick. The cap prevents a continuous
+                // flood of past-due timeouts from starving the rest of the host's tasks.
+                for (var i = 0; i < MaxCatchUpIterationsPerTick; i++)
+                {
+                    var dispatched = await PollOnceAsync(cancellationToken).ConfigureAwait(false);
+                    if (dispatched == 0)
+                    {
+                        break;
+                    }
+                }
             }
         }
         catch (OperationCanceledException)
@@ -233,23 +290,48 @@ public sealed class ProcessManagerTimeoutService(
             try { await cts.CancelAsync().ConfigureAwait(false); }
             catch (ObjectDisposedException) { }
         }
-        if (_pollingTask != null)
+        // Snapshot the polling task to a local so a racing StopAsync that nulls the field
+        // after our check cannot trip a null-deref on the abandoned-task observer below.
+        var pollingTask = _pollingTask;
+        var pollingCompleted = false;
+        if (pollingTask != null)
         {
 #pragma warning disable VSTHRD003 // _pollingTask was started by StartAsync on this instance.
             // Bound the wait so a non-cooperative ITimeoutStore (sync-over-async wedge,
             // hung network call, etc.) cannot wedge DI shutdown. On timeout the polling
             // task is left to GC; any in-flight Send/Remove will complete or be torn
-            // down by the cancelled CTS captured above.
-            try { await _pollingTask.WaitAsync(config.DisposeTimeout).ConfigureAwait(false); }
+            // down by the cancelled CTS captured above. We attach an unobserved-fault
+            // observer in that case so an eventual fault on the abandoned task does not
+            // surface as a `TaskScheduler.UnobservedTaskException` event at finalization.
+            try
+            {
+                await pollingTask.WaitAsync(config.DisposeTimeout).ConfigureAwait(false);
+                pollingCompleted = true;
+            }
             catch (OperationCanceledException) { }
             catch (TimeoutException)
             {
                 logger.LogWarning(
                     "Polling task did not complete within {Timeout}; abandoning the await and continuing dispose.",
                     config.DisposeTimeout);
+                _ = pollingTask.ContinueWith(
+                    static t => _ = t.Exception,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
 #pragma warning restore VSTHRD003
         }
-        cts?.Dispose();
+        // Mirror StopAsync's timeout-path semantics: only dispose the CTS when the polling
+        // task actually completed. When the WaitAsync timed out / was cancelled, the task
+        // is still running and may read cts.Token on its next loop iteration — disposing
+        // here would surface as ObjectDisposedException inside PollLoop's PeriodicTimer and
+        // log as "poll loop terminated unexpectedly". The fault observer above ensures the
+        // abandoned task's eventual fault is observed; the CTS is GC-reclaimable when the
+        // task finally completes.
+        if (pollingCompleted)
+        {
+            cts?.Dispose();
+        }
     }
 }

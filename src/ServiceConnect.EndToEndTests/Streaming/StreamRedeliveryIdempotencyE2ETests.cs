@@ -45,7 +45,7 @@ public class StreamRedeliveryIdempotencyE2ETests(MessagingFixture fixture)
 
         var consumerServices = new ServiceCollection();
         consumerServices.AddLogging();
-        consumerServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        consumerServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         consumerServices.AddSingleton(counter);
         consumerServices.AddSingleton(firstResult);
         consumerServices.AddTransient<IStreamHandler<TestMessage>, IdempotencyCheckHandler>();
@@ -72,7 +72,7 @@ public class StreamRedeliveryIdempotencyE2ETests(MessagingFixture fixture)
 
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>([]);
+        producerServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>

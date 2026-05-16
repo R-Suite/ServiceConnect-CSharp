@@ -37,13 +37,14 @@ public class InMemoryProcessManagerFinderPolymorphicTests
     }
 
     [Fact]
-    public async Task FindData_StoredTypeMismatchesT_ThrowsInvalidOperation()
+    public async Task FindData_StoredTypeMismatchesT_SkipsAndReturnsNull()
     {
-        // Arrange: insert a SagaTypeA record, then attempt to retrieve it as SagaTypeB.
-        // InsertDataAsync uses the runtime type (SagaTypeA) to choose the MemoryData<>
-        // wrapper, so the store holds MemoryData<SagaTypeA>.  Asking for SagaTypeB is a
-        // caller error — the two types are unrelated — and must fail deterministically
-        // rather than silently coercing the stored data to a different wrapper type.
+        // Multi-saga support: a worker can host >1 saga type. InsertDataAsync wraps the
+        // SagaTypeA record as MemoryData<SagaTypeA>; the InMemory flat-dictionary scan
+        // for SagaTypeB MUST skip the SagaTypeA entry (no match) rather than throw.
+        // The pre-v7 behaviour threw `InvalidOperationException`, which is not
+        // `ConcurrencyException`, so the dispatcher had no retry path and the worker
+        // surfaced permanently-failed dispatches whenever it hosted multiple saga types.
         var correlationId = Guid.NewGuid();
         var cache = new ProcessManagerPredicateCache();
         var state = new InMemoryPersistenceState(new FakeTimeProvider());
@@ -55,10 +56,11 @@ public class InMemoryProcessManagerFinderPolymorphicTests
             new SagaTypeA { CorrelationId = correlationId, ValueA = "hello" },
             CancellationToken.None);
 
-        // Act / Assert: retrieving as SagaTypeB must throw because the stored wrapper
-        // type (MemoryData<SagaTypeA>) is incompatible with the requested T (SagaTypeB).
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            finder.FindDataAsync<SagaTypeB>(mapper, new Message(correlationId), CancellationToken.None));
+        // Retrieving as SagaTypeB must skip the unrelated SagaTypeA row and return null —
+        // identical to the contract Mongo provides via per-saga-type collections.
+        var result = await finder.FindDataAsync<SagaTypeB>(mapper, new Message(correlationId), CancellationToken.None);
+
+        Assert.Null(result);
     }
 
     [Fact]
@@ -81,6 +83,6 @@ public class InMemoryProcessManagerFinderPolymorphicTests
         Assert.NotNull(result);
         Assert.Equal("world", result.Data.ValueA);
         // Version is surfaced via IVersioned; IPersistenceData<T> does not expose it directly.
-        Assert.Equal(1, ((IVersioned)result).Version);
+        Assert.Equal(1L, ((IVersioned)result).Version);
     }
 }

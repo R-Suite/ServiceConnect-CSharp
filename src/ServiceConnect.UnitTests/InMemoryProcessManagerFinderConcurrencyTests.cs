@@ -135,7 +135,7 @@ public class InMemoryProcessManagerFinderConcurrencyTests
         // After exactly one successful update the stored version is 2.
         var found = await finder.FindDataAsync<TestData>(mapper, new Message(corrId), CancellationToken.None);
         Assert.NotNull(found);
-        Assert.Equal(2, ((MemoryData<TestData>)found).Version);
+        Assert.Equal(2L, ((MemoryData<TestData>)found).Version);
     }
 
     [Fact]

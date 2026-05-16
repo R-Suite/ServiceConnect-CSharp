@@ -34,7 +34,7 @@ public class MaxRetriesZeroTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddTransient<IMessageHandler<TestMessage>>(_ =>
             new CallbackHandler<TestMessage>(_ =>
             {

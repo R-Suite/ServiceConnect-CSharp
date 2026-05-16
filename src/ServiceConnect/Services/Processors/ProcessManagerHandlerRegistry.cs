@@ -19,13 +19,20 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
     private readonly IReadOnlyList<Type> _sagaDataTypes;
 
     internal ProcessManagerHandlerRegistry(
-        IList<HandlerReference> handlerReferences,
+        IReadOnlyList<HandlerReference> handlerReferences,
         ILogger<ProcessManagerHandlerRegistry> logger)
     {
         ArgumentNullException.ThrowIfNull(handlerReferences);
         ArgumentNullException.ThrowIfNull(logger);
 
-        var builder = new Dictionary<Type, ProcessManagerDescriptor>();
+        // Dedup-by-HandlerType across the handlerReferences list. HandlerScanner emits
+        // one HandlerReference per (HandlerType, MessageType, InterfaceKind) — so a class
+        // implementing both IMessageHandler<T> and IProcessHandler<TData,T> for the same
+        // message type produces TWO refs with the same HandlerType. Both refs look up the
+        // same IProcessHandler<,> interface below; the dedup-by-HandlerType branch makes
+        // the second a no-op so dual-interface handlers don't crash startup. Same mechanism
+        // protects against duplicate ScanAssemblies entries or an assembly enumerated twice.
+        var builder = new Dictionary<Type, (ProcessManagerDescriptor Descriptor, Type HandlerType)>();
         foreach (var href in handlerReferences)
         {
             Type? processHandlerInterface = null;
@@ -35,8 +42,20 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
                     && interfaceType.GetGenericTypeDefinition() == typeof(IProcessHandler<,>)
                     && interfaceType.GetGenericArguments()[1] == href.MessageType)
                 {
+                    if (processHandlerInterface is not null)
+                    {
+                        // A single class implementing IProcessHandler<DataA,M> AND IProcessHandler<DataB,M>
+                        // for the same M is ambiguous: reflection order would silently pick one TData
+                        // and drop the other. Refuse the configuration at startup — the only safe
+                        // resolution is to split the two correlations into separate handler classes.
+                        throw new InvalidOperationException(
+                            $"Process-manager handler '{href.HandlerType.FullName}' implements multiple " +
+                            $"IProcessHandler<TData,{href.MessageType.Name}> with different TData types " +
+                            $"('{processHandlerInterface.GetGenericArguments()[0].FullName}' and '{interfaceType.GetGenericArguments()[0].FullName}'). " +
+                            $"Each (HandlerType, MessageType) pair must correlate to exactly one saga " +
+                            $"data type — split the handler into separate classes.");
+                    }
                     processHandlerInterface = interfaceType;
-                    break;
                 }
             }
 
@@ -45,13 +64,20 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
                 continue;
             }
 
+            if (builder.TryGetValue(href.MessageType, out var existing))
+            {
+                if (existing.HandlerType == href.HandlerType)
+                {
+                    continue; // identical (MessageType, HandlerType) pair — dedup silently
+                }
+
+                throw new InvalidOperationException(
+                    $"Duplicate process-manager handler registration for message type '{href.MessageType.FullName}'. Only one IProcessHandler<TData,TMessage> may be registered per message type; found '{existing.HandlerType.FullName}' and '{href.HandlerType.FullName}'.");
+            }
+
             var dataType = processHandlerInterface.GetGenericArguments()[0];
             var descriptor = BuildDescriptor(href.MessageType, dataType, processHandlerInterface);
-            if (!builder.TryAdd(href.MessageType, descriptor))
-            {
-                throw new InvalidOperationException(
-                    $"Duplicate process-manager handler registration for message type '{href.MessageType.FullName}'. Only one IProcessHandler<TData,TMessage> may be registered per message type.");
-            }
+            builder[href.MessageType] = (descriptor, href.HandlerType);
 
             if (logger.IsEnabled(LogLevel.Debug))
             {
@@ -61,7 +87,7 @@ internal sealed class ProcessManagerHandlerRegistry : IHandlerRegistry, IProcess
             }
         }
 
-        _descriptors = builder.ToFrozenDictionary();
+        _descriptors = builder.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Descriptor).ToFrozenDictionary();
         _sagaDataTypes = [.. _descriptors.Values.Select(d => d.DataType).Distinct()];
     }
 

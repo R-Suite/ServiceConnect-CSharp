@@ -10,16 +10,14 @@ namespace ServiceConnect.UnitTests.Persistence;
 
 /// <summary>
 /// Pins the once-only guard on <see cref="MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered"/>.
-/// The flag must only be set after every step (mode toggle, verification, serializer registration)
-/// has succeeded; flipping it earlier would let a later caller short-circuit on broken driver state
-/// and reproduce a zero-match Guid filter at query time.
+/// The flag must only be set after serializer registration succeeds; flipping it earlier would let
+/// a later caller short-circuit on broken driver state and reproduce a zero-match Guid filter at
+/// query time.
 ///
 /// These tests rely on <c>InternalsVisibleTo</c> from the MongoDb persistence project and use
-/// reflection to inspect/reset the module-private <c>_guidSerializerRegistered</c> flag. They do
-/// not force the verification throw path — once BSON serialization has started in-process,
-/// <c>BsonDefaults.GuidRepresentationMode</c> is frozen and cannot be toggled back at runtime.
-/// Instead, they lock in the observable invariant: the flag is only set after successful completion,
-/// which implies the short-circuit cannot hide a previous throw from a later caller.
+/// reflection to inspect/reset the module-private <c>_guidSerializerRegistered</c> flag. They
+/// pin the observable invariant: the flag is only set after successful completion, which implies
+/// the short-circuit cannot hide a previous throw from a later caller.
 /// </summary>
 [Collection("Mongo Bson serial")]
 public class GuidSerializerRegistrationTests
@@ -48,9 +46,6 @@ public class GuidSerializerRegistrationTests
         MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
 
         Assert.Equal(1, ReadFlag());
-#pragma warning disable CS0618
-        Assert.Equal(GuidRepresentationMode.V3, BsonDefaults.GuidRepresentationMode);
-#pragma warning restore CS0618
     }
 
     [Fact]

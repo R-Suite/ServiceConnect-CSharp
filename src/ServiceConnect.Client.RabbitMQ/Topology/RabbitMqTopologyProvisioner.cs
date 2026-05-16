@@ -16,7 +16,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// Initializes a new topology provisioner.
 /// </remarks>
 /// <param name="logger">The logger used for topology provisioning warnings.</param>
-public sealed class RabbitMqTopologyProvisioner(ILogger logger)
+internal sealed class RabbitMqTopologyProvisioner(ILogger logger)
 {
     private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
@@ -32,6 +32,11 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         bool isInitialSetup = false,
         CancellationToken cancellationToken = default)
     {
+        // Reserved for future use — see ConfigureDeclareUtilityQueueAsync for the semantic
+        // ("swallow bind-time failure during initial setup, rethrow on later provisions").
+        // This method always rethrows because exchange-declare failures during repair
+        // mean the channel is dead and the caller must reconnect rather than continue.
+        _ = isInitialSetup;
         try
         {
             await channel.ExchangeDeclareAsync(
@@ -43,7 +48,10 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         }
         catch (OperationInterruptedException ex)
         {
-            _logger.LogWarning("Error declaring exchange {ExchangeName}: {Message}", exchangeName, ex.Message);
+            // Pass `ex` as first arg so structured loggers capture the full exception
+            // (ReplyCode, ReplyText, stack) — `ex.Message` only renders the prefix and
+            // loses the AMQP reply-code that drives incident triage.
+            _logger.LogWarning(ex, "Error declaring exchange {ExchangeName}", exchangeName);
             throw;
         }
     }
@@ -62,6 +70,10 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         bool isInitialSetup = false,
         CancellationToken cancellationToken = default)
     {
+        // Reserved for future use — queue-declare failures during repair mean the channel
+        // is dead and the caller must reconnect rather than continue, so this method
+        // always rethrows regardless of phase.
+        _ = isInitialSetup;
         try
         {
             await channel.QueueDeclareAsync(
@@ -74,7 +86,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         }
         catch (OperationInterruptedException ex)
         {
-            _logger.LogWarning("Error declaring queue {QueueName}: {Message}", queueName, ex.Message);
+            _logger.LogWarning(ex, "Error declaring queue {QueueName}", queueName);
             throw;
         }
     }
@@ -103,7 +115,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         }
         catch (OperationInterruptedException ex)
         {
-            _logger.LogWarning("Error declaring exchange {ExchangeName}: {Message}", name, ex.Message);
+            _logger.LogWarning(ex, "Error declaring exchange {ExchangeName}", name);
             throw;
         }
 
@@ -113,7 +125,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         }
         catch (OperationInterruptedException ex)
         {
-            _logger.LogWarning("Error declaring queue {QueueName}: {Message}", name, ex.Message);
+            _logger.LogWarning(ex, "Error declaring queue {QueueName}", name);
             throw;
         }
 
@@ -125,7 +137,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
             }
             catch (OperationInterruptedException ex)
             {
-                _logger.LogWarning("Error binding queue {QueueName}: {Message}", name, ex.Message);
+                _logger.LogWarning(ex, "Error binding queue {QueueName}", name);
                 if (isInitialSetup)
                 {
                     throw;
@@ -148,6 +160,11 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         bool isInitialSetup = false,
         CancellationToken cancellationToken = default)
     {
+        // autoDelete: caller-supplied for symmetry with the main-queue declare site, but
+        // the retry DLX itself is invariant autoDelete:false (see the comment at the
+        // ExchangeDeclareAsync call below). isInitialSetup is reserved for future use.
+        _ = autoDelete;
+        _ = isInitialSetup;
         string retryQueueName = queueName + RabbitMqQueueNaming.RetryQueueSuffix;
         string retryDeadLetterExchangeName = queueName + RabbitMqQueueNaming.RetryDeadLetterExchangeSuffix;
 
@@ -160,7 +177,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         }
         catch (OperationInterruptedException ex)
         {
-            _logger.LogWarning("Error declaring dead letter exchange - {Message}", ex.Message);
+            _logger.LogWarning(ex, "Error declaring dead letter exchange {ExchangeName}", retryDeadLetterExchangeName);
             throw;
         }
 
@@ -170,7 +187,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         }
         catch (OperationInterruptedException ex)
         {
-            _logger.LogWarning("Error binding dead letter queue - {Message}", ex.Message);
+            _logger.LogWarning(ex, "Error binding dead letter queue {QueueName} to exchange {ExchangeName}", queueName, retryDeadLetterExchangeName);
             throw;
         }
 
@@ -191,7 +208,7 @@ public sealed class RabbitMqTopologyProvisioner(ILogger logger)
         }
         catch (OperationInterruptedException ex)
         {
-            _logger.LogWarning("Error declaring queue {Message}", ex.Message);
+            _logger.LogWarning(ex, "Error declaring retry queue {QueueName}", retryQueueName);
             throw;
         }
     }

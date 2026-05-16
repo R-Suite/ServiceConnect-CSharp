@@ -3,6 +3,11 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>ServiceConnect.HealthChecks</PackageId>
+    <AssemblyName>ServiceConnect.HealthChecks</AssemblyName>
+    <Title>ServiceConnect.HealthChecks</Title>
+    <Description>Health-check integrations for ServiceConnect. Three opt-in IHealthCheck classes for Microsoft.Extensions.Diagnostics.HealthChecks: bus liveness (IBus.IsConsuming), consumer connection (IConsumer.IsConnected) and producer connection (IProducer.IsHealthy). Transport-agnostic.</Description>
+    <PackageTags>ServiceConnect;HealthChecks;Liveness;Readiness;MessageBus;Messaging;Message;Bus;Service</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

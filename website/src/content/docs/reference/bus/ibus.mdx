@@ -54,10 +54,39 @@ Sends a message to a specific endpoint or to the queue resolved from the configu
 **Remarks.** If no destination is supplied via `options` and no queue mapping is registered for the message type, the call throws.
 
 <Aside type="note" title="Multi-endpoint Send">
-  When `Send` resolves to multiple endpoints — either via [`SendOptions.EndPoints`](../../messages/options/#endpoints) or because [`AddQueueMapping`](../../configuration/iqueueconfiguration/#addqueuemapping) registered several queues for the message type — each delivery is an independent on-wire message with a distinct `MessageId` and `TimeSent`. Use `CorrelationId` to correlate deliveries that originated from the same logical bus operation; it remains constant across the fan-out.
+  When `Send` resolves to multiple endpoints — through [`SendToManyAsync`](#sendtomanyasynct) or because [`AddQueueMapping`](../../configuration/iqueueconfiguration/#addqueuemapping) registered several queues for the message type — each delivery is an independent on-wire message with a distinct `MessageId` and `TimeSent`. Use `CorrelationId` to correlate deliveries that originated from the same logical bus operation; it remains constant across the fan-out.
 
   Failure semantics: see the [`IProducer.SendAsync` (auto-routed) failure-semantics block](../../extension-points/transport/iproducer/#sendasync-auto-routed) — per-endpoint failure aggregates into `AggregateException`, cancellation aggregates with prior failures (or propagates plain if no prior failures exist).
 </Aside>
+
+---
+
+### `SendToManyAsync<T>`
+
+```csharp
+Task SendToManyAsync<T>(
+    T message,
+    IReadOnlyList<string> endPoints,
+    SendOptions? options = null,
+    CancellationToken cancellationToken = default)
+    where T : Message;
+```
+
+Sends `message` to every endpoint in `endPoints` as an independent point-to-point delivery. Replaces the v7 `SendOptions.EndPoints` plural pattern — fan-out is now an explicit per-call list rather than a property on the options struct.
+
+**Parameters**
+- `message` — the command instance; must derive from `Message`.
+- `endPoints` — the destination queue names to send to. Must be non-null and non-empty; each entry is forwarded as a single-endpoint send. `SendOptions.EndPoint` (singular) on `options` is ignored — the explicit list always wins.
+- `options` — optional headers shared across every delivery in the fan-out. Per-endpoint headers cannot diverge.
+- `cancellationToken` — cancels the fan-out mid-flight. The cancellation must come from the caller's token to short-circuit; middleware-internal `OperationCanceledException` with a different token falls through to the per-endpoint failure path.
+
+**Throws**
+- `ArgumentNullException` — `message` or `endPoints` is `null`.
+- `ArgumentException` — `endPoints` is empty.
+- `AggregateException` — one or more endpoints failed. Inner exceptions are the per-endpoint failures in the order they occurred. If caller cancellation fired after some endpoints had already failed, the `OperationCanceledException` appears at slot 0 of the aggregate so callers can distinguish "cancelled with prior failures" from "cancelled clean".
+- `OperationCanceledException` — caller cancelled before any endpoint failed.
+
+**Remarks.** Each delivery emits its own `SendEventArgs` for telemetry — subscribers correlate fan-out by `CorrelationId`, which is stable across the deliveries. The per-endpoint loop short-circuits on caller cancellation but otherwise runs every endpoint to completion (success or failure) so a single broken endpoint cannot block the rest.
 
 ---
 
@@ -156,7 +185,7 @@ Publishes a request to every subscriber of the request type and invokes `onReply
 ```csharp
 Task RouteAsync<T>(
     T message,
-    IList<string> destinations,
+    IReadOnlyList<string> destinations,
     CancellationToken cancellationToken = default)
     where T : Message;
 ```

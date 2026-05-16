@@ -50,7 +50,7 @@ Gets the maximum number of messages to buffer before dispatching the batch. Over
 ### `ExecuteAsync`
 
 ```csharp
-public abstract Task ExecuteAsync(IList<T> messages, CancellationToken cancellationToken = default)
+public abstract Task ExecuteAsync(IReadOnlyList<T> messages, CancellationToken cancellationToken = default)
 ```
 
 Processes a completed batch. The framework calls this on a background flush after materialising the buffered records through the configured `IAggregatorPersistor`; throwing from `ExecuteAsync` leaves the batch in the persistor so the next flush retries it.
@@ -138,7 +138,7 @@ public sealed class QuoteAggregator : Aggregator<ShippingQuote>
 
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
 
-    public override async Task ExecuteAsync(IList<ShippingQuote> messages, CancellationToken cancellationToken = default)
+    public override async Task ExecuteAsync(IReadOnlyList<ShippingQuote> messages, CancellationToken cancellationToken = default)
     {
         if (messages.Count == 0) return;
 

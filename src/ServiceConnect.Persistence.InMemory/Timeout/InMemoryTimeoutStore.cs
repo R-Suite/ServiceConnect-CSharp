@@ -12,7 +12,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// lost on restart. Use a durable <see cref="ServiceConnect.Interfaces.ITimeoutStore"/>
 /// implementation (e.g. the MongoDB timeout store) for production.
 /// </remarks>
-public sealed class InMemoryTimeoutStore : ITimeoutStore, IDisposable
+internal sealed class InMemoryTimeoutStore : ITimeoutStore, IDisposable
 {
     private readonly TimeProvider _timeProvider;
     private readonly InMemoryPersistenceState _state;

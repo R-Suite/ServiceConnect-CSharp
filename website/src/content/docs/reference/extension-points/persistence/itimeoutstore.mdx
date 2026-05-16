@@ -1,6 +1,6 @@
 ---
 title: ITimeoutStore
-description: Persists scheduled timeouts for later dispatch. Base interface for the ServiceConnect timeout manager.
+description: Persists scheduled timeouts for later dispatch. Lease-aware single interface for both single-instance and multi-instance deployments.
 ---
 
 import { Aside } from '@astrojs/starlight/components';
@@ -9,7 +9,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 `ITimeoutStore` persists scheduled timeout messages and delivers them in batches when they become due. The timeout manager polls `GetTimeoutsBatchAsync` on a schedule driven by the recommended poll time returned in each batch, inserts new timeouts via `InsertTimeoutAsync`, and commits or rolls back each dispatch with `RemoveDispatchedTimeoutAsync` or `ReleaseDispatchedTimeoutAsync`.
 
-`ITimeoutStore` is the base interface suitable for single-instance deployments. Multi-instance deployments should use [`ILeaseAwareTimeoutStore`](/ServiceConnect-CSharp/reference/extension-points/persistence/ileaseawaretimeoutstore/) instead.
+`ITimeoutStore` covers both single-instance and multi-instance (active-active) deployments. Remove and release operations accept an optional `Guid? lockOwner` — when supplied, the operation is lease-checked and a worker that has lost its lease observes `ConcurrencyException` so the row is not double-dispatched. When `lockOwner` is null, the operation is unconditional and the lease check is skipped.
 
 See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the saga and timeout conceptual model.
 
@@ -19,9 +19,9 @@ See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-ma
 public interface ITimeoutStore
 {
     Task InsertTimeoutAsync(TimeoutData timeoutData, CancellationToken cancellationToken = default);
-    Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default);
-    Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
-    Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default);
+    Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default);
+    Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default);
 }
 ```
 
@@ -46,47 +46,56 @@ Inserts a timeout into the store.
 ### `GetTimeoutsBatchAsync`
 
 ```csharp
-Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default);
+Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default);
 ```
 
 Loads the next batch of due timeouts.
 
 **Parameters**
+- `batchSize` — when supplied, caps the number of timeouts returned in a single poll. Must be greater than zero. When null, the persistor applies its default cap (MongoDB uses `MongoDbPersistenceOptions.TimeoutBatchSize`; the in-memory store returns all due timeouts).
 - `cancellationToken` — a token that cancels the operation.
 
 **Returns** the due timeouts and the next recommended poll time. The caller uses the recommended poll time to back off until the next batch may be ready, avoiding tight polling loops when no timeouts are due.
+
+**Throws** `ArgumentOutOfRangeException` when `batchSize` is non-null and not greater than zero.
 
 ---
 
 ### `RemoveDispatchedTimeoutAsync`
 
 ```csharp
-Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
+Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default);
 ```
 
 Removes a timeout after it has been dispatched successfully.
 
 **Parameters**
 - `id` — the timeout identifier.
+- `lockOwner` — when non-null, the row is removed only if its current lock owner matches; when null, the row is removed unconditionally.
 - `cancellationToken` — a token that cancels the operation.
 
-**Remarks.** Call this after the timeout message has been delivered to the downstream consumer and acknowledged. The operation must be idempotent — the manager may retry on transient storage failures, so a second call for the same `id` should succeed silently (no-op).
+**Throws** `ConcurrencyException` when `lockOwner` is supplied and the row's current owner does not match (or the row's lease has expired and been reclaimed by another worker).
+
+**Remarks.** Call this after the timeout message has been delivered to the downstream consumer and acknowledged. Pass `lockOwner` when running multiple bus instances against a shared store, so a worker whose lease was reaped cannot accidentally delete a row that another worker has since claimed.
 
 ---
 
 ### `ReleaseDispatchedTimeoutAsync`
 
 ```csharp
-Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default);
+Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default);
 ```
 
 Releases a dispatched timeout so it may be retried later.
 
 **Parameters**
 - `id` — the timeout identifier.
+- `lockOwner` — when non-null, the row is released only if its current lock owner matches; when null, the row is released unconditionally.
 - `cancellationToken` — a token that cancels the operation.
 
-**Remarks.** Call this when dispatch fails — the consumer rejected the message, transport delivery failed, or the timeout is being requeued for retry. After a successful release the timeout is visible on the next `GetTimeoutsBatchAsync` call. Like `RemoveDispatchedTimeoutAsync`, this operation must be idempotent.
+**Throws** `ConcurrencyException` when `lockOwner` is supplied and the row's current owner does not match.
+
+**Remarks.** Call this when dispatch fails — the consumer rejected the message, transport delivery failed, or the timeout is being requeued for retry. After a successful release the timeout is visible on the next `GetTimeoutsBatchAsync` call.
 
 ---
 
@@ -94,13 +103,15 @@ Releases a dispatched timeout so it may be retried later.
 
 ### Invariants
 
-1. **Concurrent callers.** `GetTimeoutsBatchAsync` must not return the same timeout to two concurrent callers without locking. The built-in `InMemoryTimeoutStore` uses a `ReaderWriterLockSlim` and a per-record lease; a SQL implementation should use `FOR UPDATE SKIP LOCKED` (Postgres) or an equivalent. In clustered setups where multiple bus instances share the same persistent store, implement [`ILeaseAwareTimeoutStore`](/ServiceConnect-CSharp/reference/extension-points/persistence/ileaseawaretimeoutstore/) instead so that lease ownership is verified on removal and release.
+1. **Concurrent callers.** `GetTimeoutsBatchAsync` must not return the same timeout to two concurrent callers without locking. The built-in `InMemoryTimeoutStore` uses a `ReaderWriterLockSlim` and a per-record lease; a SQL implementation should use `FOR UPDATE SKIP LOCKED` (Postgres) or an equivalent. In clustered setups where multiple bus instances share the same persistent store, honour the optional `lockOwner` on remove/release so lease ownership is verified before mutating the row.
 
-2. **Idempotency.** `RemoveDispatchedTimeoutAsync` and `ReleaseDispatchedTimeoutAsync` must be idempotent. The manager may retry either call on transient storage failures. A second call for an already-removed or already-released record should be a silent no-op.
+2. **Lease ownership.** When the caller supplies a `lockOwner`, the persistor must throw `ConcurrencyException` if the stored owner has changed (or the lease has expired and been reaped). This is what closes the duplicate-dispatch race in active-active deployments.
 
-### Timeout lease semantics
+3. **Unconditional path.** When `lockOwner` is null, the operation is unconditional — a second call on an already-removed row is a silent no-op, matching idempotent retry semantics on transient storage failures.
 
-`RemoveDispatchedTimeoutAsync` and `ReleaseDispatchedTimeoutAsync` accept an optional lock owner when called on an [`ILeaseAwareTimeoutStore`](./ileaseawaretimeoutstore/). When supplied, the operation is lease-checked: a worker that no longer holds a valid lease observes `ConcurrencyException` so the row is not double-dispatched by a second worker that reclaimed it.
+### Lease semantics
+
+Remove and release operations accept an optional lock owner. When supplied, the operation is lease-checked: a worker that no longer holds a valid lease observes `ConcurrencyException` so the row is not double-dispatched by a second worker that reclaimed it.
 
 Both the Mongo and InMemory persistors honour identical semantics. The `LockLeaseDuration` setting — `MongoDbPersistenceOptions.TimeoutLockLeaseDuration` or `InMemoryPersistenceOptions.LockLeaseDuration` — governs how long a worker may hold a row before the reaper reclaims it. Both default to five minutes.
 
@@ -108,7 +119,7 @@ Operators running the Mongo persistor should call `ReapStaleLeasesAsync` on a ti
 
 ### Skeletal in-memory implementation
 
-The `InMemoryTimeoutStore` shipped with the library (in `ServiceConnect.Persistence.InMemory`) is the reference single-instance implementation. It stores timeouts in a sorted set, uses a write lock for all mutations, and reads its lease duration from `InMemoryPersistenceOptions` so that a crashed dispatcher does not hold records indefinitely. The constructor accepts an options instance:
+The `InMemoryTimeoutStore` shipped with the library (in `ServiceConnect.Persistence.InMemory`) is the reference single-instance implementation. It stores timeouts in a sorted set, uses a write lock for all mutations, and reads its lease duration from `InMemoryPersistenceOptions` so that a crashed dispatcher does not hold records indefinitely. A minimal third-party implementation that does NOT need lease-aware semantics (single-instance only) can ignore the `lockOwner` parameter:
 
 ```csharp
 public sealed class InMemoryTimeoutStore : ITimeoutStore
@@ -139,16 +150,21 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         return Task.CompletedTask;
     }
 
-    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(CancellationToken cancellationToken = default)
+    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
     {
+        if (batchSize is not null && batchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(batchSize), "batchSize must be greater than zero.");
+
         var batch = new TimeoutsBatch { DueTimeouts = [] };
         var utcNow = DateTimeOffset.UtcNow;
+        var cap = batchSize ?? int.MaxValue;
 
         _lock.EnterWriteLock();
         try
         {
             foreach (var entry in _index)
             {
+                if (batch.DueTimeouts.Count >= cap) break;
                 if (entry.Time <= utcNow && (!entry.Data.Locked || entry.Data.LockExpiresAt <= utcNow))
                 {
                     entry.Data.Locked = true;
@@ -166,7 +182,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         return Task.FromResult(batch);
     }
 
-    public Task RemoveDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
     {
         _lock.EnterWriteLock();
         try
@@ -181,7 +197,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
         return Task.CompletedTask;
     }
 
-    public Task ReleaseDispatchedTimeoutAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
     {
         _lock.EnterWriteLock();
         try
@@ -198,13 +214,7 @@ public sealed class InMemoryTimeoutStore : ITimeoutStore
 }
 ```
 
-## Relationship to ILeaseAwareTimeoutStore
-
-`ITimeoutStore` is the right choice for single-instance deployments: only one timeout manager polls the store at a time, so there is no risk of two callers claiming and dispatching the same timeout record simultaneously.
-
-In multi-instance (active-active) deployments where several bus instances share the same persistent store, use [`ILeaseAwareTimeoutStore`](./ileaseawaretimeoutstore/) instead. The lease-aware variant requires callers to prove they still hold the lock on a record before the store will remove or release it. This prevents duplicate dispatch when the instance that originally claimed a timeout crashes before calling `RemoveDispatchedTimeoutAsync` and another instance subsequently claims the same record.
-
-Implementations typically satisfy both interfaces on one class and are registered twice in the DI container — once for each interface — so the dispatcher can use whichever overloads are appropriate.
+For multi-instance deployments, honour the `lockOwner` on remove/release: throw `ConcurrencyException` if the stored owner has changed since the worker claimed the row.
 
 ## Usage
 
@@ -221,17 +231,6 @@ services.AddServiceConnect(builder =>
 });
 ```
 
-For multi-instance deployments, register a type that implements both interfaces and alias it to each:
-
-```csharp
-builder.AddRegistration(services =>
-{
-    services.AddSingleton<YourLeaseAwareStore>();
-    services.AddSingleton<ITimeoutStore>(sp => sp.GetRequiredService<YourLeaseAwareStore>());
-    services.AddSingleton<ILeaseAwareTimeoutStore>(sp => sp.GetRequiredService<YourLeaseAwareStore>());
-});
-```
-
 ## MongoDB timeout-store contract
 
 ### WriteConcern.Unacknowledged rejected
@@ -242,7 +241,6 @@ See [Persistence Configuration → MongoDB provider contract](/ServiceConnect-CS
 
 ## See also
 
-- [`ILeaseAwareTimeoutStore`](./ileaseawaretimeoutstore/) — lease-aware variant for multi-instance deployments
 - [`IAggregatorPersistor`](./iaggregatorpersistor/) — related reference
 - [`IProcessManagerFinder`](./iprocessmanagerfinder/) — related reference
 - [Process Manager](../../../learn/messaging-patterns/process-manager/) — concept

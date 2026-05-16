@@ -20,7 +20,7 @@ public class AggregatorTests(MessagingFixture fixture)
     public async Task Aggregator_BatchComplete_ExecutesWithAllMessages()
     {
         // Arrange
-        var executed = new TaskCompletionSource<IList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new TaskCompletionSource<IReadOnlyList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("agg-batch");
 
         var handlerRefs = new List<HandlerReference>
@@ -34,7 +34,7 @@ public class AggregatorTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton(executed);
         services.AddTransient<Aggregator<TestMessage>, BatchAggregator>();
 
@@ -93,7 +93,7 @@ public class AggregatorTests(MessagingFixture fixture)
     public async Task Aggregator_Timeout_FlushesPartialBatch()
     {
         // Arrange
-        var executed = new TaskCompletionSource<IList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new TaskCompletionSource<IReadOnlyList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("agg-timeout");
 
         var handlerRefs = new List<HandlerReference>
@@ -107,7 +107,7 @@ public class AggregatorTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton(executed);
         services.AddTransient<Aggregator<TestMessage>, TimeoutAggregator>();
 
@@ -162,26 +162,26 @@ public class AggregatorTests(MessagingFixture fixture)
     }
 }
 
-file class BatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) : Aggregator<TestMessage>
+file class BatchAggregator(TaskCompletionSource<IReadOnlyList<TestMessage>> tcs) : Aggregator<TestMessage>
 {
-    private readonly TaskCompletionSource<IList<TestMessage>> _tcs = tcs;
+    private readonly TaskCompletionSource<IReadOnlyList<TestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
-    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(messages);
         return Task.CompletedTask;
     }
 }
 
-file class TimeoutAggregator(TaskCompletionSource<IList<TestMessage>> tcs) : Aggregator<TestMessage>
+file class TimeoutAggregator(TaskCompletionSource<IReadOnlyList<TestMessage>> tcs) : Aggregator<TestMessage>
 {
-    private readonly TaskCompletionSource<IList<TestMessage>> _tcs = tcs;
+    private readonly TaskCompletionSource<IReadOnlyList<TestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 10;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(2);
-    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(messages);
         return Task.CompletedTask;

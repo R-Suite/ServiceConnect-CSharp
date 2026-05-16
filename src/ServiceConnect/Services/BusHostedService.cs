@@ -8,7 +8,11 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Hosted-service adapter that starts and stops bus consumption with the application host.
 /// </summary>
-public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger<BusHostedService> logger) : IHostedService
+internal sealed class BusHostedService(
+    IBus bus,
+    IBusConfiguration config,
+    ILogger<BusHostedService> logger,
+    IReadOnlyList<HandlerScanWarning>? scanWarnings = null) : IHostedService
 {
     /// <summary>
     /// Starts the bus automatically when <see cref="IBusConfiguration.AutoStartConsuming"/> is enabled.
@@ -16,6 +20,21 @@ public sealed class BusHostedService(IBus bus, IBusConfiguration config, ILogger
     /// <param name="cancellationToken">A token used to cancel host startup.</param>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Replay handler-scan warnings captured before the logger was available.
+        // A broken handler assembly that survives the scan with no warning shows up
+        // only when a message arrives with no registered handler — surfacing the
+        // partial-scan warning here turns silent under-discovery into a startup log.
+        if (scanWarnings is { Count: > 0 })
+        {
+            foreach (var warning in scanWarnings)
+            {
+                logger.LogWarning(
+                    warning.Exception,
+                    "Assembly {AssemblyName} threw {ExceptionType} during handler scan: {Detail}",
+                    warning.AssemblyName, warning.ExceptionType, warning.Detail);
+            }
+        }
+
         if (!config.ValidateReplyDestinations)
         {
             logger.LogWarning(

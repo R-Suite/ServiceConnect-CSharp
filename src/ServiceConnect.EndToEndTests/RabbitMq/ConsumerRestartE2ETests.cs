@@ -41,7 +41,7 @@ public class ConsumerRestartE2ETests(MessagingFixture fixture)
         {
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+            services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
             services.AddSingleton(new PhaseHolder(() => phase));
             // Capture TCS references via factory lambda to avoid DI type-ambiguity
             // (two singletons of the same type cannot be injected into distinct constructor
@@ -73,7 +73,7 @@ public class ConsumerRestartE2ETests(MessagingFixture fixture)
 
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>([]);
+        producerServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>

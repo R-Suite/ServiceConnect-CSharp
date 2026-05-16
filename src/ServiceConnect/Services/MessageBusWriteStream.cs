@@ -5,7 +5,7 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Splits a large payload into stream packets and sends them through the configured producer.
 /// </summary>
-public sealed class MessageBusWriteStream : IMessageBusWriteStream
+internal sealed class MessageBusWriteStream : IMessageBusWriteStream
 {
     private readonly IProducer _producer;
     private readonly string _endpoint;
@@ -119,6 +119,17 @@ public sealed class MessageBusWriteStream : IMessageBusWriteStream
                 // ROM<byte> threads directly to SendBytesAsync — no intermediate copy.
                 // The buffer is read once; after the await returns the caller is free to reuse it.
                 await _producer.SendBytesAsync(_endpoint, _messageType, buffer, headers, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // User-driven cancellation must NOT latch _faulted. The packet number is
+                // stranded, but the caller will not call CloseAsync if they cancelled the
+                // write — they discard the stream. If they DO call CloseAsync afterwards
+                // (e.g. cleanup in a finally), latching _faulted would force CloseAsync to
+                // skip the close packet, leaving the receiver's MessageBusReadStream
+                // perpetually incomplete until the 5-minute eviction sweep. Re-throw so the
+                // caller learns the write was cancelled.
+                throw;
             }
             catch
             {

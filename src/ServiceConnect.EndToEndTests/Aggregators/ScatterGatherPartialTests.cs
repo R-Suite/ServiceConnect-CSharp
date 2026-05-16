@@ -34,7 +34,7 @@ public class ScatterGatherPartialTests(MessagingFixture fixture)
 
         var responderServices = new ServiceCollection();
         responderServices.AddLogging();
-        responderServices.AddSingleton<IList<HandlerReference>>(responderHandlerReferences);
+        responderServices.AddSingleton<IReadOnlyList<HandlerReference>>(responderHandlerReferences);
         responderServices.AddTransient<IMessageHandler<TestRequest>>(_ => new PartialScatterReplyHandler("Resp1"));
 
         responderServices.AddServiceConnect(builder =>
@@ -68,7 +68,7 @@ public class ScatterGatherPartialTests(MessagingFixture fixture)
 
         var silentServices = new ServiceCollection();
         silentServices.AddLogging();
-        silentServices.AddSingleton<IList<HandlerReference>>(silentHandlerReferences);
+        silentServices.AddSingleton<IReadOnlyList<HandlerReference>>(silentHandlerReferences);
         silentServices.AddTransient<IMessageHandler<TestRequest>>(_ => new CallbackHandler<TestRequest>(_ => { }));
 
         silentServices.AddServiceConnect(builder =>
@@ -96,7 +96,7 @@ public class ScatterGatherPartialTests(MessagingFixture fixture)
 
         var requesterServices = new ServiceCollection();
         requesterServices.AddLogging();
-        requesterServices.AddSingleton<IList<HandlerReference>>(requesterHandlerReferences);
+        requesterServices.AddSingleton<IReadOnlyList<HandlerReference>>(requesterHandlerReferences);
 
         requesterServices.AddServiceConnect(builder =>
         {

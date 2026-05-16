@@ -43,7 +43,7 @@ public class ProcessManagerTimeoutTests(MessagingFixture fixture)
             .ConfigureServices(services =>
             {
                 services.AddLogging();
-                services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+                services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
                 services.AddSingleton(timeoutHandled);
                 services.AddTransient<IProcessHandler<TimeoutProcessData, TestMessage>, TimeoutProcessHandler>();
                 services.AddTransient<IProcessHandler<TimeoutProcessData, TimeoutMessage>, TimeoutProcessHandler>();

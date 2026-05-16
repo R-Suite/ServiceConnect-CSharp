@@ -15,7 +15,7 @@ namespace ServiceConnect.DependencyInjection;
 /// </summary>
 public static partial class ServiceCollectionExtensions
 {
-    private static IList<HandlerReference> GetHandlerReferences(ServiceConnectBuilder builder)
+    private static IReadOnlyList<HandlerReference> GetHandlerReferences(ServiceConnectBuilder builder, out IReadOnlyList<HandlerScanWarning> warnings)
     {
         // Explicit ScanAssemblies(...) list takes precedence — it represents
         // "scan exactly these assemblies" and must not be overridden by the
@@ -24,18 +24,19 @@ public static partial class ServiceCollectionExtensions
         // are still scanned; only the fallback AppDomain scan is suppressed.
         if (builder.ScanAssembliesList.Count > 0)
         {
-            return HandlerScanner.ScanForHandlers([.. builder.ScanAssembliesList]);
+            return HandlerScanner.ScanForHandlers([.. builder.ScanAssembliesList], out warnings);
         }
 
         if (!builder.BusConfig.ScanForMessageHandlers)
         {
+            warnings = [];
             return [];
         }
 
-        return HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies());
+        return HandlerScanner.ScanForHandlers(AppDomain.CurrentDomain.GetAssemblies(), out warnings);
     }
 
-    private static void RegisterHandlers(IServiceCollection services, IList<HandlerReference> handlerReferences)
+    private static void RegisterHandlers(IServiceCollection services, IReadOnlyList<HandlerReference> handlerReferences)
     {
         RegisterHandlerRegistries(services);
 
@@ -50,12 +51,12 @@ public static partial class ServiceCollectionExtensions
             RegisterHandlerType(services, handlerRef, preExistingServiceTypes);
         }
 
-        services.TryAddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.TryAddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 
         services.TryAddSingleton<IMessageTypeRegistry>(sp =>
         {
             var registry = new MessageTypeRegistry();
-            foreach (var handlerRef in sp.GetRequiredService<IList<HandlerReference>>())
+            foreach (var handlerRef in sp.GetRequiredService<IReadOnlyList<HandlerReference>>())
             {
                 registry.Register(handlerRef.MessageType);
             }
@@ -67,7 +68,7 @@ public static partial class ServiceCollectionExtensions
     private static void RegisterHandlerRegistries(IServiceCollection services)
     {
         services.TryAddSingleton<Services.Processors.ProcessManagerHandlerRegistry>(sp => new Services.Processors.ProcessManagerHandlerRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.ProcessManagerHandlerRegistry>>()));
         services.AddSingleton<IHandlerRegistry>(sp =>
             sp.GetRequiredService<Services.Processors.ProcessManagerHandlerRegistry>());
@@ -80,14 +81,14 @@ public static partial class ServiceCollectionExtensions
 
         // Message-handler descriptor registry (eagerly built, singleton)
         services.TryAddSingleton<Services.Processors.MessageHandlerRegistry>(sp => new Services.Processors.MessageHandlerRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.MessageHandlerRegistry>>()));
         services.AddSingleton<IHandlerRegistry>(sp =>
             sp.GetRequiredService<Services.Processors.MessageHandlerRegistry>());
 
         // Stream-handler descriptor registry (eagerly built, singleton)
         services.TryAddSingleton<Services.Processors.StreamHandlerRegistry>(sp => new Services.Processors.StreamHandlerRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.StreamHandlerRegistry>>()));
         services.AddSingleton<IHandlerRegistry>(sp =>
             sp.GetRequiredService<Services.Processors.StreamHandlerRegistry>());
@@ -97,7 +98,7 @@ public static partial class ServiceCollectionExtensions
         // held captive by the root provider for the host's lifetime — the temporary scope is
         // disposed inside the registry constructor.
         services.TryAddSingleton<Services.Processors.AggregatorRegistry>(sp => new Services.Processors.AggregatorRegistry(
-            sp.GetRequiredService<IList<HandlerReference>>(),
+            sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
             sp.GetRequiredService<IServiceScopeFactory>(),
             sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Services.Processors.AggregatorRegistry>>()));
         services.AddSingleton<IHandlerRegistry>(sp =>

@@ -61,9 +61,9 @@ public class MongoDbTimeoutStoreSortTieBreakerTests
 
         Assert.NotNull(capturedOptions);
         Assert.NotNull(capturedOptions!.Sort);
-        var sortJson = capturedOptions.Sort.Render(
+        var sortJson = capturedOptions.Sort.Render(new RenderArgs<TimeoutData>(
             BsonSerializer.LookupSerializer<TimeoutData>(),
-            BsonSerializer.SerializerRegistry).ToJson();
+            BsonSerializer.SerializerRegistry)).ToJson();
         Assert.Contains("\"Time\" : 1", sortJson);
         Assert.Contains("\"_id\" : 1", sortJson);
     }

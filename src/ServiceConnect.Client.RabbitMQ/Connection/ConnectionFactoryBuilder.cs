@@ -45,7 +45,7 @@ internal static class ConnectionFactoryBuilder
             Port = port,
             AutomaticRecoveryEnabled = true,
             TopologyRecoveryEnabled = true,
-            RequestedHeartbeat = ResolveHeartbeat(transport),
+            RequestedHeartbeat = ResolveHeartbeat(transport, logger ?? NullLogger.Instance),
         };
 
         // Apply NetworkRecoveryInterval only when explicitly configured. The unset path leaves
@@ -107,14 +107,23 @@ internal static class ConnectionFactoryBuilder
         }
     }
 
-    private static TimeSpan ResolveHeartbeat(ITransportConfiguration transport)
+    private static TimeSpan ResolveHeartbeat(ITransportConfiguration transport, ILogger logger)
     {
         var settings = transport.ClientSettings;
 
-        // Explicit opt-out disables heartbeats (TimeSpan.Zero == "never send one").
+        // Explicit opt-out disables heartbeats (TimeSpan.Zero == "never send one"). Without
+        // heartbeats, dead-peer detection falls to TCP keepalive (Linux default ~2 hours of
+        // idle), so the broker holds channel state for stale connections for hours and the
+        // client never observes ConnectionShutdownAsync. Surface the consequence loudly so
+        // the operator can see they've opted into it; the xmldoc on RabbitMQSettingKeys
+        // .HeartbeatEnabled documents the same caveat for static analysis.
         if (settings.TryGetValue(RabbitMQSettingKeys.HeartbeatEnabled, out var enabledRaw)
             && enabledRaw is bool enabled && !enabled)
         {
+            logger.LogWarning(
+                "AMQP heartbeats are explicitly disabled ({Setting}=false). Dead-peer detection now relies solely on TCP keepalive (Linux default ~2h idle); a crashed or firewall-isolated client will not be observed for hours, and stale connections hold broker-side channel state. Production deployments should leave heartbeats enabled and tune {HeartbeatTime} instead.",
+                RabbitMQSettingKeys.HeartbeatEnabled,
+                RabbitMQSettingKeys.HeartbeatTime);
             return TimeSpan.Zero;
         }
 

@@ -15,9 +15,9 @@ public abstract class Aggregator<T> where T : Message
     /// </returns>
     public virtual TimeSpan Timeout()
     {
-        // Timeout.InfiniteTimeSpan (-1ms) is the BCL convention for "no timeout".
-        // Pre-v8 this returned default (= TimeSpan.Zero), which the dispatcher could
-        // mistake for "fire immediately and once" rather than "disabled".
+        // Timeout.InfiniteTimeSpan (-1ms) is the BCL convention for "no timeout". Returning
+        // TimeSpan.Zero would let the dispatcher mistake "fire immediately and once" for
+        // "disabled" — the InfiniteTimeSpan sentinel is unambiguous.
         return System.Threading.Timeout.InfiniteTimeSpan;
     }
 
@@ -35,8 +35,9 @@ public abstract class Aggregator<T> where T : Message
     /// <summary>
     /// Processes a completed batch of aggregated messages.
     /// </summary>
-    /// <param name="messages">The messages collected for the batch.</param>
+    /// <param name="messages">The messages collected for the batch. Read-only — handlers must not
+    /// mutate the snapshot they were handed; the persistor owns the underlying buffer's lifetime.</param>
     /// <param name="cancellationToken">Token to observe for cancellation.</param>
     /// <returns>A task that completes when the batch has been processed.</returns>
-    public abstract Task ExecuteAsync(IList<T> messages, CancellationToken cancellationToken = default);
+    public abstract Task ExecuteAsync(IReadOnlyList<T> messages, CancellationToken cancellationToken = default);
 }

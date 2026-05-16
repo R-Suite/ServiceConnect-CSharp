@@ -45,7 +45,16 @@ public static class RabbitMQSettingKeys
     /// </summary>
     public const string RetrySeconds = "RetrySeconds";
 
-    /// <summary>Whether AMQP heartbeats are enabled for the connection.</summary>
+    /// <summary>
+    /// Whether AMQP heartbeats are enabled for the connection. Defaults to <see langword="true"/>.
+    /// <para>
+    /// <b>Warning — disabling AMQP heartbeats removes broker-side dead-peer detection.</b> A crashed
+    /// or firewall-isolated client is then only detected via TCP keepalive (Linux default ~2 hours).
+    /// The broker holds channel state for stale connections for hours; the client never observes
+    /// <c>ConnectionShutdownAsync</c> because nothing probes the link. Production deployments should
+    /// leave this <see langword="true"/> and tune <see cref="HeartbeatTime"/> instead.
+    /// </para>
+    /// </summary>
     public const string HeartbeatEnabled = "HeartbeatEnabled";
     /// <summary>Heartbeat interval, in seconds.</summary>
     public const string HeartbeatTime = "HeartbeatTime";

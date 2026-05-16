@@ -8,7 +8,7 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Default <see cref="IConsumeContext"/> implementation exposed to message handlers while a message is being processed.
 /// </summary>
-public sealed class ConsumeContext : IConsumeContext
+internal sealed class ConsumeContext : IConsumeContext
 {
     private readonly IQueueConfiguration _queueConfig;
     private readonly IBusConfiguration _busConfig;

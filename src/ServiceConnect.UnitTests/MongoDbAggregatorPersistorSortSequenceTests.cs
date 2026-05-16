@@ -32,9 +32,9 @@ public class MongoDbAggregatorPersistorSortSequenceTests
         Assert.NotNull(capturedOptions!.Sort);
 
         var rendered = capturedOptions.Sort!
-            .Render(
+            .Render(new RenderArgs<MongoDbAggregatorPersistor.AggregatorDocument>(
                 BsonSerializer.LookupSerializer<MongoDbAggregatorPersistor.AggregatorDocument>(),
-                BsonSerializer.SerializerRegistry)
+                BsonSerializer.SerializerRegistry))
             .ToJson();
 
         Assert.Contains("\"InsertedAtTicks\" : 1", rendered);
@@ -65,9 +65,9 @@ public class MongoDbAggregatorPersistorSortSequenceTests
 
     private static long ExtractInsertSequence(UpdateDefinition<MongoDbAggregatorPersistor.AggregatorDocument> update)
     {
-        var rendered = update.Render(
+        var rendered = update.Render(new RenderArgs<MongoDbAggregatorPersistor.AggregatorDocument>(
             BsonSerializer.LookupSerializer<MongoDbAggregatorPersistor.AggregatorDocument>(),
-            BsonSerializer.SerializerRegistry);
+            BsonSerializer.SerializerRegistry));
         var setOnInsert = rendered.AsBsonDocument["$setOnInsert"].AsBsonDocument;
         return setOnInsert["InsertSequence"].ToInt64();
     }

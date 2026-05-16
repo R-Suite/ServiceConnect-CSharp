@@ -42,7 +42,7 @@ public sealed class RabbitMqDispatchPipelineTests
             NullLogger.Instance);
 
         var args = MakeArgs(deliveryTag: 11);
-        await pipeline.DispatchAndAckAsync(processor, consumerChannel.Object, publishChannel.Object, args, CancellationToken.None);
+        await pipeline.DispatchAndAckAsync(processor, consumerChannel.Object, publishChannel.Object, args, new Dictionary<string, object>(StringComparer.Ordinal), CancellationToken.None);
 
         consumerChannel.Verify(c => c.BasicAckAsync(11UL, false, It.IsAny<CancellationToken>()), Times.Once);
         consumerChannel.Verify(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -80,7 +80,7 @@ public sealed class RabbitMqDispatchPipelineTests
             NullLogger.Instance);
 
         var args = MakeArgs(deliveryTag: 12);
-        await pipeline.DispatchAndAckAsync(processor, consumerChannel.Object, publishChannel.Object, args, CancellationToken.None);
+        await pipeline.DispatchAndAckAsync(processor, consumerChannel.Object, publishChannel.Object, args, new Dictionary<string, object>(StringComparer.Ordinal), CancellationToken.None);
 
         consumerChannel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         consumerChannel.Verify(c => c.BasicNackAsync(12UL, false, true, It.IsAny<CancellationToken>()), Times.Once);
@@ -110,7 +110,7 @@ public sealed class RabbitMqDispatchPipelineTests
             NullLogger.Instance);
 
         var args = MakeArgs(deliveryTag: 13);
-        await pipeline.DispatchAndAckAsync(processor, consumerChannel.Object, publishChannel.Object, args, CancellationToken.None);
+        await pipeline.DispatchAndAckAsync(processor, consumerChannel.Object, publishChannel.Object, args, new Dictionary<string, object>(StringComparer.Ordinal), CancellationToken.None);
 
         consumerChannel.Verify(c => c.BasicNackAsync(13UL, false, true, It.IsAny<CancellationToken>()), Times.Once);
 

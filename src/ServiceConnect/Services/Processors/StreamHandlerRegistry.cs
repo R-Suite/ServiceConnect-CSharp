@@ -12,7 +12,7 @@ internal sealed class StreamHandlerRegistry : IHandlerRegistry
     private readonly FrozenDictionary<Type, StreamHandlerDescriptor> _descriptors;
 
     internal StreamHandlerRegistry(
-        IList<HandlerReference> handlerReferences,
+        IReadOnlyList<HandlerReference> handlerReferences,
         ILogger<StreamHandlerRegistry> logger)
     {
         ArgumentNullException.ThrowIfNull(handlerReferences);

@@ -26,15 +26,11 @@ public class ConfigurationCleanupTests
     }
 
     [Fact]
-    public void SendEventArgs_EndPointAndEndPoints_AreIndependent()
+    public void SendEventArgs_EndPoint_IsInitOnly()
     {
-        var args = new SendEventArgs
-        {
-            EndPoint = "queue-a",
-            EndPoints = ["queue-b", "queue-c"]
-        };
-
+        // Per-delivery EndPoint is the only public surface — fan-out fires one
+        // SendEventArgs per destination. Correlate fan-out via CorrelationId.
+        var args = new SendEventArgs { EndPoint = "queue-a" };
         Assert.Equal("queue-a", args.EndPoint);
-        Assert.Equal(["queue-b", "queue-c"], args.EndPoints);
     }
 }

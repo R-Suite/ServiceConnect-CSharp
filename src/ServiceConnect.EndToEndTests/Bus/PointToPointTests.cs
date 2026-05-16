@@ -44,6 +44,24 @@ public class PointToPointTests(MessagingFixture fixture)
     public async Task SendAsync_MessageIsPublishedToRabbitMQ()
     {
         var queueName = _fixture.GetUniqueQueueName("send");
+
+        // Producer publishes with mandatory:true so a Send to an undeclared queue surfaces
+        // NO_ROUTE rather than silently dropping at the broker. The producer-only setup
+        // below does not start a consumer (no UseRabbitMQ binding), so declare the
+        // destination queue directly via RabbitMQ.Client before the send.
+        var preDeclareFactory = new global::RabbitMQ.Client.ConnectionFactory
+        {
+            HostName = _fixture.RabbitMqHostname,
+            Port = _fixture.RabbitMqPort,
+            UserName = _fixture.RabbitMqUsername,
+            Password = _fixture.RabbitMqPassword,
+        };
+        await using (var preConn = await preDeclareFactory.CreateConnectionAsync())
+        await using (var preCh = await preConn.CreateChannelAsync())
+        {
+            await preCh.QueueDeclareAsync(queueName, durable: false, exclusive: false, autoDelete: true);
+        }
+
         var bus = CreateBus(queueName);
         try
         {

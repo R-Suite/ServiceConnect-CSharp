@@ -46,9 +46,7 @@ using ServiceConnect.Interfaces;
 
 public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 {
-    public IConsumeContext Context { get; set; } = null!;
-
-    public Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
+    public Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         Console.WriteLine($"Received order {message.OrderId}");
         return Task.CompletedTask;
@@ -72,6 +70,11 @@ services.AddServiceConnect(builder =>
         transport.Host = "localhost";
         transport.Username = "guest";
         transport.Password = "guest";
+        // Local-dev plaintext: TransportConfiguration.SslEnabled defaults to true (AMQPS
+        // on 5671). The standard rabbitmq:3-management container exposes plaintext 5672,
+        // so disable SSL explicitly for the localhost path. Production deployments should
+        // leave SslEnabled at its true default and configure CertPath / ServerName.
+        transport.SslEnabled = false;
     });
 
     builder.ConfigureQueues(queues => queues.QueueName = "order-service");

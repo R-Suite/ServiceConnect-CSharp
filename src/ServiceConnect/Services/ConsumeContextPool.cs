@@ -157,12 +157,13 @@ internal sealed class ConsumeContextPool
             IReplyStatusRequestReplyManager? replyStatusRequestReplyManager,
             CancellationToken cancellationToken)
         {
-            var token = Interlocked.Increment(ref _rentToken);
-            // The rent-token bump above is the single happens-before edge between the
-            // previous Release and this Initialize; flipping _pooled back to 0 here
-            // re-arms the idempotency guard so a future Release can transition
-            // active->pooled exactly once.
-            Volatile.Write(ref _pooled, 0);
+            // Write all instance fields BEFORE bumping the rent token. The Interlocked.Increment
+            // below acts as the publish-fence: a third party who captures a stale handle and
+            // does EnsureActive(prevToken) → field-read could otherwise observe the new token
+            // (via Volatile.Read) but a still-stale BusUnsafe / CancellationTokenUnsafe under
+            // weak memory ordering (ARM64). Writing fields first ensures the field-state
+            // publish happens-before the token publish, so any reader who sees the new token
+            // is guaranteed to see the fresh fields.
             BusUnsafe = bus;
             _queueConfig = queueConfig;
             _busConfig = busConfig;
@@ -172,7 +173,14 @@ internal sealed class ConsumeContextPool
             _messageId = null;
             _messageIdCached = false;
             _correlationId = null;
-            return token;
+            // Re-arm the idempotency guard so a future Release can transition active->pooled
+            // exactly once. Sequenced before the token bump so an EnsureActive reader who
+            // sees the new token never observes _pooled=1 (which would indicate the context
+            // is already back in the pool).
+            Volatile.Write(ref _pooled, 0);
+            // Token bump publishes all preceding writes via the Interlocked full fence; the
+            // matching acquire is Volatile.Read in EnsureActive.
+            return Interlocked.Increment(ref _rentToken);
         }
 
         internal void EnsureActive(long expectedToken)
@@ -226,8 +234,27 @@ internal sealed class ConsumeContextPool
         public void Release()
         {
             // Invalidate the outstanding RentalHandle view held by consumers before
-            // handing the context back to the pool.
+            // handing the context back to the pool. The Interlocked.Increment is the
+            // publish-fence: any reader that observes the new _rentToken via Volatile.Read
+            // happens-after our field clears below — so a stale RentalHandle calling
+            // EnsureActive(oldToken) sees the mismatch and throws; a never-rented field
+            // read via the IConsumeContext explicit-interface path already throws
+            // NotSupportedException.
             Interlocked.Increment(ref _rentToken);
+
+            // Null mutable references so the previous message's headers / bus / inflight CT
+            // are GC-reclaimable while the context sits in the pool. Without this clear, a
+            // pooled instance keeps the broker-supplied headers dict and bus reference alive
+            // until next Rent, which on a quiet bus after a burst pins ≤ MaxPoolSize×N
+            // unnecessarily. Safe because the rent-token bump above invalidated every
+            // outstanding RentalHandle.
+            _headers = EmptyHeaders;
+            BusUnsafe = null!;
+            CancellationTokenUnsafe = default;
+            _replyStatusRequestReplyManager = null;
+            _messageId = null;
+            _messageIdCached = false;
+            _correlationId = null;
 
             // Idempotency guard: only the first Release call after Initialize transitions
             // _pooled from 0 to 1; a defensive double-Release CAS-fails the second call

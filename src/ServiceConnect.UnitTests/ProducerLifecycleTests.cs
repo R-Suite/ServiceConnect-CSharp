@@ -59,12 +59,13 @@ public class ProducerLifecycleTests
     }
 
     [Fact]
-    public void DisconnectAsync_IsMarkedObsoleteWithDisposeAsyncGuidance()
+    public void Producer_DoesNotExposeDisconnectAsync()
     {
-        var method = typeof(Producer).GetMethod(nameof(Producer.DisconnectAsync))!;
-        var attribute = method.GetCustomAttribute<ObsoleteAttribute>();
-
-        Assert.NotNull(attribute);
-        Assert.Contains(nameof(Producer.DisposeAsync), attribute!.Message);
+        // The legacy DisconnectAsync was removed in v7. Lifecycle is now exclusively
+        // owned by IAsyncDisposable.DisposeAsync — pinning this here so a future refactor
+        // doesn't accidentally re-introduce the dual-API hazard (where some callers used
+        // DisconnectAsync without DisposeAsync and leaked the underlying connection).
+        var method = typeof(Producer).GetMethod("DisconnectAsync");
+        Assert.Null(method);
     }
 }

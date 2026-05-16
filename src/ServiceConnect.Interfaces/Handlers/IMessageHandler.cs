@@ -16,11 +16,9 @@ public interface IMessageHandler<in TMessage> where TMessage : Message
     /// is sourced from the transport consume context and signals cooperative shutdown.
     /// </summary>
     /// <remarks>
-    /// v8: <c>Context</c> moved from a property to this parameter. Pre-v8 the framework
-    /// assigned <c>handler.Context</c> before calling <c>HandleAsync(message, ct)</c>; that
-    /// shape was unsafe for singleton-registered handlers (concurrent dispatches both
-    /// wrote the property). Migration: append <c>IConsumeContext context</c> to the method
-    /// signature and replace <c>this.Context</c> reads with <c>context</c>.
+    /// The consume context is passed as a method parameter rather than a property so that a
+    /// singleton-registered handler dispatched concurrently for two messages does not have
+    /// one invocation's context overwritten by the other.
     /// </remarks>
     Task HandleAsync(TMessage message, IConsumeContext context, CancellationToken cancellationToken = default);
 }

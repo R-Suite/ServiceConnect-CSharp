@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using ServiceConnect.DependencyInjection;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Services;
 using Xunit;
 
 namespace ServiceConnect.UnitTests;

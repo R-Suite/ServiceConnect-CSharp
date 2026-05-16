@@ -11,7 +11,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// <summary>
 /// RabbitMQ-backed implementation of <see cref="IProducer"/> for publishing and sending messages.
 /// </summary>
-public sealed class Producer : IProducer
+internal sealed class Producer : IProducer
 {
     /// <summary>Default maximum message body size, in bytes (64 KiB).</summary>
     private const long DefaultMaxMessageSize = 64 * 1024;
@@ -62,6 +62,16 @@ public sealed class Producer : IProducer
         var settings = transportConfiguration.ClientSettings;
         MaximumMessageSize = GetSetting(settings, RabbitMQSettingKeys.MessageSize, DefaultMaxMessageSize, Convert.ToInt64);
         _publishTimeout = GetSetting(settings, RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromSeconds(30), v => (TimeSpan)v);
+        // Every publish path calls CancellationTokenSource.CancelAfter(_publishTimeout); the BCL
+        // accepts only non-negative TimeSpans or Timeout.InfiniteTimeSpan (-1ms). Any other negative
+        // value throws ArgumentOutOfRangeException at every publish, which the retry loop classifies
+        // as retriable and burns the full retryCount*retrySeconds budget against. Reject loudly here.
+        if (_publishTimeout < TimeSpan.Zero && _publishTimeout != Timeout.InfiniteTimeSpan)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(transportConfiguration),
+                $"Setting '{RabbitMQSettingKeys.PublishTimeout}' must be non-negative or Timeout.InfiniteTimeSpan; got {_publishTimeout}.");
+        }
         _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, (ushort)60, Convert.ToUInt16);
         _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, (ushort)10, Convert.ToUInt16);
 
@@ -133,6 +143,20 @@ public sealed class Producer : IProducer
                     // Re-check after acquiring the lock — DisposeAsync may have set _disposed
                     // and torn down the channel while we were waiting.
                     ObjectDisposedException.ThrowIf(_disposed != 0, this);
+                    // Also re-check the channel: between EnsureConnectedAsync returning and
+                    // _publishLock.WaitAsync acquiring, another publisher's slow-path teardown
+                    // (driven by MarkResetRequired from an earlier timeout) can land
+                    // ProducerConnection._model = null. Reading `Channel` here would throw
+                    // InvalidOperationException with the misleading "before EnsureConnected"
+                    // message AND classify retriable, which would call MarkResetRequired again —
+                    // burning reconnect budget for a state that's already being reset. Throw
+                    // the typed ChannelTransientException instead so the retriable path skips
+                    // the redundant reset.
+                    if (_producerConnection.TryGetChannel() is null)
+                    {
+                        throw new ChannelTransientException(
+                            "Producer channel was torn down concurrently between connect and publish; retrying.");
+                    }
                     await lockedAction(cancellationToken).ConfigureAwait(false);
                     return;
                 }
@@ -162,6 +186,26 @@ public sealed class Producer : IProducer
                 // _publishLock spanned every retry attempt; now the lock is released between
                 // attempts so dispose can race in. Mirror the predicate used in
                 // ProducerConnection.EnsureConnectedAsync's Retry.DoAsync.
+                throw;
+            }
+            catch (ChannelTransientException ex)
+            {
+                // Channel was torn down between EnsureConnectedAsync and lock acquisition.
+                // The teardown is already the reset; retrying without MarkResetRequired drives
+                // the next attempt's EnsureConnectedAsync prologue (rebuild via _connectionSemaphore)
+                // without doubling the reconnect budget. Inter-attempt delay still runs OUTSIDE
+                // the lock so other publishers can interleave.
+                lastException = ex;
+                if (attempt < _retryCount)
+                {
+                    _logger.LogDebug(
+                        "Publish attempt {Attempt}/{Total} hit transient channel state; retrying after {Delay}s",
+                        attempt + 1,
+                        _retryCount + 1,
+                        _retryTimeInSeconds);
+                    await Task.Delay(TimeSpan.FromSeconds(_retryTimeInSeconds), cancellationToken).ConfigureAwait(false);
+                    continue;
+                }
                 throw;
             }
             catch (Exception ex) when (IsRetriablePublishException(ex))
@@ -228,7 +272,10 @@ public sealed class Producer : IProducer
     /// <param name="body">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the publish operation.</param>
-    public async Task PublishAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public Task PublishAsync(Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+        => PublishAsync(type, body, routingKey: null, headers, cancellationToken);
+
+    public async Task PublishAsync(Type type, ReadOnlyMemory<byte> body, string? routingKey, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
         cancellationToken.ThrowIfCancellationRequested();
@@ -245,6 +292,11 @@ public sealed class Producer : IProducer
         string exchangeName = string.Empty;
         bool succeeded = false;
         Exception? failure = null;
+        // RabbitMQ.Client interprets a null routing key as empty string; normalise here so
+        // metric tagging and BasicPublishAsync see the same value. Fanout exchanges ignore
+        // routing keys; topic/direct exchanges use them for routing — the caller may have
+        // configured a non-fanout exchange override and supplied a key via PublishOptions.RoutingKey.
+        var resolvedRoutingKey = routingKey ?? string.Empty;
         try
         {
             await ExecuteRetryingPublishAsync(async ct =>
@@ -260,7 +312,7 @@ public sealed class Producer : IProducer
                 await PublishWithTimeoutAsync(
                     _producerConnection.Channel,
                     exchangeName,
-                    string.Empty,
+                    resolvedRoutingKey,
                     false,
                     basicProperties,
                     body,
@@ -341,19 +393,31 @@ public sealed class Producer : IProducer
                         _producerConnection.Channel,
                         string.Empty,
                         endPoint,
-                        false,
+                        // mandatory:true — Send routes via the default exchange + queue-name
+                        // routing key. With publisher confirms, an unroutable publish (queue
+                        // not declared, typo, deleted) surfaces as PublishException rather
+                        // than being silently dropped at the broker. IsRetriablePublishException
+                        // returns false for PublishException, so the failure surfaces to the
+                        // caller's fan-out catch and is collected into the AggregateException.
+                        true,
                         basicProperties,
                         body,
                         ct).ConfigureAwait(false);
                 }, cancellationToken).ConfigureAwait(false);
                 endpointSucceeded = true;
             }
-            catch (OperationCanceledException ex)
+            catch (OperationCanceledException ex) when (cancellationToken.IsCancellationRequested)
             {
-                // Cancellation aborts subsequent endpoints, but if prior endpoints already
-                // failed in this fan-out, those failures must NOT be lost: aggregate them
-                // with the OCE. With no prior failures, OCE propagates plain so caller-side
-                // cancellation handlers see the canonical type.
+                // Caller-initiated cancellation aborts subsequent endpoints, but if prior
+                // endpoints already failed in this fan-out, those failures must NOT be lost:
+                // aggregate them with the OCE. With no prior failures, OCE propagates plain
+                // so caller-side cancellation handlers see the canonical type.
+                //
+                // The `when (cancellationToken.IsCancellationRequested)` filter is load-bearing:
+                // an OCE thrown from a middleware-internal linked CTS (custom timeout, per-
+                // endpoint deadline) carries a different token and is NOT caller cancellation.
+                // Those fall through to the generic catch and aggregate as endpoint failures,
+                // matching the semantics of Bus.SendToManyAsync.
                 endpointFailure = ex;
                 if (endpointFailures is { Count: > 0 })
                 {
@@ -436,7 +500,10 @@ public sealed class Producer : IProducer
                     _producerConnection.Channel,
                     string.Empty,
                     endPoint,
-                    false,
+                    // mandatory:true — Send to a specific endpoint must surface unroutable
+                    // (queue not declared, typo, deleted) as PublishException instead of
+                    // silently dropping at the broker. See SendAsync(Type) for the rationale.
+                    true,
                     basicProperties,
                     body,
                     ct).ConfigureAwait(false);
@@ -491,7 +558,10 @@ public sealed class Producer : IProducer
                     _producerConnection.Channel,
                     string.Empty,
                     endPoint,
-                    false,
+                    // mandatory:true — SendBytes to a specific endpoint must surface
+                    // unroutable (queue not declared, typo, deleted) as PublishException
+                    // instead of silently dropping at the broker. Same rationale as SendAsync.
+                    true,
                     basicProperties,
                     packet,
                     ct).ConfigureAwait(false);
@@ -552,17 +622,12 @@ public sealed class Producer : IProducer
         }
     }
 
-    /// <summary>
-    /// Disconnects the producer and releases its RabbitMQ resources.
-    /// </summary>
-    /// <param name="cancellationToken">A token used to cancel the disconnect request before disposal begins.</param>
-    [Obsolete("Use DisposeAsync instead.")]
-    public async Task DisconnectAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        _logger.LogDebug("In Producer.DisconnectAsync()");
-        await DisposeAsync().ConfigureAwait(false);
-    }
+    // Internal sentinel for the channel-null TOCTOU between EnsureConnectedAsync (run outside
+    // _publishLock) and the locked action acquiring the lock — see ExecuteRetryingPublishAsync.
+    // Sealed + private so callers cannot construct or catch it externally; the retry classifier
+    // pattern-matches on the type to skip MarkResetRequired (the concurrent teardown that put
+    // _model = null is already the reset).
+    private sealed class ChannelTransientException(string message) : Exception(message);
 
     /// <summary>
     /// Releases the producer's RabbitMQ channel, connection, and synchronization primitives.
@@ -606,13 +671,20 @@ public sealed class Producer : IProducer
                 remaining = TimeSpan.Zero;
             }
 
-            try { await _producerConnection.CloseAsync(remaining).ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Producer connection close failed during dispose"); }
-
+            // Release the publish lock BEFORE CloseAsync. A parallel publisher already
+            // past EnsureConnectedAsync and blocked at _publishLock.WaitAsync would
+            // otherwise wait the full disposeTimeout + close duration before its
+            // post-acquire ObjectDisposedException re-check fires. Releasing first lets
+            // that publisher acquire-and-trip-ODE in the typical microsecond range while
+            // CloseAsync proceeds in parallel; `_disposed=1` is already set above so the
+            // unblocked publisher cannot start new work, only short-circuit out.
             if (publishLockAcquired)
             {
                 _publishLock.Release();
             }
+
+            try { await _producerConnection.CloseAsync(remaining).ConfigureAwait(false); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Producer connection close failed during dispose"); }
 
             // _publishLock is intentionally NOT Disposed:
             // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and
@@ -680,13 +752,20 @@ public sealed class Producer : IProducer
             // on the next publish clears the confirm-tracker's state before any subsequent publish runs.
             _producerConnection.MarkResetRequired();
 
-            // SendAsync passes exchange="" with the destination on routingKey; use a
-            // conventional sentinel so the metric tag stays present (downstream alerts
-            // and panels rely on a stable schema).
+            // Tag schema matches the sibling publish-duration histograms (Producer.cs:580):
+            // operation.type for cross-metric dashboards, system for messaging-system filter,
+            // destination.name for per-queue alerting. SendAsync passes exchange="" with the
+            // real destination on routingKey (point-to-point goes through the default direct
+            // exchange), so prefer routingKey when exchange is empty rather than emitting a
+            // placeholder that obscures which queue stalled.
+            var destinationTag = !string.IsNullOrEmpty(exchange)
+                ? exchange
+                : (!string.IsNullOrEmpty(routingKey) ? routingKey : "<empty>");
             ServiceConnectMeter.AddPublishConfirmTimeout(new TagList
             {
                 { "messaging.system", "rabbitmq" },
-                { "messaging.destination.name", string.IsNullOrEmpty(exchange) ? "<empty>" : exchange },
+                { "messaging.operation.type", "publish" },
+                { "messaging.destination.name", destinationTag },
             });
 
             throw new TimeoutException(

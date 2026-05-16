@@ -46,13 +46,13 @@ public interface ITransportConfiguration
     int GracefulShutdownTimeoutMilliseconds { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether TLS is enabled.
+    /// Gets or sets a value indicating whether TLS is enabled. Defaults to <see langword="true"/>:
+    /// the framework connects to the broker over TLS on port 5671 unless overridden.
     /// </summary>
     /// <remarks>
-    /// <b>Defaults to <see langword="true"/> as of v8.</b> The framework connects to the broker over
-    /// TLS on port 5671 by default. To connect to a plaintext broker (e.g. a local RabbitMQ in
-    /// Docker without TLS configured), set this to <see langword="false"/>; the framework logs a
-    /// <c>Warning</c> when this is disabled against a non-loopback host.
+    /// To connect to a plaintext broker (e.g. a local RabbitMQ in Docker without TLS configured),
+    /// set this to <see langword="false"/>; the framework logs a <c>Warning</c> when TLS is
+    /// disabled against a non-loopback host.
     /// </remarks>
     bool SslEnabled { get; set; }
 

@@ -10,7 +10,7 @@ namespace ServiceConnect.Services;
 /// Creates a read stream for the supplied sequence identifier.
 /// </remarks>
 /// <param name="sequenceId">The identifier shared by all packets in the stream.</param>
-public sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStream
+internal sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStream
 {
     private const long MaxTotalStreamSize = 100 * 1024 * 1024;
     private readonly ConcurrentDictionary<long, byte[]> _packets = new();

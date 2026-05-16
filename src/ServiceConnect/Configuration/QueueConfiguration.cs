@@ -7,7 +7,7 @@ namespace ServiceConnect.Configuration;
 /// <summary>
 /// Mutable implementation of <see cref="IQueueConfiguration"/> used to configure local queue names and routing maps.
 /// </summary>
-public sealed class QueueConfiguration : IQueueConfiguration
+internal sealed class QueueConfiguration : IQueueConfiguration
 {
     /// <inheritdoc />
     public string QueueName { get; set; } = "";

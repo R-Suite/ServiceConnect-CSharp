@@ -146,22 +146,36 @@ Each class is `public sealed`, takes its observed interface via constructor with
 ```csharp
 public sealed class BusConsumingHealthCheck : IHealthCheck
 {
+    // Default 30s recovery grace; system TimeProvider; no consumer
+    // supplied (no broker-cancelled short-circuit beyond IBus.IsCancelledByBroker).
     public BusConsumingHealthCheck(IBus bus);
+
+    // Configurable recovery-grace window and optional consumer for broker-cancelled
+    // short-circuit. Pass TimeSpan.Zero to disable grace (suits liveness probes).
+    public BusConsumingHealthCheck(
+        IBus bus,
+        IConsumer? consumer,
+        TimeSpan recoveryGraceWindow,
+        TimeProvider timeProvider);
+
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default);
 }
 ```
 
-Returns `HealthCheckResult.Healthy("Bus is consuming.")` when `IBus.IsConsuming` is `true`, otherwise `new HealthCheckResult(failureStatus, "Bus is not consuming.")` where `failureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy`.
+The check evaluates four observed states in order; the first match wins:
 
-`IsConsuming` flips to `true` after `IBus.StartConsumingAsync` succeeds and back to `false` after `StopConsumingAsync` (which is terminal — the bus cannot be restarted). For the standard `BusHostedService` wiring, `StartConsumingAsync` is awaited during host startup, so the check returns `Healthy` for the lifetime of a normally-running host.
+1. **`IBus.IsConsuming == true`** — returns `Healthy("Bus is consuming.")` and stamps the last-Healthy timestamp used by the recovery-grace path.
+2. **Broker-cancelled** — when the supplied `IConsumer.IsCancelledByBroker` is `true`, OR (parameterless-ctor path) when `IBus.IsCancelledByBroker` is `true`. Returns `new HealthCheckResult(failureStatus, "Bus is not consuming (broker cancelled the consumer).")`. Bypasses the grace window — a `basic.cancel` event (queue deleted, policy expired, mirror promoted) is terminal until the consumer restarts.
+3. **Stopped or disposed** — when `IBus.IsStopped` is `true`. Returns `new HealthCheckResult(failureStatus, "Bus is not consuming (stopped or disposed).")`. Also bypasses grace; there is no reconnect to wait for.
+4. **Within the recovery-grace window** — when the bus has been observed Healthy at some prior point AND the time since that observation is less than `recoveryGraceWindow`, returns `Healthy("Bus is not consuming, but within recovery grace (…).")`. This is the readiness-friendly path: a momentary broker disconnect (auto-recovery, network blip, broker bounce) does not crash-loop pods wired on liveness probes.
 
-The check reports `Unhealthy` (i.e. `IsConsuming` is `false`) in three cases:
+If none of the above matches, the check returns `new HealthCheckResult(failureStatus, "Bus is not consuming.")` where `failureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy`.
 
-- Before `StartConsumingAsync` has been called (or after `StopConsumingAsync`).
-- After a broker-initiated `basic.cancel` event — queue deleted, policy expired, mirror promoted. See [Observability — Broker-initiated cancellation](/ServiceConnect-CSharp/learn/operations/observability/#broker-initiated-cancellation).
-- When the underlying `IConsumer` has not yet started consuming on at least one queue.
+The recovery-grace window defaults to **30 seconds** when the parameterless constructor is used. Pass `TimeSpan.Zero` to the 4-arg ctor to disable grace (suits liveness probes that must flip immediately on disconnect). The `TimeProvider` parameter is injectable for tests.
+
+The grace state is keyed on the `IBus` instance via a `ConditionalWeakTable`, so per-probe re-allocations performed by `HealthCheckService` do not reset the last-Healthy timestamp. A never-Healthy probe (the first-probe case) always reports Unhealthy regardless of the grace window — there is no equivalent to `IProducer.HasAttemptedConnection` for consumers; a never-Healthy consumer is genuinely unhealthy, not lazy.
 
 ### `ConsumerConnectionHealthCheck`
 

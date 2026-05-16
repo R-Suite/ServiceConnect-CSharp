@@ -10,7 +10,7 @@ public sealed class TelemetrySliceAggregator : Aggregator<TelemetrySlice>
 
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(10);
 
-    public override Task ExecuteAsync(IList<TelemetrySlice> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<TelemetrySlice> messages, CancellationToken cancellationToken = default)
     {
         var total = messages.Sum(message => message.Value);
         ConsoleStatus.Success("aggregator-consumer", $"combined total {total} from {messages.Count} slices");

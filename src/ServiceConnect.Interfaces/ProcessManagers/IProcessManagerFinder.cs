@@ -46,10 +46,41 @@ public interface IProcessManagerFinder
     Task UpdateDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
 
     /// <summary>
-    /// Deletes persisted process-manager state.
+    /// Deletes persisted process-manager state. Use this to physically complete a saga and
+    /// remove its row from the store; the framework does NOT call this automatically — saga
+    /// completion is a deliberate decision the application owns.
     /// </summary>
     /// <typeparam name="T">The process-manager data type.</typeparam>
     /// <param name="data">The persisted data wrapper to delete.</param>
     /// <param name="cancellationToken">A token that cancels the operation.</param>
+    /// <remarks>
+    /// <para>
+    /// <b>Saga completion patterns.</b> Two approaches:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>
+    /// <b>Flag-based completion (default).</b> Set a boolean on the data
+    /// (<c>data.IsCompleted = true</c>); handlers check the flag on entry and return early. The
+    /// row lives in the store indefinitely — useful for audit, but consumes storage. This is
+    /// what the framework's built-in dispatch loop and the bundled examples do; no
+    /// <c>DeleteDataAsync</c> call required.
+    /// </item>
+    /// <item>
+    /// <b>Physical deletion via <see cref="DeleteDataAsync"/>.</b> Resolve
+    /// <see cref="IProcessManagerFinder"/> from DI inside the handler and call this method to
+    /// remove the row. After deletion, a late-arriving message or timeout for the same
+    /// correlation id sees no saga and starts a fresh one. Reserve for sagas whose completion
+    /// is final and replay-safe. The framework's success-path persist re-checks for the row
+    /// before issuing UpdateData; a handler that deleted the saga mid-invocation and then
+    /// returned cleanly will NOT have its deletion silently undone by an update that
+    /// resurrects the just-deleted row.
+    /// </item>
+    /// </list>
+    /// <para>
+    /// All first-party persistors enforce optimistic concurrency on delete (filter on
+    /// <c>Version</c>) and throw <see cref="Exceptions.ConcurrencyException"/> when the row is
+    /// missing or stale — a delete cannot silently lose a concurrent update.
+    /// </para>
+    /// </remarks>
     Task DeleteDataAsync<T>(IPersistenceData<T> data, CancellationToken cancellationToken = default) where T : class, IProcessManagerData;
 }

@@ -670,13 +670,25 @@ public class RabbitMqConsumerHostTests
             },
             "q");
 
+        // Capture the AsyncEventingBasicConsumer reference BEFORE starting dispose. The
+        // dispose path may null the host's _consumer field once CloseChannelAsync's
+        // deadline-abandonment branch fires (WaitForShutdownOperationAsync returns
+        // immediately without awaiting model.CloseAsync once deadline elapses), so
+        // reading via reflection AFTER closeStarted is timing-sensitive under
+        // parallel test load. The "late delivery" we want to drive is one that
+        // fires on the AsyncEventingBasicConsumer instance regardless of the host's
+        // current field state — capture it now while it's still wired up.
+        var capturedConsumer = (global::RabbitMQ.Client.Events.AsyncEventingBasicConsumer)typeof(RabbitMqConsumerHost)
+            .GetField("_consumer", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .GetValue(host)!;
+
         var disposeTask = host.DisposeAsync().AsTask();
         releaseCancel.SetResult();
 
         timeProvider.Advance(TimeSpan.FromMilliseconds(50));
         await closeStarted.Task;
 
-        var lateDeliveryTask = DeliverMessageAsync(host, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
+        var lateDeliveryTask = DeliverMessageOnConsumerAsync(capturedConsumer, new byte[1], new Dictionary<string, object> { [HeaderKeys.TypeName] = "SomeType" });
 
         var completed = await Task.WhenAny(handlerStarted.Task, lateDeliveryTask, Task.Delay(TimeSpan.FromSeconds(2)));
         Assert.NotSame(handlerStarted.Task, completed);
@@ -899,7 +911,7 @@ public class RabbitMqConsumerHostTests
         publishChannel.Setup(c => c.BasicPublishAsync(
                 "audit",
                 string.Empty,
-                false,
+                true,
                 It.IsAny<BasicProperties>(),
                 It.IsAny<ReadOnlyMemory<byte>>(),
                 It.IsAny<CancellationToken>()))
@@ -970,7 +982,7 @@ public class RabbitMqConsumerHostTests
         publishChannel.Setup(c => c.BasicPublishAsync(
                 "audit",
                 string.Empty,
-                false,
+                true,
                 It.IsAny<BasicProperties>(),
                 It.IsAny<ReadOnlyMemory<byte>>(),
                 It.IsAny<CancellationToken>()))
@@ -1041,6 +1053,20 @@ public class RabbitMqConsumerHostTests
             throw new InvalidOperationException("_consumer field not found or host not started.");
         }
 
+        return await DeliverMessageOnConsumerAsync(consumer, body, headers).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Drives a synthetic message via a directly-captured AsyncEventingBasicConsumer reference.
+    /// Used by tests that drive a late delivery against a consumer whose host is mid-dispose —
+    /// reading the host's _consumer field via reflection at that point is timing-sensitive under
+    /// parallel test load because the dispose path may have already nulled the field.
+    /// </summary>
+    private static async Task<bool> DeliverMessageOnConsumerAsync(
+        global::RabbitMQ.Client.Events.AsyncEventingBasicConsumer consumer,
+        byte[] body,
+        Dictionary<string, object>? headers = null)
+    {
         var props = new global::RabbitMQ.Client.BasicProperties();
         if (headers != null)
         {
@@ -1066,7 +1092,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_OversizedMessage_IsNacked_AndHandlerNotInvoked()
     {
-        const long maxSize = 10L;
+        const long maxSize = 100L;
         var (conn, channel, publishChannel) = MockConnection();
         var tcfg = MakeTransportCfgWithMaxSize(maxSize);
         var qcfg = MakeQueueCfg();
@@ -1096,7 +1122,7 @@ public class RabbitMqConsumerHostTests
     [Fact]
     public async Task EventAsync_ExactLimitMessage_IsProcessed()
     {
-        const long maxSize = 10L;
+        const long maxSize = 100L;
         var (conn, channel, _) = MockConnection();
         var tcfg = MakeTransportCfgWithMaxSize(maxSize);
         var qcfg = MakeQueueCfg();
@@ -1282,7 +1308,7 @@ public class RabbitMqConsumerHostTests
             It.IsAny<CancellationToken>()), Times.Never);
         // Audit publish still runs — backward-compat invariant.
         publishChannel.Verify(c => c.BasicPublishAsync(
-            "audit", string.Empty, false,
+            "audit", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
@@ -1564,10 +1590,13 @@ public class RabbitMqConsumerHostTests
     }
 
     [Fact]
-    public async Task StartConsumingAsync_DisposesPreviouslyAssignedCtsFields()
+    public async Task DisposeAsync_DisposesFieldInitialisedCtsInstances()
     {
-        // Field-initialised CTS instances and any CTS from a previous start must be
-        // disposed before being replaced in StartConsumingAsync — otherwise restart leaks.
+        // The host is single-use (PrepareAsync may be called at most once); the field-
+        // initialised CTS instances are owned by the host for that single lifecycle and
+        // must be disposed in DisposeAsync. This test asserts the lifecycle invariant
+        // without relying on the prior CTS-rotation-on-restart behaviour, which was
+        // removed when the host became single-use.
         var (conn, _, _) = MockConnection();
         var tcfg = MakeTransportCfg();
         var qcfg = MakeQueueCfg();
@@ -1583,11 +1612,10 @@ public class RabbitMqConsumerHostTests
         var initialShutdownCts = (CancellationTokenSource)shutdownCtsField.GetValue(host)!;
 
         await host.StartConsumingAsync((_, _, _, _) => Task.FromResult(new ConsumeEventResult { Success = true }), "test-queue");
+        await host.DisposeAsync();
 
         Assert.Throws<ObjectDisposedException>(initialDeliveryCts.Cancel);
         Assert.Throws<ObjectDisposedException>(initialShutdownCts.Cancel);
-
-        await host.DisposeAsync();
     }
 
     /// <summary>

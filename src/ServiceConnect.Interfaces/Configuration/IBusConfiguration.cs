@@ -37,8 +37,7 @@ public interface IBusConfiguration
 
     /// <summary>
     /// Optional async hook invoked when message dispatch throws. Awaited by the dispatcher
-    /// before returning the failure result, so slow handlers no longer block the consumer
-    /// thread (v7 used <c>Action&lt;Exception&gt;</c> and was synchronous).
+    /// before returning the failure result, so a slow handler does not block the consumer thread.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -58,10 +57,6 @@ public interface IBusConfiguration
     /// exception, logs at <c>Error</c> level with the message-type for correlation, and
     /// continues. The original dispatch failure flows through to the retry/error-queue path
     /// normally; a flaky notification hook cannot block message processing.
-    /// </para>
-    /// <para>
-    /// Migration from v7: wrap your <c>Action&lt;Exception&gt;</c> as
-    /// <c>(ex, _) =&gt; { Sync(ex); return ValueTask.CompletedTask; }</c>.
     /// </para>
     /// </remarks>
     Func<Exception, CancellationToken, ValueTask>? ExceptionHandler { get; set; }
@@ -88,6 +83,20 @@ public interface IBusConfiguration
     /// known queues when enabled.
     /// </summary>
     bool EnableRoutingSlipProcessing { get; set; }
+
+    /// <summary>
+    /// Maximum number of routing-slip destinations honoured when forwarding an inbound
+    /// <c>RoutingSlip</c> header. Defaults to <c>32</c>. A header containing more entries
+    /// than this is rejected (logged and dropped) without forwarding to any destination.
+    /// </summary>
+    /// <remarks>
+    /// Caps the per-message amplification factor when a hostile inbound message carries
+    /// a hand-crafted slip header (e.g. <c>victim-q,victim-q,…</c> repeated within the
+    /// per-value header byte budget). Without a cap, ~900 entries fit within the default
+    /// 8 KiB header-value cap, so one delivered message can drive ~900 handler invocations.
+    /// Lowering the cap below 32 trades hops-per-business-workflow against DoS protection.
+    /// </remarks>
+    int MaxRoutingSlipHops { get; set; }
 
     /// <summary>
     /// When <c>true</c>, messages that the dispatcher runs to completion on but which no
@@ -126,7 +135,9 @@ public interface IBusConfiguration
     /// Maximum time <c>Bus.DisposeAsync</c> waits for the lifecycle semaphore before
     /// proceeding with teardown anyway. A wedged <c>StartConsumingAsync</c> (e.g., broker
     /// partition during handshake) would otherwise block the semaphore indefinitely and
-    /// hang container shutdown. Default: 30 seconds.
+    /// hang container shutdown. Default: 30 seconds. Must be positive and at most
+    /// <c>uint.MaxValue - 1</c> milliseconds (the .NET timer-API ceiling), or
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> for no bound.
     /// </summary>
-    TimeSpan DisposeTimeout { get; }
+    TimeSpan DisposeTimeout { get; set; }
 }

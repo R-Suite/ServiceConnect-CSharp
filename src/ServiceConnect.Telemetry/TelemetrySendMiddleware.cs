@@ -27,15 +27,15 @@ internal sealed class TelemetrySendMiddleware(
                 Message = context.Message,
                 Headers = context.Headers,
                 RoutingKey = context.RoutingKey ?? string.Empty,
-                // Pre-fix this set Exchange = MessageType.FullName, stamping the CLR type into
-                // messaging.destination.name. That violated the OTel messaging semconv where
-                // destination.name carries the broker-side exchange/topic. SendContext does NOT
-                // currently carry the broker exchange (the producer pipeline resolves it from the
-                // type at the transport layer), so without an upstream architectural change we leave
-                // Exchange empty here. Spans then surface as messaging.destination.anonymous=true,
-                // which is correct (anonymous-from-the-span's-perspective) rather than misleadingly
-                // CLR-typed. Callers wanting per-type span discrimination should use the activity
-                // DisplayName ("<routing-key> publish") or attach an enricher via EnrichWithMessage.
+                // OTel messaging semconv: messaging.destination.name carries the broker-side
+                // exchange/topic, not the CLR type. SendContext does not currently carry the
+                // broker exchange (the producer pipeline resolves it from the type at the
+                // transport layer), so without an upstream architectural change we leave
+                // Exchange empty here. Spans surface as messaging.destination.anonymous=true,
+                // which is correct ("anonymous from the span's perspective") rather than
+                // misleadingly stamping the CLR type into destination.name. Callers wanting
+                // per-type span discrimination should use the activity DisplayName
+                // ("<routing-key> publish") or attach an enricher via EnrichWithMessage.
                 Exchange = string.Empty,
             }, _options, _attributes),
             SendOperation.Send or SendOperation.Request => ServiceConnectActivitySource.Send(new SendEventArgs

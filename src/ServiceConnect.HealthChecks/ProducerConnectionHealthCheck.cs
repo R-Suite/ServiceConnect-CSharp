@@ -9,10 +9,10 @@ namespace ServiceConnect.HealthChecks;
 /// O(1), allocation-light, side-effect-free — does not perform broker I/O.
 /// </summary>
 /// <remarks>
-/// The producer connects lazily on the first publish/send call. Pre-v8 this check
-/// returned Unhealthy in that pre-publish window, which crash-looped readiness probes.
-/// v8: NotYetAttempted is treated as Healthy; once a publish is attempted and fails,
-/// transitions to <see cref="HealthStatus.Unhealthy"/>.
+/// The producer connects lazily on the first publish/send call. The "never attempted"
+/// state is treated as Healthy so a readiness probe that runs before the first publish
+/// does not crash-loop the pod; the check transitions to <see cref="HealthStatus.Unhealthy"/>
+/// only once a publish has been attempted and failed.
 /// </remarks>
 public sealed class ProducerConnectionHealthCheck : IHealthCheck
 {

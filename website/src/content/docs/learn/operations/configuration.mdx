@@ -3,7 +3,7 @@ title: Configuration
 description: The five knobs on the ServiceConnect builder — transport, queues, persistence, pipeline, bus — and what each one controls.
 ---
 
-ServiceConnect is configured through a single builder on the service collection. Every production setting — connection, retries, queue names, TLS, filters, handler scanning — lives under one of five `Configure*` methods. This page is the map.
+ServiceConnect is configured through a single builder on the service collection. Every production setting — connection, retries, queue names, TLS, filters, handler scanning — lives under one of four `Configure*` callbacks plus typed pipeline-builder helpers. This page is the map.
 
 ```csharp
 services.AddServiceConnect(builder =>
@@ -11,12 +11,16 @@ services.AddServiceConnect(builder =>
     builder.UseRabbitMQ(transport => { /* transport */ });
     builder.ConfigureQueues(queues => { /* queues */ });
     builder.ConfigurePersistence(p => { /* persistence */ });
-    builder.ConfigurePipeline(p => { /* filters and middleware */ });
     builder.ConfigureBus(bus => { /* runtime behaviour */ });
+
+    // Filters and middleware register via typed builder methods, not a single
+    // ConfigurePipeline callback. See the "Pipeline filters and middleware" section
+    // below for the full list.
+    builder.AddBeforeConsumingFilter<MyFilter>();
 });
 ```
 
-Each callback mutates an options object. You never construct the configuration yourself — the builder hands you the live instance to edit.
+Each `Configure*` callback mutates an options object. You never construct the configuration yourself — the builder hands you the live instance to edit.
 
 ## Transport
 
@@ -127,15 +131,29 @@ builder.UseMongoDbPersistence(options =>
 
 There's also an in-memory provider (`UseInMemoryPersistence`) useful for tests and short-lived workflows. If your bus never uses a process manager, aggregator, or timeout, you can omit persistence entirely — the bus will fail fast if you later try to use one without it.
 
-## Pipeline
+## Pipeline filters and middleware
 
-`ConfigurePipeline` — or the shortcut methods `AddOutgoingFilter<T>`, `AddBeforeConsumingFilter<T>`, `AddAfterConsumingFilter<T>` — registers filters and middleware in order:
+Filters and middleware are registered via typed builder methods — one per stage and registration shape:
 
 ```csharp
+// Filters (run before / after handler dispatch).
 builder.AddOutgoingFilter<TraceHeaderFilter>();
 builder.AddBeforeConsumingFilter<AuthFilter>();
+builder.AddOnConsumedSuccessfullyFilter<OutboxFilter>();
 builder.AddAfterConsumingFilter<AuditFilter>();
+
+// Middleware (wraps the send or processing call site).
+builder.AddSendMessageMiddleware<EncryptionMiddleware>();
+builder.AddMessageProcessingMiddleware<RetryBudgetMiddleware>();
+
+// Outermost-position middleware (runs first on the way out, last on the way back).
+// Useful for tracing / metrics middleware that must bracket every other layer.
+// De-duplicates by type — a repeat call with the same T is a no-op.
+builder.InsertSendMessageMiddlewareOutermost<TelemetrySendMiddleware>();
+builder.InsertMessageProcessingMiddlewareOutermost<TelemetryProcessingMiddleware>();
 ```
+
+There is no public `ConfigurePipeline` callback; the typed builder methods are the supported v7 surface. Each `Add*` call appends to its stage's middleware/filter list; each `Insert*Outermost` call prepends with type-dedup. Order matters within a stage — the first `Add*` call runs first.
 
 The full shape of filters, what they can do, and when to prefer middleware is [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/).
 
@@ -157,7 +175,7 @@ builder.ConfigureBus(bus =>
     bus.ValidateReplyDestinations = true;   // default; guard against unknown reply queues
 
     bus.IncludeMachineNameInHeaders = false; // default; opt in only when safe
-    bus.ExceptionHandler = ex => _metrics.RecordHandlerFailure(ex);
+    bus.ExceptionHandler = (ex, _) => { _metrics.RecordHandlerFailure(ex); return ValueTask.CompletedTask; };
 });
 ```
 

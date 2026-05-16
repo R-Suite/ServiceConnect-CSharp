@@ -44,7 +44,7 @@ public class MessageAuditPublisherTests
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "audit", string.Empty, false,
+            "audit", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -97,7 +97,7 @@ public class MessageAuditPublisherTests
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "audit", string.Empty, false,
+            "audit", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }
@@ -117,7 +117,7 @@ public class MessageAuditPublisherTests
         await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), []);
 
         channel.Verify(c => c.BasicPublishAsync(
-            "audit", string.Empty, false,
+            "audit", string.Empty, true,
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Once);
     }

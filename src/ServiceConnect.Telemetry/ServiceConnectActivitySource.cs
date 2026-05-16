@@ -72,14 +72,21 @@ public static class ServiceConnectActivitySource
 
                 if (!string.IsNullOrWhiteSpace(eventArgs.Exchange))
                 {
-                    activity.DisplayName = Truncate(eventArgs.Exchange + " publish", options.MaxTagValueLength);
-                    activity.SetTag(MessagingAttributes.MessagingDestination,
-                        Truncate(eventArgs.Exchange, options.MaxTagValueLength));
+                    // Truncate the exchange first, then append the suffix. Concatenating first
+                    // and truncating second would chop off the " publish" suffix when the
+                    // exchange is close to MaxTagValueLength — losing the operation signal in
+                    // the span display.
+                    var truncatedExchange = Truncate(eventArgs.Exchange, options.MaxTagValueLength);
+                    activity.DisplayName = truncatedExchange + " publish";
+                    activity.SetTag(MessagingAttributes.MessagingDestination, truncatedExchange);
                 }
                 else
                 {
                     activity.DisplayName = "anonymous publish";
-                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+                    // OTel messaging semconv defines messaging.destination.anonymous as a
+                    // boolean attribute; emitting the string "true" mismatches downstream
+                    // schema-validating backends (Honeycomb, Tempo, Jaeger v2).
+                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, true);
                 }
 
                 if (!string.IsNullOrWhiteSpace(eventArgs.RoutingKey))
@@ -143,6 +150,13 @@ public static class ServiceConnectActivitySource
             return null;
         }
 
+        // Telemetry enrichment is best-effort: a malformed header (HeaderDecoder throw on a
+        // pathologically nested AMQP table, an unexpected runtime tag failure) must NOT
+        // block the consume pipeline. Telemetry runs BEFORE the handler dispatch, so a
+        // rethrow here propagates out of the middleware before next() is invoked and the
+        // handler never runs — a single poison header would crash every consumer pulling
+        // it. Capture the failure into the span via an enrichment.exception tag and
+        // return the started activity so the dispatch path proceeds.
         try
         {
             if (activity.IsAllDataRequested)
@@ -177,22 +191,50 @@ public static class ServiceConnectActivitySource
                 }
                 else
                 {
-                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, true);
                 }
             }
 
-            if (eventArgs.Message is not null)
+            // BodySize is the on-wire byte count, populated by the consume middleware even
+            // when eventArgs.Message is the empty-sentinel array (no enricher configured —
+            // bytes were not materialised to save the per-delivery allocation). Fall back to
+            // eventArgs.Message.Length for direct callers of Consume() that pre-date BodySize
+            // and only set Message; without the fallback, those callers would suddenly emit
+            // body-size=0 on every span.
+            var bodySize = eventArgs.BodySize > 0
+                ? eventArgs.BodySize
+                : (eventArgs.Message?.Length ?? 0);
+            activity.SetTag(MessagingAttributes.MessagingBodySize, bodySize);
+            if (eventArgs.Message is { Length: > 0 })
             {
-                activity.SetTag(MessagingAttributes.MessagingBodySize, eventArgs.Message.Length);
                 TryEnrich(activity, eventArgs.Message, options);
             }
 
             return activity;
         }
-        catch
+        catch (OperationCanceledException)
         {
             activity.Dispose();
             throw;
+        }
+        catch (Exception ex)
+        {
+            // Don't rethrow — see the block-leading comment. Record the failure as a
+            // telemetry-attribution tag (type name only; messages may carry caller-
+            // controlled payloads) and return the partial activity. Wrap the SetTag
+            // in its own try/catch because a pathological ActivityListener registered
+            // against this source could itself throw during the tag callback — without
+            // the inner guard, a malformed-header poison delivery would still kill the
+            // consume path via the listener rather than the original enrichment fault.
+            try
+            {
+                activity.SetTag("enrichment.exception", ex.GetType().FullName);
+            }
+            catch
+            {
+                // Telemetry is best-effort. Last-resort: leave the activity unmodified.
+            }
+            return activity;
         }
     }
 
@@ -238,37 +280,25 @@ public static class ServiceConnectActivitySource
 
             if (activity.IsAllDataRequested)
             {
-                // Compute the effective destination from EndPoint (singular) first, then fall back
-                // to EndPoints (plural, comma-joined). Preserves single-endpoint display while surfacing
-                // multi-destination fan-outs that would otherwise appear as anonymous sends in traces.
-                // Whitespace entries are filtered before joining so a stray ""/null slot cannot leak into
-                // traces as "queue-a,,queue-b"; if filtering empties the list, fall through to anonymous.
-                string? destination;
-                if (!string.IsNullOrWhiteSpace(eventArgs.EndPoint))
-                {
-                    destination = eventArgs.EndPoint;
-                }
-                else if (eventArgs.EndPoints.Count > 0)
-                {
-                    var nonEmpty = eventArgs.EndPoints.Where(e => !string.IsNullOrWhiteSpace(e));
-                    var joined = string.Join(",", nonEmpty);
-                    destination = joined.Length > 0 ? joined : null;
-                }
-                else
-                {
-                    destination = null;
-                }
+                // SendEventArgs carries the per-delivery endpoint only — for multi-endpoint
+                // fan-out (SendToManyAsync), each delivery raises its own SendEventArgs and
+                // therefore its own span. The fan-out grouping is recoverable via the message
+                // CorrelationId, which stays stable across the deliveries.
+                var destination = string.IsNullOrWhiteSpace(eventArgs.EndPoint) ? null : eventArgs.EndPoint;
 
-                activity.DisplayName = Truncate((destination ?? "anonymous") + " send", options.MaxTagValueLength);
-
+                // Truncate the destination first, then append the suffix. Concatenating first
+                // and truncating second would chop off " send" when the endpoint is near the
+                // MaxTagValueLength cap — losing the operation signal in the span display.
                 if (destination is not null)
                 {
-                    activity.SetTag(MessagingAttributes.MessagingDestination,
-                        Truncate(destination, options.MaxTagValueLength));
+                    var truncatedDestination = Truncate(destination, options.MaxTagValueLength);
+                    activity.DisplayName = truncatedDestination + " send";
+                    activity.SetTag(MessagingAttributes.MessagingDestination, truncatedDestination);
                 }
                 else
                 {
-                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, "true");
+                    activity.DisplayName = "anonymous send";
+                    activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, true);
                 }
 
                 if (eventArgs.Message is null)

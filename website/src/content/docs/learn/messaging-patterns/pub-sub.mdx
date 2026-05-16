@@ -57,7 +57,7 @@ Console.WriteLine("Published order-100");
 
 Notice what is missing:
 
-- **No destination.** `PublishAsync` doesn't take a queue name or an `EndPoints` list. Fan-out is RabbitMQ's job, not yours.
+- **No destination.** `PublishAsync` doesn't take a queue name or a list of endpoints. Fan-out is RabbitMQ's job, not yours.
 - **No subscriber list.** The publisher has no idea how many subscribers are running or where they are. It publishes into an exchange and walks away.
 
 That is the entire point. A new subscriber can come online tomorrow without any change to the publisher.
@@ -108,7 +108,7 @@ A billing subscriber is structurally identical — different queue name (`billin
 
 ## How the fan-out works
 
-Under the hood, ServiceConnect publishes through a RabbitMQ **topic exchange** named after the message type's full name. When a bus starts consuming and has a handler for `OrderPlaced`, it creates a binding from that exchange to its own queue. Every published message is copied to every bound queue.
+Under the hood, ServiceConnect publishes through a RabbitMQ **fanout exchange** named after the message type's full name. When a bus starts consuming and has a handler for `OrderPlaced`, it creates a binding from that exchange to its own queue. Every published message is copied to every bound queue.
 
 ```
                               ┌─────────────┐

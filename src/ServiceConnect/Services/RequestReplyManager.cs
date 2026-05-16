@@ -8,11 +8,20 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Tracks pending request-reply exchanges and correlates incoming replies with the originating request.
 /// </summary>
-public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline) : IRequestReplyManager, IReplyStatusRequestReplyManager
+internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline) : IRequestReplyManager, IReplyStatusRequestReplyManager, IAsyncDisposable
 {
+    // Hard cap on in-flight requests to prevent unbounded memory growth from
+    // RequestOptions.Timeout = Timeout.Infinite (or a hot loop of unawaited requests).
+    // Each RequestState pins a Timer, CancellationTokenSource, TaskCompletionSource, and
+    // the cancellation-registration closure. 10_000 is sized to cover any realistic
+    // concurrent-fan-out scenario while still bounding the worst case. Exposed as an
+    // internal const so a future BusConfiguration knob can override.
+    internal const int MaxInflightRequests = 10_000;
+
     private readonly ConcurrentDictionary<Guid, RequestState> _pendingRequests = new();
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
     private readonly ISendMessagePipeline _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
+    private int _disposed;
 
     /// <inheritdoc />
     /// <remarks>
@@ -31,15 +40,38 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfDisposed();
 
         var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
         _serializer.Serialize(message, bufferWriter);
         var messageBytes = bufferWriter.WrittenMemory;
 
+        // Capacity check BEFORE we mint the request id so a saturated manager fails fast
+        // rather than allocating and then leaking the entry. The cap protects against
+        // Timeout.Infinite callers that never wake up and against unawaited request loops.
+        if (_pendingRequests.Count >= MaxInflightRequests)
+        {
+            throw new InvalidOperationException(
+                $"RequestReplyManager has reached its in-flight request cap ({MaxInflightRequests}). " +
+                "This usually indicates callers with Timeout.Infinite that never complete, or a hot loop " +
+                "of unawaited SendRequestAsync calls. Lower the per-request Timeout, await prior requests, " +
+                "or investigate why responders are not replying.");
+        }
+
         var messageId = Guid.NewGuid();
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
         var state = new RequestState(tcs, 1, typeof(TReply));
         _pendingRequests[messageId] = state;
+        // Re-check after registration: DisposeAsync iterates _pendingRequests once and
+        // exits. If dispose started AFTER our ThrowIfDisposed check but BEFORE the line
+        // above, the iteration has already passed and our entry is stranded — the caller
+        // would await tcs.Task forever (especially under Timeout.Infinite). Fault our own
+        // entry to preserve "every pending TCS faults on dispose" symmetry.
+        if (Volatile.Read(ref _disposed) != 0 && _pendingRequests.TryRemove(messageId, out _))
+        {
+            throw new ObjectDisposedException(nameof(RequestReplyManager),
+                "Bus was disposed while sending a request.");
+        }
 
         headers[HeaderKeys.RequestMessageId] = messageId.ToString();
 
@@ -177,16 +209,30 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfDisposed();
 
         var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
         _serializer.Serialize(message, bufferWriter);
         var messageBytes = bufferWriter.WrittenMemory;
 
+        if (_pendingRequests.Count >= MaxInflightRequests)
+        {
+            throw new InvalidOperationException(
+                $"RequestReplyManager has reached its in-flight request cap ({MaxInflightRequests}). " +
+                "See SendRequestAsync for guidance.");
+        }
+
         var messageId = Guid.NewGuid();
         // List<T> with explicit lock outperforms ConcurrentBag for the request/reply
         // fan-in case because we need Count to be O(1) and we're appending on the
         // reply thread with no parallel readers until completion.
-        var responses = new List<TReply>(Math.Max(0, options.ExpectedReplyCount ?? 0));
+        // Capacity is a hint, not a hard limit — clamp to InitialCapacityCap so a
+        // hostile or accidental ExpectedReplyCount=int.MaxValue cannot pre-allocate
+        // ~16 GiB up-front (caller-controlled capacity passed straight to List<T>(int)
+        // is otherwise an OOM vector). The list grows naturally past the cap if more
+        // replies actually arrive.
+        const int InitialCapacityCap = 256;
+        var responses = new List<TReply>(Math.Clamp(options.ExpectedReplyCount ?? 0, 0, InitialCapacityCap));
         int expectedCount = options.ExpectedReplyCount ?? -1;
         var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -198,6 +244,12 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
             }
         });
         _pendingRequests[messageId] = state;
+        // Post-registration dispose re-check; see SendRequestAsync for the race rationale.
+        if (Volatile.Read(ref _disposed) != 0 && _pendingRequests.TryRemove(messageId, out _))
+        {
+            throw new ObjectDisposedException(nameof(RequestReplyManager),
+                "Bus was disposed while sending a request.");
+        }
 
         headers[HeaderKeys.RequestMessageId] = messageId.ToString();
 
@@ -222,8 +274,8 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 // positive ExpectedReplyCount expects *exactly* that many replies. Under-
                 // delivery is a real timeout, not "got something". Throw RequestTimeoutException
                 // and surface the partials via PartialReplies so callers who want to recover
-                // them can. Pre-v8 this path silently called TrySetResult(null!) and the
-                // caller saw the partial list with no indication anything went wrong.
+                // them can — a silent TrySetResult here would hand the caller a partial list
+                // with no indication anything went wrong.
                 if (expectedCount > 0 && !state.HasReceivedAllExpectedReplies)
                 {
                     object[] partials;
@@ -348,10 +400,18 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
         ValidateOptions(options);
 
         cancellationToken.ThrowIfCancellationRequested();
+        ThrowIfDisposed();
 
         var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
         _serializer.Serialize(message, bufferWriter);
         var messageBytes = bufferWriter.WrittenMemory;
+
+        if (_pendingRequests.Count >= MaxInflightRequests)
+        {
+            throw new InvalidOperationException(
+                $"RequestReplyManager has reached its in-flight request cap ({MaxInflightRequests}). " +
+                "See SendRequestAsync for guidance.");
+        }
 
         var messageId = Guid.NewGuid();
         var expectedCount = options.ExpectedReplyCount ?? -1;
@@ -360,6 +420,12 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
 
         var state = new RequestState(tcs, expectedCount, typeof(TReply), reply => onReply((TReply)reply));
         _pendingRequests[messageId] = state;
+        // Post-registration dispose re-check; see SendRequestAsync for the race rationale.
+        if (Volatile.Read(ref _disposed) != 0 && _pendingRequests.TryRemove(messageId, out _))
+        {
+            throw new ObjectDisposedException(nameof(RequestReplyManager),
+                "Bus was disposed while publishing a request.");
+        }
 
         headers[HeaderKeys.RequestMessageId] = messageId.ToString();
 
@@ -541,6 +607,42 @@ public sealed class RequestReplyManager(IMessageSerializer serializer, ISendMess
                 $"Use RequestOptions.Default or new RequestOptions() to get the default {RequestOptions.DefaultTimeoutMs}ms timeout, " +
                 $"or set Timeout = Timeout.Infinite to wait indefinitely.");
         }
+    }
+
+    /// <summary>
+    /// Faults any pending request TCSes with <see cref="ObjectDisposedException"/> so callers
+    /// awaiting a reply (especially those with <see cref="System.Threading.Timeout.Infinite"/>
+    /// timeouts) wake up promptly on app shutdown rather than waiting for GC. Subsequent reply
+    /// callbacks for those request ids no-op against the disposed flag.
+    /// </summary>
+    private void ThrowIfDisposed()
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            throw new ObjectDisposedException(nameof(RequestReplyManager));
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return ValueTask.CompletedTask;
+        }
+
+        // Snapshot the entries first — TryRemove + TrySetException happens for each, then we
+        // clear the dictionary at the end. Using Tcs.TrySetException is safe (idempotent) even
+        // if a near-simultaneous reply / cancellation / timeout completes the TCS first.
+        foreach (var pair in _pendingRequests)
+        {
+            if (_pendingRequests.TryRemove(pair.Key, out var state))
+            {
+                state.Close(() => state.Tcs.TrySetException(
+                    new ObjectDisposedException(nameof(RequestReplyManager),
+                        "Bus was disposed while a request was in flight.")));
+            }
+        }
+        return ValueTask.CompletedTask;
     }
 
     private sealed class RequestState(TaskCompletionSource<object> tcs, int expectedCount, Type replyType, Action<object>? onReply = null)

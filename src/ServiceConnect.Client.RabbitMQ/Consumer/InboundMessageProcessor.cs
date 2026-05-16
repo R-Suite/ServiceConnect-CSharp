@@ -49,13 +49,22 @@ internal sealed class InboundMessageProcessor(
     /// false if the message must be nacked back to the broker (shutdown grace expired before
     /// the failure-routing publish completed).
     /// </summary>
-    public async Task<bool> ProcessAsync(IChannel publishChannel, BasicDeliverEventArgs args, CancellationToken cancellationToken)
+    /// <param name="publishChannel">The dedicated publish channel for retry/audit/error republishes.</param>
+    /// <param name="args">The raw RabbitMQ delivery event args.</param>
+    /// <param name="copiedHeaders">
+    /// The pre-built inbound headers dict. When supplied (the production path), the host has
+    /// already eagerly-decoded byte[] values and stamped pre-size headroom; this method
+    /// stamps additional framework headers (Redelivered, TimeReceived, DestinationAddress)
+    /// in-place. When <see langword="null"/> (unit tests), the dict is built locally.
+    /// </param>
+    /// <param name="cancellationToken">The per-delivery cancellation token.</param>
+    public async Task<bool> ProcessAsync(IChannel publishChannel, BasicDeliverEventArgs args, Dictionary<string, object>? copiedHeaders, CancellationToken cancellationToken)
     {
         ConsumeEventResult result;
         // Pre-size to incoming header count plus 3 consumer-added entries to avoid rehashes.
         // Ordinal comparer matches AMQP's case-sensitive wire contract: a sender that writes
         // "X-Trace-Id" reads it back exactly. User filters / middleware look up by string literal.
-        var headers = CopyInboundHeadersWithEagerDecode(args);
+        var headers = copiedHeaders ?? CopyInboundHeadersWithEagerDecode(args);
 
         if (args.Redelivered)
         {
@@ -94,6 +103,16 @@ internal sealed class InboundMessageProcessor(
 
             HeaderHelpers.SetHeader(headers, HeaderKeys.TimeProcessed, FormatTimestamp(_timeProvider.GetUtcNow().UtcDateTime));
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cooperative cancellation by a well-behaved handler that observed the supplied CT
+            // (e.g. shutdown grace cancelled _deliveryCts before the drain wait) is NOT a
+            // retry-worthy handler failure. Propagate so the outer dispatch leaves the message
+            // unacked for broker redelivery — without this filter the broad catch below would
+            // burn a retry slot, increment the retry counter, and after max retries route the
+            // message to the error exchange even though the handler never rejected it.
+            throw;
+        }
         catch (Exception ex)
         {
             result = new ConsumeEventResult { Exception = ex, Success = false };
@@ -108,82 +127,19 @@ internal sealed class InboundMessageProcessor(
                 return false;
             }
 
-            try
+            // Terminal failure (permanently malformed payload — JsonException, NotSupportedException
+            // from the dispatcher's deserialise path) bypasses the retry queue and goes straight to
+            // the error exchange. Retrying a poison payload produces the identical failure on every
+            // attempt; the retry budget would be burned for no benefit and amplify load 3× on
+            // pathological inputs. Handler-thrown exceptions stay on the retry path — those reflect
+            // downstream dependencies that may recover.
+            if (result.TerminalFailure)
             {
-                await _retryHandler.HandleFailureAsync(
-                    publishChannel,
-                    _retryQueueName,
-                    args,
-                    headers,
-                    result.Exception,
-                    shutdownToken).ConfigureAwait(false);
+                await HandleTerminalFailureDirectAsync(publishChannel, args, headers, result.Exception, shutdownToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+            else
             {
-                // Shutdown grace window expired mid-publish — propagate so the outer finally
-                // leaves the message unacked for broker redelivery after reconnection.
-                throw;
-            }
-            catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
-            {
-                // Transport-class failure — rethrow so the outer finally nacks-with-requeue
-                // and the broker redelivers after reconnect.
-                // See learn/operations/cancellation: transient transport failures must NOT
-                // ack-and-drop messages.
-                throw;
-            }
-            catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
-            {
-                // Transport-class failure — rethrow so the outer finally nacks-with-requeue
-                // and the broker redelivers after reconnect.
-                throw;
-            }
-            catch (Exception retryEx)
-            {
-                // Retry-queue publish failed with a non-transport exception (typically
-                // PublishException on mandatory:true unroutable, or a topology drift). Try
-                // the error exchange as a fallback before giving up — the retry queue may
-                // be misconfigured/deleted but the error exchange is independent topology,
-                // so a recoverable destination is more useful than ack-and-drop. Only if
-                // the fallback ALSO fails do we surface the drop counter and ack to break
-                // the loop; that final ack-and-drop is the last-resort to prevent unbounded
-                // redelivery on a permanently-broken topology.
-                _logger.LogError(retryEx,
-                    "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; attempting error-exchange fallback before drop.",
-                    args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
-                try
-                {
-                    await _retryHandler.HandleTerminalFailureAsync(
-                        publishChannel,
-                        args,
-                        headers,
-                        retryEx,
-                        shutdownToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
-                {
-                    throw;
-                }
-                catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
-                {
-                    throw;
-                }
-                catch (Exception fallbackEx)
-                {
-                    _logger.LogError(fallbackEx,
-                        "Error-exchange fallback also failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
-                        args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
-                    ServiceConnectMeter.AddRetryDrop(new TagList
-                    {
-                        { "messaging.system", "rabbitmq" },
-                        { "messaging.destination.name", _queueConfiguration.QueueName },
-                        { "error.type", ExceptionTypeMapper.Map(fallbackEx) },
-                    });
-                }
+                await HandleHandlerFailureAsync(publishChannel, args, headers, result.Exception, shutdownToken).ConfigureAwait(false);
             }
         }
         else if (result.NotHandled && _deadLetterUnhandledMessages && !_errorsDisabled)
@@ -244,6 +200,125 @@ internal sealed class InboundMessageProcessor(
         }
 
         return !_shutdownTimedOut();
+    }
+
+    // Routes a permanently-malformed delivery (set via ConsumeEventResult.TerminalFailure)
+    // directly to the error exchange, bypassing the retry queue. Transport-class exceptions
+    // and shutdown-grace-expired OCE re-throw so the outer dispatch nacks-with-requeue and
+    // the broker redelivers after reconnect. Non-transport publish failures (PublishException
+    // on a missing error exchange, topology drift) are last-resort dropped with a log to
+    // prevent unbounded redelivery on a permanently-broken topology.
+    private async Task HandleTerminalFailureDirectAsync(
+        IChannel publishChannel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        Exception? terminalException,
+        CancellationToken shutdownToken)
+    {
+        try
+        {
+            await _retryHandler.HandleTerminalFailureAsync(
+                publishChannel,
+                args,
+                headers,
+                terminalException ?? new InvalidOperationException("Permanently invalid payload."),
+                shutdownToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
+        {
+            throw;
+        }
+        catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
+        {
+            throw;
+        }
+        catch (Exception terminalEx)
+        {
+            _logger.LogError(terminalEx,
+                "Terminal-failure publish for permanently-invalid payload failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
+                args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
+        }
+    }
+
+    // Extracted from ProcessAsync. Routes a handler-failed delivery through the retry queue
+    // (HandleFailureAsync); on retry-publish failure tries the error exchange as a fallback
+    // before giving up. Transport-class exceptions and shutdown-grace-expired OCE re-throw so
+    // the outer dispatch nacks-with-requeue and the broker redelivers after reconnect.
+    // Non-transport publish failures (typically PublishException on mandatory:true unroutable,
+    // or topology drift) are last-resort dropped with a counter to prevent unbounded
+    // redelivery on a permanently-broken topology.
+    private async Task HandleHandlerFailureAsync(
+        IChannel publishChannel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        Exception? handlerException,
+        CancellationToken shutdownToken)
+    {
+        try
+        {
+            await _retryHandler.HandleFailureAsync(
+                publishChannel,
+                _retryQueueName,
+                args,
+                headers,
+                handlerException,
+                shutdownToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
+        {
+            throw;
+        }
+        catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
+        {
+            throw;
+        }
+        catch (Exception retryEx)
+        {
+            _logger.LogError(retryEx,
+                "Retry publish failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; attempting error-exchange fallback before drop.",
+                args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
+            try
+            {
+                await _retryHandler.HandleTerminalFailureAsync(
+                    publishChannel,
+                    args,
+                    headers,
+                    retryEx,
+                    shutdownToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (global::RabbitMQ.Client.Exceptions.AlreadyClosedException)
+            {
+                throw;
+            }
+            catch (global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
+            {
+                throw;
+            }
+            catch (Exception fallbackEx)
+            {
+                _logger.LogError(fallbackEx,
+                    "Error-exchange fallback also failed for MessageId {MessageId} (DeliveryTag {DeliveryTag}) on queue {Queue}; dropping to prevent unbounded redelivery loop.",
+                    args.BasicProperties.MessageId, args.DeliveryTag, _queueConfiguration.QueueName);
+                ServiceConnectMeter.AddRetryDrop(new TagList
+                {
+                    { "messaging.system", "rabbitmq" },
+                    { "messaging.destination.name", _queueConfiguration.QueueName },
+                    { "error.type", ExceptionTypeMapper.Map(fallbackEx) },
+                });
+            }
+        }
     }
 
     // Extracted from ProcessAsync to keep the dispatch method under the analyzer's

@@ -30,7 +30,7 @@ public class ProducerDisposeConcurrencyE2ETests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>([]);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>([]);
 
         services.AddServiceConnect(builder =>
         {

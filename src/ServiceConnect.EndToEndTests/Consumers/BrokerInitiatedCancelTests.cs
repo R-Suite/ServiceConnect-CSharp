@@ -53,7 +53,7 @@ public class BrokerInitiatedCancelTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging(lb => lb.AddProvider(capturingProvider).SetMinimumLevel(LogLevel.Debug));
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddTransient<IMessageHandler<TestMessage>>(_ =>
             new CallbackHandler<TestMessage>(_ => { /* no-op consumer */ }));
 

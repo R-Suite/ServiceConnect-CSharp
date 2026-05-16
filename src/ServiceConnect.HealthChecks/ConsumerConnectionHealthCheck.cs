@@ -86,7 +86,12 @@ public sealed class ConsumerConnectionHealthCheck : IHealthCheck
 
         if (_consumer.IsConnected)
         {
-            Volatile.Write(ref _recoveryState.LastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
+            // Interlocked.Exchange (not Volatile.Write) because long writes are not atomic
+            // on 32-bit runtimes (.NET Framework x86, some embedded ARM32). A torn 8-byte
+            // write could materialise a half-written ticks value outside DateTimeOffset's
+            // legal range, which the reader's ctor below would AOORE on. Matches the
+            // BusConsumingHealthCheck pattern.
+            Interlocked.Exchange(ref _recoveryState.LastHealthyTicks, _timeProvider.GetUtcNow().UtcTicks);
             return Task.FromResult(HealthCheckResult.Healthy("Consumer connection is open."));
         }
 
@@ -100,7 +105,10 @@ public sealed class ConsumerConnectionHealthCheck : IHealthCheck
                 "Consumer connection is closed (stopped or disposed)."));
         }
 
-        var lastHealthy = Volatile.Read(ref _recoveryState.LastHealthyTicks);
+        // Interlocked.Read pairs with Interlocked.Exchange above — 8-byte atomic on every
+        // architecture, including 32-bit. Volatile.Read on a long does NOT guarantee an
+        // atomic read on 32-bit.
+        var lastHealthy = Interlocked.Read(ref _recoveryState.LastHealthyTicks);
         if (lastHealthy != 0 && _recoveryGraceWindow > TimeSpan.Zero)
         {
             var age = _timeProvider.GetUtcNow() - new DateTimeOffset(lastHealthy, TimeSpan.Zero);

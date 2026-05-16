@@ -32,7 +32,7 @@ public class ContentRoutingTests(MessagingFixture fixture)
         services.AddLogging();
 
         // Register handler references before AddServiceConnect so TryAddSingleton keeps this list
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 
         // Register each handler backed by its own callback
         services.AddTransient<IMessageHandler<TestMessage>>(_ =>

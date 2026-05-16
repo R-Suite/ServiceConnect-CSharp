@@ -3,7 +3,7 @@ namespace ServiceConnect.Persistence.InMemory;
 /// <summary>
 /// Tracks the current expiry window for a sliding-expiration cache entry.
 /// </summary>
-public sealed class SlidingDetails
+internal sealed class SlidingDetails
 {
     private readonly TimeProvider _timeProvider;
 

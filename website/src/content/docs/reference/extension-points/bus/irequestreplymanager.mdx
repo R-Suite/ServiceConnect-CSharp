@@ -93,9 +93,9 @@ Sends a typed request and waits for exactly one reply. The method generates a co
 
 ### `SendRequestMultiAsync<TRequest, TReply>`
 
-Sends a serialized request and collects multiple replies. Works identically to `SendRequestAsync` for the outgoing side. On the incoming side, each `ProcessReply` call appends to an internal list. The method returns when either `RequestOptions.ExpectedReplyCount` replies have arrived, all `RequestOptions.EndPoints` have replied, or the timeout fires — whichever comes first. On timeout the replies collected so far are returned rather than throwing.
+Sends a serialized request and collects multiple replies. Works identically to `SendRequestAsync` for the outgoing side; fan-out to multiple responders comes from registering multiple queues against the request type via `IQueueConfiguration.AddQueueMapping`. On the incoming side, each `ProcessReply` call appends to an internal list. With `RequestOptions.ExpectedReplyCount` set to a positive value, the call returns as soon as that many replies have arrived; if fewer arrive before the timeout, a `RequestTimeoutException` is thrown with the partials available on `PartialReplies`. With `ExpectedReplyCount` left unset (or set to zero/negative), the call waits the full timeout and returns every reply received.
 
-**Parameters** — same shape as `SendRequestAsync`. `options.ExpectedReplyCount` or `options.EndPoints.Count` drives the reply-count expectation.
+**Parameters** — same shape as `SendRequestAsync`. `options.ExpectedReplyCount` drives the reply-count expectation.
 
 **Returns** the collected replies as `IList<TReply>`.
 
@@ -177,5 +177,5 @@ builder.AddRegistration(svc =>
 ## See also
 
 - [`IBus`](../../bus/ibus/) — the runtime bus surface; `SendRequestAsync`, `SendRequestMultiAsync`, and `PublishRequestAsync` delegate to this interface
-- [Message options](../../messages/options/) — `RequestOptions` including `Timeout`, `EndPoint`, `EndPoints`, and `ExpectedReplyCount`
+- [Message options](../../messages/options/) — `RequestOptions` including `Timeout`, `EndPoint`, and `ExpectedReplyCount`
 - [Request/reply pattern](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/) — the messaging pattern this interface implements

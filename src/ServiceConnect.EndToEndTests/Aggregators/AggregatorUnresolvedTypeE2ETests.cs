@@ -30,7 +30,7 @@ public class AggregatorUnresolvedTypeE2ETests(PersistenceFixture fixture)
     public async Task Aggregator_UnresolvableDocumentInCollection_ResolvableBatchDeliveredAndUnresolvedSurvives()
     {
         // Arrange
-        var executed = new TaskCompletionSource<IList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var executed = new TaskCompletionSource<IReadOnlyList<TestMessage>>(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("agg-unresolved");
         var dbName = _fixture.GetUniqueDatabaseName("agg-unresolved");
         const string collectionName = "Aggregator";
@@ -68,7 +68,7 @@ public class AggregatorUnresolvedTypeE2ETests(PersistenceFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton(executed);
         services.AddTransient<Aggregator<TestMessage>, UnresolvedBatchAggregator>();
 
@@ -135,13 +135,13 @@ public class AggregatorUnresolvedTypeE2ETests(PersistenceFixture fixture)
     }
 }
 
-file class UnresolvedBatchAggregator(TaskCompletionSource<IList<TestMessage>> tcs) : Aggregator<TestMessage>
+file class UnresolvedBatchAggregator(TaskCompletionSource<IReadOnlyList<TestMessage>> tcs) : Aggregator<TestMessage>
 {
-    private readonly TaskCompletionSource<IList<TestMessage>> _tcs = tcs;
+    private readonly TaskCompletionSource<IReadOnlyList<TestMessage>> _tcs = tcs;
 
     public override int BatchSize() => 3;
     public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
-    public override Task ExecuteAsync(IList<TestMessage> messages, CancellationToken cancellationToken = default)
+    public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default)
     {
         _tcs.TrySetResult(messages);
         return Task.CompletedTask;

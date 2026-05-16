@@ -6,19 +6,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Examples are never packaged. A repo-root `dotnet pack` without this guard
+         would emit class-library packages for every Contracts project under the
+         examples tree, which we never want to publish. -->
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="$(MSBuildThisFileDirectory)appsettings.json"
              Link="appsettings.json"
              CopyToOutputDirectory="PreserveNewest" />
-  </ItemGroup>
-  <!-- Suppress audit advisories for transitive vulnerabilities that have no fix at
-       MongoDB.Driver 2.23.1's pinned versions. The library code never feeds untrusted
-       input to these compression libraries; the suppression is scoped to the specific
-       advisories rather than disabling NuGetAudit globally. -->
-  <ItemGroup>
-    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-6c8g-7p36-r338" /> <!-- SharpCompress 0.30.1 moderate -->
-    <NuGetAuditSuppress Include="https://github.com/advisories/GHSA-pggp-6c3x-2xmx" /> <!-- Snappier 1.0.0 high -->
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0">

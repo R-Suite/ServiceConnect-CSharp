@@ -51,35 +51,35 @@ Gets the transport headers associated with the consumed message. The getter lazi
 
 ## `ConsumeEventResult`
 
-Represents the outcome of invoking a consumer callback.
+Represents the outcome of invoking a consumer callback. Framework-produced and consumer-observed only; the properties are `init`-only and have no defined meaning when mutated post-construction.
 
 ### `Success`
 
 ```csharp
-public bool Success { get; set; }
+public bool Success { get; init; }
 ```
 
-Gets or sets whether the consumer callback completed successfully. A `false` value with a populated `Exception` is the failure shape.
+Whether the consumer callback completed successfully. A `false` value with a populated `Exception` is the failure shape.
 
 ---
 
 ### `NotHandled`
 
 ```csharp
-public bool NotHandled { get; set; }
+public bool NotHandled { get; init; }
 ```
 
-Gets or sets whether the dispatcher ran to completion but no processor claimed the message. Distinct from `Success`: a handler-less message is not a failure, but callers may want to route it to the error exchange rather than silently acking — see [`IBusConfiguration.DeadLetterUnhandledMessages`](../../bus/ibusconfiguration/#deadletterunhandledmessages).
+Whether the dispatcher ran to completion but no processor claimed the message. Distinct from `Success`: a handler-less message is not a failure, but callers may want to route it to the error exchange rather than silently acking — see [`IBusConfiguration.DeadLetterUnhandledMessages`](../../bus/ibusconfiguration/#deadletterunhandledmessages).
 
 ---
 
 ### `Exception`
 
 ```csharp
-public Exception? Exception { get; set; }
+public Exception? Exception { get; init; }
 ```
 
-Gets or sets the exception raised by the consumer, if any. Null on success.
+The exception raised by the consumer, if any. Null on success.
 
 ---
 
@@ -111,19 +111,29 @@ Gets the outgoing transport headers. Unlike the consume side, outgoing headers a
 
 `PublishEventArgs : OutgoingEventArgs` — outgoing telemetry payload for published messages.
 
+### `Exchange`
+
+```csharp
+public string Exchange { get; init; } = string.Empty;
+```
+
+The transport-side exchange name the message was published to. Empty when the publish was anonymous (e.g. a routing-key-only publish through the default exchange). Telemetry uses this as the `messaging.destination.name` span attribute.
+
+---
+
 ### `RoutingKey`
 
 ```csharp
 public string RoutingKey { get; init; } = string.Empty;
 ```
 
-Gets the routing key used when publishing the message. For broadcast publishes without a key override the value is empty.
+The routing key used when publishing the message. For broadcast publishes without a key override the value is empty.
 
 ---
 
 ## `SendEventArgs`
 
-`SendEventArgs : OutgoingEventArgs` — outgoing telemetry payload for point-to-point sends.
+`SendEventArgs : OutgoingEventArgs` — outgoing telemetry payload for point-to-point sends. Multi-endpoint fan-out (`IBus.SendToManyAsync`) raises one `SendEventArgs` per destination — each with its own per-delivery `EndPoint`. Subscribers that need to correlate fan-out deliveries should match on the message `CorrelationId`, which stays stable across the per-endpoint events.
 
 ### `EndPoint`
 
@@ -131,17 +141,7 @@ Gets the routing key used when publishing the message. For broadcast publishes w
 public string EndPoint { get; init; } = string.Empty;
 ```
 
-Gets the primary destination endpoint. For a single-target send this is the only endpoint; for a fan-out send it is the first in the list.
-
----
-
-### `EndPoints`
-
-```csharp
-public IReadOnlyList<string> EndPoints { get; init; } = [];
-```
-
-Gets the complete set of destination endpoints when a send targets multiple queues. Empty when the send was directed at a single endpoint.
+The destination endpoint for this delivery.
 
 ## Usage
 

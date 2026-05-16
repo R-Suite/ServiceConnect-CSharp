@@ -79,8 +79,8 @@ public class ProducerPublishTimeoutTests
         // Arrange: short timeout so the test doesn't wait long
         var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
         var channel = MakeHangingChannel();
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
@@ -142,8 +142,8 @@ public class ProducerPublishTimeoutTests
         var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
         var channel = new Mock<IChannel>();
         channel.SetupGet(c => c.IsOpen).Returns(true);
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
 
         channel.Setup(c => c.BasicPublishAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -166,8 +166,8 @@ public class ProducerPublishTimeoutTests
         var producer = CreateProducer(publishTimeout: TimeSpan.FromSeconds(30));
         var channel = new Mock<IChannel>();
         channel.SetupGet(c => c.IsOpen).Returns(true);
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
 
         using var cts = new CancellationTokenSource();
 
@@ -213,8 +213,8 @@ public class ProducerPublishTimeoutTests
         // runs OUTSIDE _publishLock) consumes the flag under _connectionSemaphore.
         var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
         var channel = MakeHangingChannel();
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
@@ -239,8 +239,8 @@ public class ProducerPublishTimeoutTests
         // messageId so operators have enough context for post-mortem correlation.
         var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
         var channel = MakeHangingChannel();
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);

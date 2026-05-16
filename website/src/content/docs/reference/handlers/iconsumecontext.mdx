@@ -70,7 +70,7 @@ Gets a cancellation token tied to the consumer loop. It fires when consumption i
 ```csharp
 Task ReplyAsync<TReply>(
     TReply message,
-    IDictionary<string, string>? headers = null,
+    ReplyOptions? options = null,
     CancellationToken cancellationToken = default)
     where TReply : Message;
 ```
@@ -79,7 +79,7 @@ Sends `message` back to the requester as a reply. The helper sets the `ResponseM
 
 **Parameters**
 - `message` — the reply payload; must derive from `Message`.
-- `headers` — optional additional string-valued headers attached to the reply envelope.
+- `options` — optional `ReplyOptions` carrying additional headers on `options.Headers`.
 - `cancellationToken` — cancels the send before the broker acknowledges.
 
 **Remarks.** The method only correlates cleanly when it is called from inside the handler that is consuming the originating request — the headers on the incoming message supply the `ResponseMessageId` value.

@@ -141,9 +141,12 @@ public class MongoDbAggregatorPersistorBsonExceptionTests
     {
         var (persistor, mockCollection, _) = CreateMockedPersistor();
 
+        // RemoveDataAsync now uses FindOneAndDeleteAsync (returns the deleted doc so the
+        // lease state can be inspected). Mock that path instead.
         mockCollection
-            .Setup(c => c.DeleteOneAsync(
+            .Setup(c => c.FindOneAndDeleteAsync(
                 It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
+                It.IsAny<FindOneAndDeleteOptions<MongoDbAggregatorPersistor.AggregatorDocument, MongoDbAggregatorPersistor.AggregatorDocument>>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new BsonSerializationException("bson boom"));
 

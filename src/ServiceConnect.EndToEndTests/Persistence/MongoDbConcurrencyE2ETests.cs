@@ -173,7 +173,7 @@ public class MongoDbConcurrencyE2ETests(PersistenceFixture fixture)
 
         var final = await finder.FindDataAsync<TestData>(mapper, new Message(corrId));
         Assert.NotNull(final);
-        Assert.Equal(2, ((MongoDbData<TestData>)final!).Version);
+        Assert.Equal(2L, ((MongoDbData<TestData>)final!).Version);
     }
 
     [Fact]

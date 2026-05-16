@@ -27,12 +27,32 @@ Returns `true` when the consumer is connected to the broker and able to receive 
 
 ---
 
+### `IsCancelledByBroker`
+
+```csharp
+bool IsCancelledByBroker { get; }
+```
+
+Returns `true` when the broker has explicitly cancelled this consumer — for example, the queue was deleted, the queue policy expired, or a mirror was promoted. Distinct from a transient disconnection: a broker-cancellation is terminal until the consumer is restarted. `IBus.IsConsuming` returns `false` whenever this is `true` so health checks surface the unhealthy state.
+
+---
+
+### `IsStopped`
+
+```csharp
+bool IsStopped => false;
+```
+
+Default-interface method (returns `false` if not overridden). Distinguishes "intentional shutdown" from "transient disconnect": once `StopConsumingAsync` or `DisposeAsync` has run, `IsStopped` flips `true` permanently — there is no reconnect to wait for. `ConsumerConnectionHealthCheck` consults this to bypass the recovery-grace window on intentional shutdown and report Unhealthy immediately.
+
+---
+
 ### `StartConsumingAsync`
 
 ```csharp
 Task StartConsumingAsync(
     string queueName,
-    IList<string> messageTypes,
+    IReadOnlyList<string> messageTypes,
     ConsumerEventHandler eventHandler,
     CancellationToken cancellationToken = default);
 ```
@@ -45,6 +65,18 @@ Subscribes to `queueName` and begins delivering messages to `eventHandler`. The 
 - `messageTypes` — the allow-list of wire type names the consumer should receive. Transports that support server-side filtering (Azure Service Bus subscription filters, Kafka topic-per-type routing) should push this filter to the broker. Transports that do not support server-side filtering must filter client-side: discard deliveries whose type header is not in this list.
 - `eventHandler` — the `ConsumerEventHandler` delegate that the transport calls for each delivery. See [`ConsumerEventHandler`](#consumereventhandler) below.
 - `cancellationToken` — signals that the consumer should stop receiving new messages and exit the consume loop cleanly.
+
+---
+
+### `StopConsumingAsync`
+
+```csharp
+Task StopConsumingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+```
+
+Default-interface method (no-op by default). Issues a *graceful* stop: instructs the broker to stop delivering messages to this consumer and drains any in-flight handler invocations. Does NOT tear down the underlying channel/connection — that happens on `IAsyncDisposable.DisposeAsync`. Idempotent.
+
+The default no-op exists so existing third-party `IConsumer` implementations stay source-compatible. Custom transports that want graceful shutdown semantics should override this; without an override, `Bus.StopConsumingAsync` only flips the consuming flag and the broker keeps delivering until DI disposal.
 
 ---
 
@@ -76,13 +108,13 @@ The callback the transport invokes for every delivered message.
 ```csharp
 public sealed class ConsumeEventResult
 {
-    public bool Success { get; set; }
-    public bool NotHandled { get; set; }
-    public Exception? Exception { get; set; }
+    public bool Success { get; init; }
+    public bool NotHandled { get; init; }
+    public Exception? Exception { get; init; }
 }
 ```
 
-Returned by the `ConsumerEventHandler` to communicate the processing outcome back to the transport.
+Returned by the `ConsumerEventHandler` to communicate the processing outcome back to the transport. The properties are `init`-only — construct via object initialiser at the point of return; the type is framework-produced and consumer-observed only.
 
 - `Success = true` — the message was processed; the transport should acknowledge it to the broker.
 - `Success = false` — processing failed; the transport should nack, requeue, or move the message to the dead-letter destination according to its policy.
@@ -308,5 +340,4 @@ When `OrderService` starts, the framework calls `StartConsumingAsync` with the q
 ## See also
 
 - [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) — how the consumer fits into the message pipeline
-- [`IServiceConnectConnection`](./iserviceconnectconnection/) — RabbitMQ-specific connection abstraction
 - [`IProducer`](./iproducer/) — the outbound counterpart

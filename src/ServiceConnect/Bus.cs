@@ -1,7 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using ServiceConnect.Diagnostics;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
 
@@ -11,7 +13,7 @@ namespace ServiceConnect;
 /// Default <see cref="IBus"/> implementation that coordinates serialization, filtering,
 /// transport dispatch, request-reply tracking, and message consumption.
 /// </summary>
-public sealed class Bus : IBus
+internal sealed class Bus : IBus
 {
     private readonly IMessageSerializer _serializer;
     private readonly IFilterPipeline _filterPipeline;
@@ -20,7 +22,7 @@ public sealed class Bus : IBus
     private readonly ILogger<Bus> _logger;
     private readonly IQueueConfiguration _queueConfig;
     private readonly IMessageDispatcher _dispatcher;
-    private readonly IList<HandlerReference> _handlerReferences;
+    private readonly IReadOnlyList<HandlerReference> _handlerReferences;
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
     private readonly ITimeoutStore? _timeoutStore;
@@ -28,6 +30,7 @@ public sealed class Bus : IBus
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly IBusConfiguration _busConfig;
+    private readonly TimeProvider _timeProvider;
     private readonly bool _hasOutgoingFilters;
 #if NET9_0_OR_GREATER
     private readonly System.Threading.Lock _stateLock = new();
@@ -49,7 +52,7 @@ public sealed class Bus : IBus
         ILogger<Bus> logger,
         IQueueConfiguration queueConfig,
         IMessageDispatcher dispatcher,
-        IList<HandlerReference> handlerReferences,
+        IReadOnlyList<HandlerReference> handlerReferences,
         IPipelineConfiguration pipelineConfig,
         IServiceScopeFactory scopeFactory,
         ConsumeScopeAccessor scopeAccessor,
@@ -57,7 +60,8 @@ public sealed class Bus : IBus
         IProducer? producer = null,
         ITimeoutStore? timeoutStore = null,
         ConsumeContextAccessor? consumeContextAccessor = null,
-        IBusConfiguration? busConfig = null)
+        IBusConfiguration? busConfig = null,
+        TimeProvider? timeProvider = null)
     {
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -82,6 +86,11 @@ public sealed class Bus : IBus
         // busConfig is optional for test call sites; production always supplies it via ServiceCollectionExtensions.
         // When absent, fall back to the standard 30-second dispose timeout so the safety bound still applies.
         _busConfig = busConfig ?? new Configuration.BusConfiguration();
+        // TimeProvider is optional so test call sites can construct a Bus without DI; production
+        // wiring threads sp.GetService<TimeProvider>() through. RequestTimeoutAsync uses this so
+        // FakeTimeProvider-driven tests of process-manager scenarios match the wall-clock
+        // semantics of the rest of the time-dependent surface (timeout store, header timestamps).
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -114,6 +123,7 @@ public sealed class Bus : IBus
     public async Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
         _serializer.Serialize(message, bufferWriter);
@@ -122,7 +132,7 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, options?.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), options?.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 return;
@@ -140,6 +150,18 @@ public sealed class Bus : IBus
             headers[HeaderKeys.RoutingKey] = routingKey;
         }
 
+        // Resolve the effective routing key: caller-supplied options take precedence, but
+        // an outgoing IFilter that wrote HeaderKeys.RoutingKey into the envelope (the
+        // pre-extract path) should also reach the AMQP basic.publish routing-key slot.
+        // Without this read-back, filter-mutated routing keys are stamped onto the wire
+        // headers but the producer's BasicPublishAsync still passes empty-string for
+        // routing-key, so topic-exchange dispatch is silently dropped.
+        string? effectiveRoutingKey = options?.RoutingKey;
+        if (effectiveRoutingKey is null && headers.TryGetValue(HeaderKeys.RoutingKey, out var headerRoutingKey) && !string.IsNullOrEmpty(headerRoutingKey))
+        {
+            effectiveRoutingKey = headerRoutingKey;
+        }
+
         var context = new SendContext
         {
             Message = message,
@@ -147,7 +169,7 @@ public sealed class Bus : IBus
             MessageBytes = messageBytes,
             Headers = headers,
             EndPoint = null,
-            RoutingKey = options?.RoutingKey,
+            RoutingKey = effectiveRoutingKey,
             Operation = SendOperation.Publish,
         };
         await _sendPipeline.ExecutePublishMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
@@ -157,6 +179,7 @@ public sealed class Bus : IBus
     public async Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
 
         var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
@@ -166,7 +189,7 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, options?.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), options?.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 return;
@@ -196,6 +219,7 @@ public sealed class Bus : IBus
     public async Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         ArgumentNullException.ThrowIfNull(endPoints);
         if (endPoints.Count == 0)
@@ -210,7 +234,7 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, options?.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), options?.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 return;
@@ -246,18 +270,42 @@ public sealed class Bus : IBus
             {
                 await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
             }
-            catch (OperationCanceledException oce)
+            catch (OperationCanceledException oce) when (cancellationToken.IsCancellationRequested)
             {
-                // Cancellation mid-fan-out must surface the OCE (callers expect to detect cancellation),
-                // but any failures already accumulated for prior endpoints would otherwise be silently
-                // dropped. Wrap them with the OCE so the caller sees both: AggregateException's
-                // InnerExceptions enumeration starts with the OCE for OCE-shape detection upstream.
+                // Caller-initiated cancellation mid-fan-out must surface the OCE (callers expect to
+                // detect cancellation), but any failures already accumulated for prior endpoints
+                // would otherwise be silently dropped. Wrap them with the OCE so the caller sees
+                // both: AggregateException's InnerExceptions enumeration starts with the OCE for
+                // OCE-shape detection upstream.
+                //
+                // The `when (cancellationToken.IsCancellationRequested)` filter is load-bearing:
+                // an OCE thrown from a middleware-internal linked CTS (custom timeout, per-endpoint
+                // deadline) carries a different token and is NOT caller cancellation. Those fall
+                // through to the generic catch and aggregate as endpoint failures, matching the
+                // semantics of Producer.SendAsync's per-endpoint loop.
                 if (endpointFailures is { Count: > 0 })
                 {
                     var combined = new List<Exception>(endpointFailures.Count + 1) { oce };
                     combined.AddRange(endpointFailures);
                     throw new AggregateException(
                         $"SendToManyAsync of message type '{typeof(T).FullName}' was cancelled after one or more endpoint failures.",
+                        combined);
+                }
+                throw;
+            }
+            catch (ObjectDisposedException ode)
+            {
+                // The send pipeline (or one of its components) was disposed by a concurrent
+                // shutdown. Every remaining iteration would throw the same ODE; aggregating
+                // N identical ODEs hides the real cause behind a list of duplicates. Mirror
+                // Producer.SendAsync's per-endpoint loop and surface the ODE directly,
+                // wrapping any failures collected on prior endpoints so they aren't lost.
+                if (endpointFailures is { Count: > 0 })
+                {
+                    var combined = new List<Exception>(endpointFailures.Count + 1) { ode };
+                    combined.AddRange(endpointFailures);
+                    throw new AggregateException(
+                        $"SendToManyAsync of message type '{typeof(T).FullName}' aborted after dispose with one or more endpoint failures.",
                         combined);
                 }
                 throw;
@@ -281,6 +329,7 @@ public sealed class Bus : IBus
         where TRequest : Message where TReply : Message
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
         Dictionary<string, string> headers;
@@ -293,10 +342,10 @@ public sealed class Bus : IBus
             var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
             _serializer.Serialize(message, bufferWriter);
             var messageBytes = bufferWriter.WrittenMemory;
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(TRequest), requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
-                throw new InvalidOperationException("Outgoing filters blocked the request message.");
+                throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
             }
 
             headers = ExtractHeaders(envelope);
@@ -318,6 +367,7 @@ public sealed class Bus : IBus
         where TRequest : Message where TReply : Message
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
         Dictionary<string, string> headers;
@@ -328,10 +378,10 @@ public sealed class Bus : IBus
             var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
             _serializer.Serialize(message, bufferWriter);
             var messageBytes = bufferWriter.WrittenMemory;
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(TRequest), requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
-                throw new InvalidOperationException("Outgoing filters blocked the request message.");
+                throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
             }
 
             headers = ExtractHeaders(envelope);
@@ -353,6 +403,8 @@ public sealed class Bus : IBus
         where TRequest : Message where TReply : Message
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(onReply);
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
 
@@ -369,10 +421,10 @@ public sealed class Bus : IBus
             var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
             _serializer.Serialize(message, bufferWriter);
             var messageBytes = bufferWriter.WrittenMemory;
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, requestOptions.Headers);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(TRequest), requestOptions.Headers);
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
-                throw new InvalidOperationException("Outgoing filters blocked the request message.");
+                throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
             }
 
             headers = ExtractHeaders(envelope);
@@ -437,7 +489,7 @@ public sealed class Bus : IBus
 
         if (_hasOutgoingFilters)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId);
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T));
             if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
             {
                 return;
@@ -455,6 +507,24 @@ public sealed class Bus : IBus
             headers[HeaderKeys.RoutingSlip] = BuildRoutingSlip(snapshot);
         }
 
+        // Cross-service hop counter. Each RouteAsync hop — whether driven by the framework's
+        // own ForwardRoutingSlipAsync or by a handler that explicitly invokes RouteAsync —
+        // increments the inbound counter (defaulting to 0 for the first hop in a flow) and
+        // stamps it on the outbound headers. If the total exceeds MaxRoutingSlipHops, the
+        // forward is refused. Without this, a service that receives a near-end-of-slip
+        // message could publish a fresh 32-entry slip and amplify the flow indefinitely
+        // across services; the per-slip cap in HandlerProcessor only bounds one hop's slip
+        // length, not the total flow.
+        var hopsCompleted = ReadInboundHopsCompleted();
+        var outboundHops = hopsCompleted + 1;
+        if (outboundHops > _busConfig.MaxRoutingSlipHops)
+        {
+            throw new InvalidOperationException(
+                $"Total routing-slip hops ({outboundHops}) exceeds the configured MaxRoutingSlipHops cap ({_busConfig.MaxRoutingSlipHops}); " +
+                "rejecting forward to prevent cross-service amplification.");
+        }
+        headers[HeaderKeys.RoutingSlipHopsCompleted] = outboundHops.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         var context = new SendContext
         {
             Message = message,
@@ -466,6 +536,29 @@ public sealed class Bus : IBus
             Operation = SendOperation.Send,
         };
         await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
+    }
+
+    private int ReadInboundHopsCompleted()
+    {
+        var inboundHeaders = _consumeContextAccessor.CurrentHeaders;
+        if (inboundHeaders is null ||
+            !inboundHeaders.TryGetValue(HeaderKeys.RoutingSlipHopsCompleted, out var raw))
+        {
+            return 0;
+        }
+        var decoded = HeaderDecoder.Decode(raw);
+        if (string.IsNullOrEmpty(decoded) ||
+            !int.TryParse(decoded, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var hops) ||
+            hops < 0)
+        {
+            return 0;
+        }
+        // Clamp to MaxRoutingSlipHops so `hops + 1` on the caller's side never overflows.
+        // Without this, a crafted inbound header carrying int.MaxValue wraps to int.MinValue
+        // and slips past the `outboundHops > MaxRoutingSlipHops` guard — the per-hop cap
+        // is the framework's only cross-service amplification control, so silent overflow
+        // is a real bypass, not theory.
+        return Math.Min(hops, _busConfig.MaxRoutingSlipHops);
     }
 
     /// <inheritdoc />
@@ -542,8 +635,8 @@ public sealed class Bus : IBus
                 _queueConfig.QueueName, messageTypeNames.Count);
 
             // Flip _consuming = true BEFORE the await so health checks during the StartConsumingAsync
-            // window see Healthy. Pre-fix the flag was set after the await — broker dispatch could
-            // arrive in the gap, and IsConsuming returned false during a perfectly-fine startup,
+            // window see Healthy. If the flag flipped after the await, broker dispatch could arrive
+            // in the gap and IsConsuming would return false during a perfectly-fine startup,
             // surfacing as spurious health-check Unhealthy. Wrap the await in try/catch to roll
             // the flag back on failure (the broker isn't actually consuming).
             lock (_stateLock) { _consuming = true; }
@@ -604,6 +697,17 @@ public sealed class Bus : IBus
             throw new InvalidOperationException("No ITimeoutStore is registered. Add persistence via UseInMemoryPersistence() or UseMongoDbPersistence() and set BusConfiguration.EnableProcessManagerTimeouts = true.");
         }
 
+        // Empty correlation id is always a programmer error: TimeoutMessage dispatch
+        // would key on Guid.Empty and IProcessManagerFinder.FindData would never
+        // match, leaving a stray timeout row that gets retried-then-dropped. Fail
+        // fast so the bug surfaces at the offending call site, not at dispatch time.
+        if (correlationId == Guid.Empty)
+        {
+            throw new ArgumentException(
+                "Timeout correlation id must not be Guid.Empty. Pass the saga's own data.CorrelationId.",
+                nameof(correlationId));
+        }
+
         if (delay <= TimeSpan.Zero)
         {
             throw new ArgumentOutOfRangeException(nameof(delay), "Timeout delay must be positive.");
@@ -614,7 +718,7 @@ public sealed class Bus : IBus
             Id = Guid.NewGuid(),
             Destination = _queueConfig.QueueName,
             ProcessManagerId = correlationId,
-            Time = DateTimeOffset.UtcNow + delay,
+            Time = _timeProvider.GetUtcNow() + delay,
             Headers = TimeoutHeaderPersistence.CaptureForStorage(_consumeContextAccessor.CurrentHeaders)
         };
 
@@ -751,14 +855,43 @@ public sealed class Bus : IBus
             _logger.LogWarning(ex, "Bus.StopConsumingCoreAsync failed during dispose.");
         }
 
-        await _sendPipeline.DisposeAsync().ConfigureAwait(false);
+        try
+        {
+            await _sendPipeline.DisposeAsync().ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            // Without this catch, a throw here would skip the request-reply-manager dispose
+            // below, leaving every in-flight SendRequestAsync TCS un-faulted — callers
+            // awaiting with Timeout.Infinite would never wake. Today _sendPipeline.DisposeAsync
+            // only flips a flag and cannot throw, but a future implementation (or third-party
+            // ISendMessagePipeline) might; the guard matches the neighbouring catch shapes.
+            _logger.LogWarning(ex, "SendMessagePipeline.DisposeAsync failed during bus shutdown.");
+        }
+
+        // Fault any in-flight request TCSes so callers awaiting a reply (especially with
+        // Timeout.Infinite) wake up promptly on shutdown rather than waiting for GC. The
+        // concrete RequestReplyManager implements IAsyncDisposable; IRequestReplyManager
+        // does not (custom third-party impls don't have to opt in). Pattern-match to honour
+        // it when present.
+        if (_requestReplyManager is IAsyncDisposable disposableReplyManager)
+        {
+            try
+            {
+                await disposableReplyManager.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "RequestReplyManager.DisposeAsync failed during bus shutdown.");
+            }
+        }
 
         // _lifecycleSemaphore is intentionally NOT Disposed:
         // SemaphoreSlim.Dispose only releases the lazily-allocated WaitHandle, and we never call
         // AvailableWaitHandle, so disposal is a functional no-op. A concurrent caller's Release()
         // on a disposed semaphore would throw ObjectDisposedException out of the unwind path,
         // which we cannot prevent without holding GC references to every caller. Mirrors the
-        // Connection / ProducerConnection / Producer pattern (Phases 4 + 6).
+        // Connection / ProducerConnection / Producer "do not dispose the semaphore" pattern.
     }
 
     private void ThrowIfDisposed()
@@ -775,9 +908,41 @@ public sealed class Bus : IBus
     // the root provider. The scope is disposed as soon as the filter chain completes.
     private async Task<FilterAction> RunOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken)
     {
-        using var scope = _scopeFactory.CreateScope();
-        using var _ = _scopeAccessor.Push(scope.ServiceProvider);
-        return await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+        // CreateAsyncScope so user-supplied IFilter / ISendMessageMiddleware implementations
+        // that are IAsyncDisposable-only (no IDisposable) are honoured. Explicit try/finally
+        // + DisposeAsync().ConfigureAwait(false) so the analyzer can see the await.
+        var scope = _scopeFactory.CreateAsyncScope();
+        try
+        {
+            using var _ = _scopeAccessor.Push(scope.ServiceProvider);
+            var action = await _filterPipeline.ExecuteOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+            // A filter-Stop short-circuits the call before the send-message middleware runs,
+            // so no publish/send span is emitted and the operator-side trace shows a silent
+            // gap. Surface that case on a dedicated counter so dashboards can alert on
+            // filter-suppressed deliveries without parsing logs. Tagged with the message
+            // type name (when known) so per-shape suppression rates are visible.
+            if (action == FilterAction.Stop)
+            {
+                // String literal rather than a const from ServiceConnect.Telemetry — keeps the
+                // ServiceConnect package from taking a build-time dependency on the optional
+                // Telemetry package just to reference its attribute-name constants. The tag
+                // schema matches what Telemetry emits on the corresponding success path.
+                var tags = new System.Diagnostics.TagList
+                {
+                    { "messaging.system", "serviceconnect" },
+                };
+                if (envelope.Headers.TryGetValue(HeaderKeys.TypeName, out var typeNameObj) && typeNameObj is string typeName && !string.IsNullOrEmpty(typeName))
+                {
+                    tags.Add("messaging.message.type", typeName);
+                }
+                ServiceConnectMeter.AddOutgoingFiltersBlocked(tags);
+            }
+            return action;
+        }
+        finally
+        {
+            await scope.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <summary>
@@ -791,7 +956,7 @@ public sealed class Bus : IBus
         HeaderKeys.MessageId,
     };
 
-    private Envelope CreateEnvelope(ReadOnlyMemory<byte> body, Guid correlationId, IReadOnlyDictionary<string, string>? additionalHeaders = null)
+    private Envelope CreateEnvelope(ReadOnlyMemory<byte> body, Guid correlationId, Type messageType, IReadOnlyDictionary<string, string>? additionalHeaders = null)
     {
         // Snapshot once up front so a concurrent caller mutating the source
         // dictionary can't throw "Collection was modified" inside the foreach
@@ -819,11 +984,23 @@ public sealed class Bus : IBus
         }
 
         // Bus-authoritative: stamp system headers last so callers cannot spoof via options.Headers.
-        // Outgoing filters and middleware rely on MessageId / CorrelationId being present. MessageType
-        // is stamped authoritatively by the producer (OutboundHeaderBuilder) as the operation name
-        // "Publish"|"Send"|"ByteStream"; type info is carried by TypeName / FullTypeName.
+        // Outgoing filters and middleware rely on MessageId / CorrelationId being present.
         envelope.Headers[HeaderKeys.CorrelationId] = correlationId.ToString();
         envelope.Headers[HeaderKeys.MessageId] = Guid.NewGuid().ToString();
+        // Stamp type-name headers here so outgoing filters can gate on message type
+        // (e.g. drop telemetry control messages, route by message-type). The producer's
+        // OutboundHeaderBuilder re-stamps these authoritatively with identical values
+        // from its TypeNameCache (TypeName = FullName, FullTypeName = AssemblyQualifiedName),
+        // so the producer values still win on the wire — but the outgoing filter pipeline
+        // now sees a complete header set instead of just CorrelationId+MessageId.
+        if (messageType.FullName is { } fullName)
+        {
+            envelope.Headers[HeaderKeys.TypeName] = fullName;
+        }
+        if (messageType.AssemblyQualifiedName is { } aqn)
+        {
+            envelope.Headers[HeaderKeys.FullTypeName] = aqn;
+        }
 
         return envelope;
     }
@@ -835,10 +1012,18 @@ public sealed class Bus : IBus
         var headers = new Dictionary<string, string>(envelope.Headers.Count, StringComparer.Ordinal);
         foreach (var kvp in envelope.Headers)
         {
+            // IFormattable handles every BCL value type (decimal/double/float/DateTime/
+            // DateTimeOffset/TimeSpan/Guid/int/long/…) with explicit InvariantCulture, so
+            // a German producer's `(3.14m).ToString()` does not stamp `"3,14"` on the wire
+            // for an invariant-parsing consumer to read as the wrong number. Object types
+            // without `IFormattable` fall through to a naked ToString — for those, the
+            // caller is responsible for using a culture-invariant representation if the
+            // value crosses the wire to a different locale.
             headers[kvp.Key] = kvp.Value switch
             {
                 null => string.Empty,
                 string s => s,
+                IFormattable formattable => formattable.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
                 _ => kvp.Value.ToString() ?? string.Empty
             };
         }

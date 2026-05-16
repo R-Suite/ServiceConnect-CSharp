@@ -31,6 +31,14 @@ public static class HeaderKeys
     public const string Publish = "Publish";
     /// <summary>Header containing the serialized routing slip.</summary>
     public const string RoutingSlip = "RoutingSlip";
+    /// <summary>
+    /// Header counting the number of routing-slip hops a message has completed.
+    /// Incremented authoritatively by the forwarder on each <c>RouteAsync</c> hop;
+    /// compared against <c>BusConfiguration.MaxRoutingSlipHops</c> on inbound to defend
+    /// against cross-service amplification (service A → [B,C,…32 entries] → service B,
+    /// each receiver could otherwise publish a fresh full-cap slip indefinitely).
+    /// </summary>
+    public const string RoutingSlipHopsCompleted = "RoutingSlipHopsCompleted";
     /// <summary>Header containing the byte-stream sequence identifier.</summary>
     public const string SequenceId = "SequenceId";
     /// <summary>Header containing the current packet number in a stream.</summary>

@@ -57,8 +57,8 @@ public class ProducerRetryTests
         firstChannel.SetupGet(c => c.IsOpen).Returns(true);
         var secondChannel = new Mock<IChannel>();
         secondChannel.SetupGet(c => c.IsOpen).Returns(true);
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
 
         firstChannel.Setup(c => c.BasicPublishAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
@@ -111,8 +111,8 @@ public class ProducerRetryTests
         var producer = CreateProducer();
         var channel = new Mock<IChannel>();
         channel.SetupGet(c => c.IsOpen).Returns(true);
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
         using var cancellationSource = new CancellationTokenSource();
         var cancellationToken = cancellationSource.Token;
         var connectionAttempts = 0;
@@ -160,8 +160,8 @@ public class ProducerRetryTests
         var producer = CreateProducer();
         var firstChannel = new Mock<IChannel>();
         firstChannel.SetupGet(c => c.IsOpen).Returns(true);
-        var declaredExchanges = GetField<ConcurrentDictionary<string, bool>>(producer, "_declaredExchanges");
-        declaredExchanges["SystemObject"] = true;
+        var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
+        declaredExchanges["SystemObject"] = 0L;
         using var cancellationSource = new CancellationTokenSource();
         var cancellationToken = cancellationSource.Token;
         var reconnectStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

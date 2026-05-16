@@ -1,0 +1,98 @@
+name: Release to NuGet
+
+# Triggered on a `v*` tag push (e.g. `v7.0.0`). The tag value drives the package Version
+# property — release the same source tree against a new tag by retagging, not by editing
+# csprojs. The "Verify tag matches Version property" step blocks a mismatched cut.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (without leading v). Used only for manual dispatch; tag pushes use the tag value.'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  ContinuousIntegrationBuild: true
+
+jobs:
+  release:
+    name: Pack + push
+    runs-on: ubuntu-latest
+    environment:
+      name: nuget
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # github.ref is "refs/tags/v7.0.0"; strip the prefix.
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
+      - name: Verify tag matches csproj Version property
+        working-directory: src
+        run: |
+          set -e
+          DECLARED=$(grep -oP '<Version>\K[^<]+' Directory.Build.props | head -1)
+          if [ "$DECLARED" != "${{ steps.version.outputs.version }}" ]; then
+            echo "ERROR: Tag version '${{ steps.version.outputs.version }}' does not match Directory.Build.props <Version> '$DECLARED'."
+            echo "Bump src/Directory.Build.props and retag, or correct the tag."
+            exit 1
+          fi
+
+      - name: Restore
+        working-directory: src
+        run: dotnet restore ServiceConnect.slnx
+
+      - name: Build
+        working-directory: src
+        run: dotnet build ServiceConnect.slnx --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+
+      - name: Pack
+        working-directory: src
+        run: dotnet pack ServiceConnect.slnx --configuration Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ../artifacts
+
+      - name: List produced packages
+        run: ls -la artifacts/
+
+      - name: Upload artifacts (audit trail)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs-${{ steps.version.outputs.version }}
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Push to NuGet.org
+        # --skip-duplicate so a re-run after a partial failure doesn't error on packages
+        # already pushed; NuGet.org treats a re-push of the same version as a conflict.
+        run: |
+          dotnet nuget push 'artifacts/*.nupkg' \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

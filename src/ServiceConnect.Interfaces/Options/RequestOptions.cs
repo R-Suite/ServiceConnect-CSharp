@@ -15,8 +15,13 @@ namespace ServiceConnect.Interfaces.Options;
 /// </remarks>
 public readonly record struct RequestOptions
 {
-    /// <summary>Default per-call timeout in milliseconds.</summary>
-    public const int DefaultTimeoutMs = 10_000;
+    /// <summary>
+    /// Default per-call timeout in milliseconds. Declared <c>static readonly</c> rather than
+    /// <c>const</c> so a future tuning of the default doesn't require every consumer to
+    /// recompile to pick up the change — <c>const</c> values are inlined into the consumer's
+    /// binary at compile time and frozen, whereas <c>static readonly</c> is resolved at runtime.
+    /// </summary>
+    public static readonly int DefaultTimeoutMs = 10_000;
 
     /// <summary>
     /// Initialises <see cref="Timeout"/> to <see cref="DefaultTimeoutMs"/>.

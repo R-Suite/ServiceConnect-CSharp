@@ -117,13 +117,56 @@ public sealed class ServiceConnectBuilder
     }
 
     /// <summary>
-    /// Configures pipeline filters and middleware registrations.
+    /// Internal pipeline-configuration hook used by the framework's own builder extensions
+    /// (e.g. <c>AddTelemetry</c>) that need to mutate the middleware lists directly. Public
+    /// callers should use the strongly-typed <see cref="AddOutgoingFilter{T}"/> /
+    /// <see cref="AddBeforeConsumingFilter{T}"/> / <see cref="AddSendMessageMiddleware{T}"/>
+    /// (etc.) entry points instead, which insulate consumers from internal refactors of
+    /// the pipeline-configuration shape.
     /// </summary>
     /// <param name="configure">The callback that mutates pipeline settings.</param>
     /// <returns>The current builder instance.</returns>
-    public ServiceConnectBuilder ConfigurePipeline(Action<PipelineConfiguration> configure)
+    internal ServiceConnectBuilder ConfigurePipeline(Action<PipelineConfiguration> configure)
     {
         configure(BusConfig.Pipeline);
+        return this;
+    }
+
+    /// <summary>
+    /// Registers middleware that wraps outgoing send and publish operations at the
+    /// outermost position — runs first on the way out, last on the way back. Use for
+    /// cross-cutting concerns that need to bracket every other middleware (tracing,
+    /// metrics). De-duplicates by middleware type: a repeat call with the same
+    /// <typeparamref name="T"/> is a no-op rather than producing two registrations.
+    /// </summary>
+    /// <typeparam name="T">The middleware type.</typeparam>
+    /// <returns>The current builder instance.</returns>
+    public ServiceConnectBuilder InsertSendMessageMiddlewareOutermost<T>() where T : class, ISendMessageMiddleware
+    {
+        var list = BusConfig.Pipeline.SendMessageMiddleware;
+        if (!list.Contains(typeof(T)))
+        {
+            list.Insert(0, typeof(T));
+        }
+        return this;
+    }
+
+    /// <summary>
+    /// Registers middleware that wraps incoming message processing at the outermost
+    /// position — runs first on the way in, last on the way out. Use for cross-cutting
+    /// concerns that need to bracket every other middleware (tracing, metrics).
+    /// De-duplicates by middleware type: a repeat call with the same
+    /// <typeparamref name="T"/> is a no-op rather than producing two registrations.
+    /// </summary>
+    /// <typeparam name="T">The middleware type.</typeparam>
+    /// <returns>The current builder instance.</returns>
+    public ServiceConnectBuilder InsertMessageProcessingMiddlewareOutermost<T>() where T : class, IMessageProcessingMiddleware
+    {
+        var list = BusConfig.Pipeline.MessageProcessingMiddleware;
+        if (!list.Contains(typeof(T)))
+        {
+            list.Insert(0, typeof(T));
+        }
         return this;
     }
 
@@ -142,6 +185,15 @@ public sealed class ServiceConnectBuilder
     // Guard against silently-broken bus configuration at startup. A ConsumerCount below 1
     // causes the client-construction loop in Consumer.StartConsumingAsync to be skipped
     // entirely, leaving the bus reporting IsConsuming=true while dispatching nothing.
+    // Task.WaitAsync / SemaphoreSlim.WaitAsync / PeriodicTimer all reject TimeSpan values
+    // greater than uint.MaxValue ms (~49.7 days). Any user-supplied timeout configured
+    // beyond that range — even TimeSpan.MaxValue, which a "wait forever" intent might
+    // suggest — produces an ArgumentOutOfRangeException at the framework's first await,
+    // long after startup, with no operator-actionable signal. The cap below catches the
+    // misconfiguration at startup. Use Timeout.InfiniteTimeSpan when the intent is
+    // truly "wait indefinitely" — the BCL's APIs have explicit support for it.
+    private static readonly TimeSpan MaxAcceptedTimeSpan = TimeSpan.FromMilliseconds(uint.MaxValue - 1);
+
     private static void ValidateBus(IBusConfiguration bus)
     {
         if (bus.ConsumerCount < 1)
@@ -151,13 +203,43 @@ public sealed class ServiceConnectBuilder
         }
 
         // DisposeTimeout flows into Task.WaitAsync / SemaphoreSlim.WaitAsync which throw
-        // ArgumentOutOfRangeException for any negative value other than Timeout.InfiniteTimeSpan.
-        // Catch the misconfiguration at startup rather than at host teardown where the AOORE
-        // escapes ProcessManagerTimeoutService.DisposeAsync's narrower catch.
+        // ArgumentOutOfRangeException for any negative value other than Timeout.InfiniteTimeSpan,
+        // and for any TimeSpan greater than uint.MaxValue ms. Catch the misconfiguration at
+        // startup rather than at host teardown where the AOORE escapes
+        // ProcessManagerTimeoutService.DisposeAsync's narrower catch.
         if (bus.DisposeTimeout != Timeout.InfiniteTimeSpan && bus.DisposeTimeout <= TimeSpan.Zero)
         {
             throw new InvalidOperationException(
                 $"BusConfiguration.DisposeTimeout must be positive or Timeout.InfiniteTimeSpan (got {bus.DisposeTimeout}).");
+        }
+        if (bus.DisposeTimeout != Timeout.InfiniteTimeSpan && bus.DisposeTimeout > MaxAcceptedTimeSpan)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.DisposeTimeout must be at most {MaxAcceptedTimeSpan} (uint.MaxValue ms); " +
+                $"got {bus.DisposeTimeout}. Use Timeout.InfiniteTimeSpan if you want to wait indefinitely.");
+        }
+
+        // ProcessManagerTimeoutPollInterval is consumed by `new PeriodicTimer(interval, …)`
+        // which rejects values > int.MaxValue ms. Without this check, a TimeSpan.MaxValue
+        // (or any > ~24.8 days) silently faults the polling task at startup and the host
+        // comes up "started" but never polls.
+        if (bus.ProcessManagerTimeoutPollInterval <= TimeSpan.Zero ||
+            bus.ProcessManagerTimeoutPollInterval > TimeSpan.FromMilliseconds(int.MaxValue))
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.ProcessManagerTimeoutPollInterval must be positive and at most " +
+                $"{TimeSpan.FromMilliseconds(int.MaxValue)} (int.MaxValue ms); got {bus.ProcessManagerTimeoutPollInterval}.");
+        }
+
+        // MaxRoutingSlipHops <= 0 silently disables routing-slip forwarding
+        // (HandlerProcessor short-circuits at the limit check). Either reject or document;
+        // we reject at startup so the misconfig surfaces with a clear remediation.
+        if (bus.MaxRoutingSlipHops <= 0)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.MaxRoutingSlipHops must be at least 1 (got {bus.MaxRoutingSlipHops}). " +
+                "Routing-slip processing is disabled via BusConfiguration.EnableRoutingSlipProcessing=false, " +
+                "not by setting MaxRoutingSlipHops to zero or negative.");
         }
     }
 
@@ -211,24 +293,39 @@ public sealed class ServiceConnectBuilder
     }
 
     /// <summary>
-    /// Adds middleware that wraps outgoing send and publish operations.
+    /// Appends middleware that wraps outgoing send and publish operations. De-duplicates
+    /// by middleware type: a repeat call with the same <typeparamref name="T"/> is a no-op
+    /// rather than producing two registrations — matches the dedup semantics of
+    /// <see cref="InsertSendMessageMiddlewareOutermost{T}"/> so two feature modules each
+    /// calling the framework's own builder extensions can't accidentally wrap the pipeline
+    /// twice (which would otherwise double-emit telemetry spans and overwrite the outer
+    /// <c>traceparent</c> with the inner span's context).
     /// </summary>
     /// <typeparam name="T">The middleware type.</typeparam>
     /// <returns>The current builder instance.</returns>
     public ServiceConnectBuilder AddSendMessageMiddleware<T>() where T : class, ISendMessageMiddleware
     {
-        BusConfig.Pipeline.SendMessageMiddleware.Add(typeof(T));
+        var list = BusConfig.Pipeline.SendMessageMiddleware;
+        if (!list.Contains(typeof(T)))
+        {
+            list.Add(typeof(T));
+        }
         return this;
     }
 
     /// <summary>
-    /// Adds middleware that wraps incoming message processing.
+    /// Appends middleware that wraps incoming message processing. De-duplicates by
+    /// middleware type — see <see cref="AddSendMessageMiddleware{T}"/> for the rationale.
     /// </summary>
     /// <typeparam name="T">The middleware type.</typeparam>
     /// <returns>The current builder instance.</returns>
     public ServiceConnectBuilder AddMessageProcessingMiddleware<T>() where T : class, IMessageProcessingMiddleware
     {
-        BusConfig.Pipeline.MessageProcessingMiddleware.Add(typeof(T));
+        var list = BusConfig.Pipeline.MessageProcessingMiddleware;
+        if (!list.Contains(typeof(T)))
+        {
+            list.Add(typeof(T));
+        }
         return this;
     }
 }

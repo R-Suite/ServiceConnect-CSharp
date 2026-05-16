@@ -30,11 +30,24 @@ internal sealed class TelemetryProcessingMiddleware(
 
         Activity? activity = null;
         IDisposable? inboundFallback = null;
+        var publishOrSendEnabled =
+            ServiceConnectActivitySource.IsPublishTelemetryEnabled(_options)
+            || ServiceConnectActivitySource.IsSendTelemetryEnabled(_options);
         if (ServiceConnectActivitySource.IsConsumeTelemetryEnabled(_options))
         {
+            // Materialise the body byte[] ONLY when an EnrichWithMessageBytes callback is
+            // configured. Without that gate, every consume-telemetry-enabled delivery pays
+            // a full-body byte[] copy (envelope.Body.ToArray()) regardless of whether the
+            // bytes are actually read — at 4 KiB body × 10k msg/s that's ~40 MB/s of
+            // throwaway allocations. The default-null callback means most callers never
+            // need the array.
+            var bytes = _options.EnrichWithMessageBytes is null
+                ? []
+                : envelope.Body.ToArray();
             var args = new ConsumeEventArgs
             {
-                Message = envelope.Body.ToArray(),
+                Message = bytes,
+                BodySize = envelope.Body.Length,
                 Type = messageType.FullName ?? string.Empty,
                 // IMessageProcessingMiddleware's contract types `headers` as IDictionary<string,object>;
                 // the in-tree RabbitMQ transport always supplies a Dictionary<,> (which also implements
@@ -46,8 +59,18 @@ internal sealed class TelemetryProcessingMiddleware(
                 Headers = new Dictionary<string, object>(headers, StringComparer.Ordinal),
             };
             activity = ServiceConnectActivitySource.Consume(args, _options, _attributes);
+
+            // Sampling drop: listeners are registered but the sampler returned None/RecordOnly,
+            // so StartActivity returned null. Without a stashed fallback, a subsequent publish
+            // from the handler observes Activity.Current == null and starts a fresh trace root,
+            // snapping the cross-broker trace graph at every sampled-out consume hop. Mirror
+            // the consume-disabled branch below so the publish path can stitch through.
+            if (activity is null && publishOrSendEnabled)
+            {
+                inboundFallback = TryStashInboundTraceFallback(headers);
+            }
         }
-        else if (ServiceConnectActivitySource.IsPublishTelemetryEnabled(_options) || ServiceConnectActivitySource.IsSendTelemetryEnabled(_options))
+        else if (publishOrSendEnabled)
         {
             // Consume telemetry is disabled but the handler may still publish or send. Without
             // intervention, Activity.Current is null when the handler invokes Bus.Send/Publish,

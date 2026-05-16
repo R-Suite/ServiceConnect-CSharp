@@ -3,6 +3,11 @@
   <PropertyGroup>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>ServiceConnect.Telemetry</PackageId>
+    <AssemblyName>ServiceConnect.Telemetry</AssemblyName>
+    <Title>ServiceConnect.Telemetry</Title>
+    <Description>OpenTelemetry-compatible ActivitySource instrumentation for ServiceConnect. Emits publish, send and consume spans tagged with the OTel messaging semantic conventions, and injects/extracts W3C traceparent headers so traces propagate end-to-end across the broker.</Description>
+    <PackageTags>ServiceConnect;Telemetry;OpenTelemetry;Tracing;MessageBus;Messaging;Message;Bus;Service</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>

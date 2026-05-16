@@ -63,6 +63,11 @@ public static class ServiceConnectMeter
         unit: "{drop}",
         description: "Audit messages that failed to publish.");
 
+    private static readonly Counter<long> _outgoingFiltersBlocked = _meter.CreateCounter<long>(
+        name: MetricNames.OutgoingFiltersBlocked,
+        unit: "{message}",
+        description: "Outgoing operations aborted because an outgoing filter returned FilterAction.Stop.");
+
     private static readonly UpDownCounter<long> _inFlightMessages = _meter.CreateUpDownCounter<long>(
         name: MetricNames.InFlightMessages,
         unit: "{message}",
@@ -93,6 +98,9 @@ public static class ServiceConnectMeter
 
     /// <summary>Increments the audit-drops counter by 1 with the given tags.</summary>
     public static void AddAuditDrop(in TagList tags) => _auditDrops.Add(1, tags);
+
+    /// <summary>Increments the outgoing-filters-blocked counter by 1 with the given tags.</summary>
+    public static void AddOutgoingFiltersBlocked(in TagList tags) => _outgoingFiltersBlocked.Add(1, tags);
 
     /// <summary>Adjusts the in-flight UpDownCounter by <paramref name="delta"/> with the given tags.</summary>
     public static void AddInFlight(long delta, in TagList tags) => _inFlightMessages.Add(delta, tags);

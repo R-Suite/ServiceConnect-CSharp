@@ -10,15 +10,17 @@ using Xunit;
 namespace ServiceConnect.UnitTests;
 
 /// <summary>
-/// RemoveDataAsync must distinguish between a name that has never existed
-/// (KeyNotFoundException) and a name that exists but the supplied CorrelationId
-/// wasn't matched (ConcurrencyException with row count in the message).
+/// RemoveDataAsync must throw <see cref="ConcurrencyException"/> for both "could-not-find"
+/// shapes — name bucket entirely empty AND name bucket exists but no row matched the
+/// supplied CorrelationId. The contract on <see cref="IAggregatorPersistor.RemoveDataAsync"/>
+/// names the single exception type, and the InMemory persistor matches; mismatch would
+/// break test→prod migration paths.
 /// </summary>
 [Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorRemoveDataDistinctionTests
 {
     [Fact]
-    public async Task RemoveData_NoRowsForName_ThrowsKeyNotFoundException()
+    public async Task RemoveData_NoRowsForName_ThrowsConcurrencyException()
     {
         // DeleteOneAsync returns acknowledged with DeletedCount=0.
         // CountDocumentsAsync (Name-only filter) also returns 0 — the name bucket is empty.
@@ -37,8 +39,9 @@ public class MongoDbAggregatorPersistorRemoveDataDistinctionTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(0L);
 
-        await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+        var ex = await Assert.ThrowsAsync<ConcurrencyException>(() =>
             persistor.RemoveDataAsync("missing-name", Guid.NewGuid()));
+        Assert.Contains("no rows for Name", ex.Message);
     }
 
     [Fact]

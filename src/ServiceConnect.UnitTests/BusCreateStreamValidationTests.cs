@@ -28,7 +28,7 @@ public sealed class BusCreateStreamValidationTests
         mockPipelineConfig.Setup(x => x.OutgoingFilters).Returns([]);
         var mockDispatcher = new Mock<IMessageDispatcher>();
         var mockProducer = new Mock<IProducer>();
-        IList<HandlerReference> handlerReferences = [];
+        IReadOnlyList<HandlerReference> handlerReferences = [];
         var scopeFactory = new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
         var scopeAccessor = new ConsumeScopeAccessor();
 

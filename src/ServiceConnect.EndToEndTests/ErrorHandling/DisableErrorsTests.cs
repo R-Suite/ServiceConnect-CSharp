@@ -16,13 +16,14 @@ public class DisableErrorsTests(MessagingFixture fixture)
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task DisableErrors_SuccessfulMessage_AuditSkipped()
+    public async Task DisableErrors_DoesNotAffectAuditing_AuditIsStillPublished()
     {
-        // When DisableErrors=true, the audit publish branch is skipped in Client.cs
-        // even if AuditingEnabled=true, because the code path is:
-        //   if (!result.Success) { ... retry/error ... }
-        //   else if (!_errorsDisabled) { ... audit ... }
-        // So _errorsDisabled=true prevents audit publishing.
+        // Audit is orthogonal to DisableErrors — disabling the error/retry/DLQ topology
+        // must NOT also disable audit. Audit is gated separately by IQueueConfiguration
+        // .AuditingEnabled inside MessageAuditPublisher; combining the two would silently
+        // ack successful messages whenever errors were disabled, losing observability with
+        // no operator signal. This test asserts the decoupled contract: with DisableErrors
+        // =true AND AuditingEnabled=true, audit messages DO arrive on the audit queue.
 
         // Arrange
         var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -40,7 +41,7 @@ public class DisableErrorsTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
         services.AddTransient<IMessageHandler<TestMessage>>(_ =>
             new CallbackHandler<TestMessage>(msg => tcs.TrySetResult(msg)));
 
@@ -85,7 +86,8 @@ public class DisableErrorsTests(MessagingFixture fixture)
             var received = await tcs.Task;
             Assert.Equal("errors-disabled", received.Content);
 
-            // Assert: audit queue should NOT receive the message despite AuditingEnabled=true
+            // Assert: audit queue DOES receive the message — AuditingEnabled=true is
+            // honoured independently of DisableErrors=true.
             await Task.Delay(2000);
 
             var factory = new ConnectionFactory
@@ -98,15 +100,8 @@ public class DisableErrorsTests(MessagingFixture fixture)
             await using var conn = await factory.CreateConnectionAsync();
             await using var channel = await conn.CreateChannelAsync();
 
-            try
-            {
-                var auditMsg = await channel.BasicGetAsync(auditQueueName, autoAck: true);
-                Assert.Null(auditMsg);
-            }
-            catch (RabbitMQ.Client.Exceptions.OperationInterruptedException)
-            {
-                // Queue doesn't exist — expected
-            }
+            var auditMsg = await channel.BasicGetAsync(auditQueueName, autoAck: true);
+            Assert.NotNull(auditMsg);
         }
         finally
         {

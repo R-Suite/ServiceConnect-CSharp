@@ -47,7 +47,7 @@ public class PriorityQueueTests(MessagingFixture fixture)
         // Set up producer bus (its own queue, only sends)
         var producerServices = new ServiceCollection();
         producerServices.AddLogging();
-        producerServices.AddSingleton<IList<HandlerReference>>([]);
+        producerServices.AddSingleton<IReadOnlyList<HandlerReference>>([]);
         producerServices.AddServiceConnect(builder =>
         {
             builder.UseRabbitMQ(t =>
@@ -95,7 +95,7 @@ public class PriorityQueueTests(MessagingFixture fixture)
 
         var consumerServices = new ServiceCollection();
         consumerServices.AddLogging();
-        consumerServices.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        consumerServices.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         consumerServices.AddTransient<IMessageHandler<PriorityMessage>>(_ =>
             new CallbackHandler<PriorityMessage>(msg =>
             {

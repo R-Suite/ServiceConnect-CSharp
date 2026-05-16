@@ -200,6 +200,46 @@ services.AddServiceConnect(builder =>
 });
 ```
 
+## MessagingAttributes — span attribute keys
+
+`MessagingAttributes` exposes the OTel semconv 1.x attribute name constants ServiceConnect stamps on every span. Reference these from your enrichment delegates and span-filter rules rather than hard-coding the strings.
+
+| Constant | Wire name | Description |
+|---|---|---|
+| `MessagingSystem` | `messaging.system` | Broker name supplied via `IMessagingSystemAttributes` (`"rabbitmq"` by default). |
+| `MessagingDestination` | `messaging.destination.name` | Queue or exchange name for the operation. Empty/absent when anonymous. |
+| `MessagingDestinationAnonymous` | `messaging.destination.anonymous` | Boolean — set to `true` when the operation has no resolvable destination. |
+| `MessagingDestinationRoutingKey` | `messaging.rabbitmq.destination.routing_key` | RabbitMQ routing key for publishes that target a topic exchange. |
+| `MessagingOperationType` | `messaging.operation.type` | `publish` for sends/publishes, `process` for consumer-side handler dispatch. (Semconv 1.x.) |
+| `MessagingOperationName` | `messaging.operation.name` | `publish` for sends/publishes, `receive` for consumer-side handler dispatch. (Semconv 1.x.) |
+| `MessageId` | `messaging.message.id` | Per-delivery unique id stamped by the producer. |
+| `MessageConversationId` | `messaging.message.conversation_id` | The `CorrelationId` — stable across a request/reply round-trip or a saga's full life. |
+| `MessagingMessageBodySize` | `messaging.message.body.size` | Serialised payload size in bytes. |
+| `ErrorType` | `error.type` | Mapped exception type for failure paths. Closed allow-list (`cancelled`, `timeout`, `forbidden`, …); never the exception message. |
+| `MessagingClientId` | `messaging.client.id` | Optional consumer-side stable identifier; populated when an enrichment delegate supplies one. |
+
+The legacy pre-1.x `messaging.operation` attribute is intentionally NOT emitted — v7 emits the `operation.type` + `operation.name` split prescribed by semconv 1.x. Dashboards that filtered on the legacy attribute should switch to `messaging.operation.type`.
+
+## Metrics
+
+`ServiceConnect.Telemetry`'s `AddServiceConnectInstrumentation()` extension wires the meter named `"ServiceConnect.Bus"`. The meter publishes 10 instruments — six OTel-standard messaging metrics plus four ServiceConnect-specific extensions. See [Observability — Metrics](/ServiceConnect-CSharp/learn/operations/observability/#metrics) for the full catalogue with tag schemas, unit details, and cardinality guidance.
+
+The instrument-name constants live in `ServiceConnect.Diagnostics.MetricNames` (in the `ServiceConnect` package — not the telemetry package). Reference them rather than hard-coding strings:
+
+```csharp
+using ServiceConnect.Diagnostics;
+
+var meterListener = new MeterListener();
+meterListener.InstrumentPublished = (instrument, listener) =>
+{
+    if (instrument.Meter.Name == ServiceConnectMeter.MeterName &&
+        instrument.Name == MetricNames.PublishDuration)
+    {
+        listener.EnableMeasurementEvents(instrument);
+    }
+};
+```
+
 ## Usage
 
 ### Registration

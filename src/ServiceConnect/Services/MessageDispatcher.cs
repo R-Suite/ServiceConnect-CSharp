@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
@@ -21,7 +22,7 @@ namespace ServiceConnect.Services;
 /// <remarks>
 /// Creates a dispatcher for incoming broker messages.
 /// </remarks>
-public sealed class MessageDispatcher(
+internal sealed class MessageDispatcher(
     IMessageSerializer serializer,
     IFilterPipeline filterPipeline,
     IList<IMessageProcessor> processors,
@@ -30,7 +31,8 @@ public sealed class MessageDispatcher(
     IPipelineConfiguration pipelineConfig,
     IServiceScopeFactory scopeFactory,
     ConsumeScopeAccessor scopeAccessor,
-    IMessageTypeRegistry typeRegistry) : IMessageDispatcher
+    IMessageTypeRegistry typeRegistry,
+    ConsumeContextAccessor? consumeContextAccessor = null) : IMessageDispatcher
 {
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
     private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -41,14 +43,28 @@ public sealed class MessageDispatcher(
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
     private readonly ConsumeScopeAccessor _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
     private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
+    // Optional so test rigs that construct the dispatcher directly without DI keep working —
+    // a null accessor means middleware that resolves the inbound headers via the ambient
+    // ConsumeContextAccessor sees null (the pre-existing behaviour). In production wiring,
+    // ServiceCollectionExtensions registers ConsumeContextAccessor as a singleton and DI
+    // threads it in here automatically.
+    private readonly ConsumeContextAccessor? _consumeContextAccessor = consumeContextAccessor;
 
     /// <inheritdoc />
     public async Task<ConsumeEventResult> DispatchAsync(ReadOnlyMemory<byte> messageBytes, string messageType, IReadOnlyDictionary<string, object> headers, CancellationToken cancellationToken = default)
     {
-        using var scope = _scopeFactory.CreateScope();
+        // CreateAsyncScope so user-supplied IMessageHandler / IFilter / IMessageProcessingMiddleware
+        // implementations that are IAsyncDisposable-only (no IDisposable) are honoured. A sync scope
+        // dispose against an IAsyncDisposable-only registered service throws
+        // InvalidOperationException("AsyncDisposableServiceNotSupported") under MS.DI. Explicit
+        // try/finally + DisposeAsync().ConfigureAwait(false) so the analyzer can see the await.
+        var scope = _scopeFactory.CreateAsyncScope();
+        try
+        {
         using var _ = _scopeAccessor.Push(scope.ServiceProvider);
 
         Envelope? envelope = null;
+        IDisposable? contextScope = null;
         var beforeFiltersRan = false;
         try
         {
@@ -80,6 +96,26 @@ public sealed class MessageDispatcher(
 
             envelope = new Envelope { Headers = mutableHeaders, Body = messageBytes };
 
+            // Push the inbound-context accessor BEFORE filters/middleware run so any outbound
+            // call made from a middleware (e.g. an auto-forward IMessageProcessingMiddleware
+            // that invokes Bus.RouteAsync or Bus.SendAsync) reads the inbound hop counter via
+            // ConsumeContextAccessor.CurrentHeaders. Without this, middleware sees
+            // CurrentHeaders == null and the framework stamps RoutingSlipHopsCompleted=1
+            // regardless of the inbound hop count — defeating MaxRoutingSlipHops as the
+            // cross-service amplification defence.
+            //
+            // The Dictionary fast-path covers the production transport (Bus constructs as
+            // Dictionary<,>); third-party transports passing a non-Dictionary IDictionary
+            // get a defensive shallow copy snapshot so the IReadOnlyDictionary contract is
+            // honoured. The HandlerProcessor / ProcessManagerProcessor push later with the
+            // pooled context's typed headers, which nests cleanly.
+            if (_consumeContextAccessor is not null)
+            {
+                var headersForContext = mutableHeaders as IReadOnlyDictionary<string, object>
+                    ?? new Dictionary<string, object>(mutableHeaders, StringComparer.Ordinal);
+                contextScope = _consumeContextAccessor.Push(headersForContext);
+            }
+
             var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
 
             // Before-consuming filters run first so they gate every dispatch path —
@@ -97,6 +133,13 @@ public sealed class MessageDispatcher(
             var (replyProcessor, preDeserHandled) = await RunPreDeserializationProcessorsAsync(messageBytes, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
             if (preDeserHandled)
             {
+                // Mirror the reply branch and the handler-success branch: a pre-deserialisation
+                // processor (StreamProcessor accepting a packet frame) that returns Handled is
+                // a successful consume. User filters built on the OnConsumedSuccessfully stage
+                // (dedup-key recording, audit, outbox commit) must observe stream packets here
+                // — without this call, dedup filters silently under-count and stream payloads
+                // bypass user-installed audit hooks.
+                await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
                 return new ConsumeEventResult { Success = true };
             }
 
@@ -120,48 +163,9 @@ public sealed class MessageDispatcher(
                 type = typeof(Message);
             }
 
-            if (replyProcessor != null && hasResponseMessageId)
+            if (hasResponseMessageId)
             {
-                var replyResult = await replyProcessor.ProcessAsync(messageBytes, type!, null, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
-
-                // Fire OnConsumedSuccessfully filters on both sub-paths (handled and untracked-reply).
-                // Pre-fix this branch returned Success=true without invoking the filter pipeline,
-                // silently under-counting reply messages for audit/telemetry filters that count
-                // successful consumes. Match the non-reply success path's filter semantics — the
-                // reply was successfully consumed in both cases (the dispatcher acks the broker).
-                await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
-
-                if (replyResult == ProcessResult.Handled)
-                {
-                    return new ConsumeEventResult { Success = true };
-                }
-
-                // No pending request matched this reply — the caller timed out or this is a
-                // duplicate delivery. Returning Success=false would drive nack/requeue and
-                // cause spurious retry/DLQ churn, so we log at Debug and silently ack instead.
-                // Reachable only when hasResponseMessageId (see line 131 gate).
-                var replyCorrelationId = HeaderDecoder.Decode(headers[HeaderKeys.ResponseMessageId]) ?? "<unknown>";
-                _logger.LogDebug(
-                    "Discarding reply for untracked correlation '{CorrelationId}' (likely timed out or duplicate)",
-                    replyCorrelationId);
-                return new ConsumeEventResult { Success = true };
-            }
-
-            // Reply-shaped message but no ReplyProcessor in the pipeline (custom DI
-            // configuration that doesn't register IRequestReplyManager / ReplyProcessor).
-            // Do NOT dispatch through the regular handler — the payload was correlated to
-            // a request, not a self-contained message; a regular handler running against it
-            // would receive a payload it didn't expect. Log at Warning (this is a
-            // misconfiguration — replies arriving at a bus with no request-reply manager
-            // is operationally suspicious) and ack-and-drop.
-            if (replyProcessor == null && hasResponseMessageId)
-            {
-                _logger.LogWarning(
-                    "Reply received (ResponseMessageId={ResponseMessageId}) but no ReplyProcessor / IRequestReplyManager is registered on this bus. " +
-                    "The reply cannot be correlated and the regular handler must NOT run against a reply payload. " +
-                    "Acking and dropping.",
-                    HeaderDecoder.Decode(headers[HeaderKeys.ResponseMessageId]) ?? "<unknown>");
-                return new ConsumeEventResult { Success = true };
+                return await DispatchReplyAsync(replyProcessor, messageBytes, type!, mutableHeaders, envelope, headers, cancellationToken).ConfigureAwait(false);
             }
 
             if (!typeResolvedFromRegistry)
@@ -181,10 +185,7 @@ public sealed class MessageDispatcher(
 
             if (result.Success && !result.NotHandled)
             {
-                // Stop returned by an on-success filter halts further on-success filters
-                // (handled inside ExecuteFiltersAsync) but is not propagated here:
-                // consumption already succeeded.
-                await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+                await RunOnConsumedSuccessfullyAsync(envelope, messageType, cancellationToken).ConfigureAwait(false);
             }
 
             return result;
@@ -196,26 +197,27 @@ public sealed class MessageDispatcher(
             // See learn/operations/cancellation for the full contract.
             throw;
         }
+        catch (Exception ex) when (ex is JsonException or NotSupportedException or Interfaces.Exceptions.SerializationException)
+        {
+            // Permanently malformed payload — JsonException covers wire-format faults
+            // (truncated bytes, schema mismatch, max-depth exceeded), NotSupportedException
+            // surfaces when an STJ converter rejects the value, and SerializationException
+            // is the serializer's wrapper around JsonException (so JsonException would
+            // otherwise be invisible behind the wrap — the wrap is what
+            // SystemTextJsonMessageSerializer.Deserialize raises on every failed parse).
+            // Retrying produces the identical failure; route as terminal so the message goes
+            // straight to the error exchange and the retry budget isn't burned on a poison
+            // delivery.
+            _logger.LogError(ex,
+                "Permanently invalid payload for message of type {MessageType}; routing as terminal failure (no retry).",
+                messageType);
+            await InvokeExceptionHandlerAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
+            return new ConsumeEventResult { Success = false, Exception = ex, TerminalFailure = true };
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error dispatching message of type {MessageType}", messageType);
-            if (_config.ExceptionHandler is { } handler)
-            {
-                try
-                {
-                    await handler(ex, cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception handlerEx)
-                {
-                    // Error level: ExceptionHandler is an opt-in user-configured notification
-                    // hook; a crash inside it is a real failure of an explicitly-installed
-                    // surface and operators must see it. The dispatcher continues regardless —
-                    // the original message-dispatch exception (ex) is already attached to the
-                    // returned ConsumeEventResult and drives the retry/error-queue path; the
-                    // hook crash is a secondary signal that must not block message processing.
-                    _logger.LogError(handlerEx, "ExceptionHandler threw while handling dispatch error for message of type {MessageType}", messageType);
-                }
-            }
+            await InvokeExceptionHandlerAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
             return new ConsumeEventResult { Success = false, Exception = ex };
         }
         finally
@@ -231,6 +233,101 @@ public sealed class MessageDispatcher(
                     _logger.LogWarning(afterEx, "AfterConsumingFilters threw while finalising dispatch of {MessageType}", messageType);
                 }
             }
+            // Pop the inbound-context AsyncLocal AFTER AfterConsumingFilters so those filters
+            // still observe the headers context, but BEFORE the DI scope disposes so any
+            // service depending on the accessor doesn't observe a stale push from this
+            // dispatch in the next one.
+            contextScope?.Dispose();
+        }
+        }
+        finally
+        {
+            await scope.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    // Handles a reply-shaped delivery (ResponseMessageId header present). Two sub-cases:
+    //   - replyProcessor != null: dispatch through the reply processor. Both Handled (matched a
+    //     pending request) and not-Handled (untracked correlation — likely timed out or duplicate)
+    //     are treated as successful consumes; the dispatcher acks either way so the
+    //     OnConsumedSuccessfully filter stage must fire on both so audit/telemetry filters count
+    //     reply messages.
+    //   - replyProcessor == null: misconfiguration. A reply arrived but no IRequestReplyManager
+    //     is registered; running the regular handler against a reply payload would surprise
+    //     handlers expecting a self-contained message. Log at Warning and ack-and-drop.
+    private async Task<ConsumeEventResult> DispatchReplyAsync(
+        ReplyProcessor? replyProcessor,
+        ReadOnlyMemory<byte> messageBytes,
+        Type type,
+        IDictionary<string, object> mutableHeaders,
+        Envelope envelope,
+        IReadOnlyDictionary<string, object> headers,
+        CancellationToken cancellationToken)
+    {
+        if (replyProcessor == null)
+        {
+            _logger.LogWarning(
+                "Reply received (ResponseMessageId={ResponseMessageId}) but no ReplyProcessor / IRequestReplyManager is registered on this bus. " +
+                "The reply cannot be correlated and the regular handler must NOT run against a reply payload. " +
+                "Acking and dropping.",
+                HeaderDecoder.Decode(headers[HeaderKeys.ResponseMessageId]) ?? "<unknown>");
+            return new ConsumeEventResult { Success = true };
+        }
+
+        var replyResult = await replyProcessor.ProcessAsync(messageBytes, type, null, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
+        await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+
+        if (replyResult == ProcessResult.Handled)
+        {
+            return new ConsumeEventResult { Success = true };
+        }
+
+        _logger.LogDebug(
+            "Discarding reply for untracked correlation '{CorrelationId}' (likely timed out or duplicate)",
+            HeaderDecoder.Decode(headers[HeaderKeys.ResponseMessageId]) ?? "<unknown>");
+        return new ConsumeEventResult { Success = true };
+    }
+
+    // Runs the OnConsumedSuccessfully filter stage after a successful handler dispatch. A throw
+    // here flips the dispatch result from success to fail and the consumer host retries — which
+    // re-runs the already-successful handler and DUPLICATES its side effects. The discriminating
+    // Error log makes that signal visible so operators can tell a post-handler-filter-throw
+    // apart from a handler-throw when triaging dedup failures. Cooperative-shutdown OCE is
+    // allowed to propagate without the side-effect-duplication note.
+    private async Task RunOnConsumedSuccessfullyAsync(Envelope envelope, string messageType, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception successFilterEx) when (successFilterEx is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogError(successFilterEx,
+                "OnConsumedSuccessfully filter threw after handler success for message of type {MessageType}; retry will re-run the handler and duplicate its side effects.",
+                messageType);
+            throw;
+        }
+    }
+
+    // Invokes the optional ExceptionHandler callback and swallows + logs any throw it produces
+    // at Error level. ExceptionHandler is an opt-in user-configured notification hook; a crash
+    // inside it is a real failure of an explicitly-installed surface and operators must see it.
+    // The dispatcher continues regardless — the original dispatch exception is already attached
+    // to the returned ConsumeEventResult and drives the retry/error-queue path; the hook crash
+    // is a secondary signal that must not block message processing.
+    private async Task InvokeExceptionHandlerAsync(Exception ex, string messageType, CancellationToken cancellationToken)
+    {
+        if (_config.ExceptionHandler is not { } handler)
+        {
+            return;
+        }
+        try
+        {
+            await handler(ex, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception handlerEx)
+        {
+            _logger.LogError(handlerEx, "ExceptionHandler threw while handling dispatch error for message of type {MessageType}", messageType);
         }
     }
 
@@ -244,6 +341,11 @@ public sealed class MessageDispatcher(
         ReplyProcessor? replyProcessor = null;
         foreach (var proc in _processors)
         {
+            // Honour cooperative shutdown between processors. A processor that completes
+            // synchronously (no internal await) would otherwise not observe cancellation
+            // until the next async point — on a busy broker that could be the next message.
+            cancellationToken.ThrowIfCancellationRequested();
+
             if (proc is ReplyProcessor typedReplyProcessor)
             {
                 replyProcessor = typedReplyProcessor;
@@ -269,6 +371,10 @@ public sealed class MessageDispatcher(
     {
         foreach (var proc in _processors)
         {
+            // Mirror the pre-deserialization loop: shutdown cancellation must propagate
+            // between processors even when a processor completes synchronously.
+            ct.ThrowIfCancellationRequested();
+
             if (proc.RunBeforeDeserialization)
             {
                 continue;
@@ -281,7 +387,12 @@ public sealed class MessageDispatcher(
             }
         }
 
-        _logger.LogWarning("No processor handled message of type {MessageType}", mt.FullName);
+        // Debug, not Warning: the unregistered-type path already logs at Warning earlier in
+        // DispatchAsync. Reaching here means the type IS registered but no processor (handler,
+        // saga, aggregator, stream) claimed it — on a topic-exchange topology where the bus
+        // binds an exchange it doesn't fully service, that's the steady state for the unclaimed
+        // subset, not an operator-actionable signal.
+        _logger.LogDebug("No processor handled message of type {MessageType}", mt.FullName);
         return new ConsumeEventResult { Success = true, NotHandled = true };
     }
 

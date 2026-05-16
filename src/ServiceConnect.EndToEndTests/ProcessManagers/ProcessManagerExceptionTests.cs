@@ -43,7 +43,7 @@ public class ProcessManagerExceptionTests(MessagingFixture fixture)
 
         var services = new ServiceCollection();
         services.AddLogging();
-        services.AddSingleton<IList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
         services.AddSingleton<IProcessManagerPropertyMapper>(mapper);
         services.AddTransient<IProcessHandler<TestProcessData, TestMessage>, ThrowingProcessHandler>();
 

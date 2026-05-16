@@ -39,7 +39,7 @@ public class ConsumeContextReplyTests(MessagingFixture fixture)
 
         var responderServices = new ServiceCollection();
         responderServices.AddLogging();
-        responderServices.AddSingleton<IList<HandlerReference>>(responderHandlerRefs);
+        responderServices.AddSingleton<IReadOnlyList<HandlerReference>>(responderHandlerRefs);
         responderServices.AddTransient<IMessageHandler<TestRequest>, ContextReplyHandler>();
 
         responderServices.AddServiceConnect(builder =>
@@ -74,7 +74,7 @@ public class ConsumeContextReplyTests(MessagingFixture fixture)
 
         var requesterServices = new ServiceCollection();
         requesterServices.AddLogging();
-        requesterServices.AddSingleton<IList<HandlerReference>>(requesterHandlerRefs);
+        requesterServices.AddSingleton<IReadOnlyList<HandlerReference>>(requesterHandlerRefs);
         requesterServices.AddTransient<IMessageHandler<TestResponse>>(_ =>
             new CallbackHandler<TestResponse>(msg => replyTcs.TrySetResult(msg)));
 

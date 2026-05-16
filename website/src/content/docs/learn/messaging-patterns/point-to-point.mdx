@@ -132,15 +132,12 @@ One sender, one consumer, a direct line between them. This is also the shape the
 
 ## Multiple destinations
 
-A single `SendAsync` can deliver to more than one queue. Use `SendOptions.EndPoints` (plural) with a list:
+A single call can deliver to more than one queue via `IBus.SendToManyAsync`, which takes an explicit endpoint list:
 
 ```csharp
-await bus.SendAsync(
+await bus.SendToManyAsync(
     new StockUpdated(correlationId) { Sku = "widget", Quantity = 10 },
-    new SendOptions
-    {
-        EndPoints = new[] { "pricing", "search-index", "reporting" },
-    });
+    new[] { "pricing", "search-index", "reporting" });
 ```
 
 This is still point-to-point — one copy per listed queue. The sender is choosing the fan-out explicitly, rather than letting subscribers opt in. When the list of recipients is a fact you control, this is cleaner than publishing; when it is a concern that belongs on the consumer side, publish instead.
