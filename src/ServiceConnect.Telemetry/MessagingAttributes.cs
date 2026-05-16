@@ -38,7 +38,7 @@ public static class MessagingAttributes
     public const string MessagingOperationType = "messaging.operation.type";
 
     /// <summary>
-    /// Implementation-specific operation name (e.g. "publish", "send", "request", "receive").
+    /// Implementation-specific operation name (e.g. "publish", "send", "request", "process").
     /// </summary>
     public const string MessagingOperationName = "messaging.operation.name";
 
