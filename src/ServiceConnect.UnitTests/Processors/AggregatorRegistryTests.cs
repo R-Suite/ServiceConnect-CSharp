@@ -45,8 +45,27 @@ public class AggregatorRegistryTests
         Assert.DoesNotContain("PublicKeyToken=", descriptor.AggregatorName);
         Assert.DoesNotContain("Culture=", descriptor.AggregatorName);
 
-        // The name is the concrete handler's FullName, stable across hypothetical version bumps.
+        // The name is the concrete handler's FullName, stable across assembly version changes.
         Assert.Equal(typeof(ArgFooAggregator).FullName, descriptor.AggregatorName);
+    }
+
+    [Fact]
+    public void Construction_ThrowsInvalidOperation_WhenAggregatorIsGeneric()
+    {
+        // A generic aggregator subclass produces a FullName that embeds the assembly-qualified
+        // name of its generic argument (Version=, Culture=, PublicKeyToken=), defeating the
+        // version-stable derivation. The registry must reject such handlers at startup.
+        var refs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(ArgFoo), HandlerType = typeof(GenericFooAggregator<int>) }
+        };
+        var services = new ServiceCollection();
+        services.AddTransient<Aggregator<ArgFoo>, GenericFooAggregator<int>>();
+        var sp = services.BuildServiceProvider();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance));
+        Assert.Contains("generic", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -254,6 +273,14 @@ file class ArgFooMessageHandler : IMessageHandler<ArgFoo>
 }
 
 file class ArgBar(Guid c) : Message(c);
+
+file class GenericFooAggregator<TUnused> : Aggregator<ArgFoo>
+{
+    public override int BatchSize() => 1;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(1);
+    public override Task ExecuteAsync(IReadOnlyList<ArgFoo> messages, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
 
 file class ArgBarAggregator(int batchSize, TimeSpan timeout) : Aggregator<ArgBar>
 {

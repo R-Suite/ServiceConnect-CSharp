@@ -56,11 +56,23 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
                 !typeof(IDisposable).IsAssignableFrom(href.HandlerType))
             {
                 throw new InvalidOperationException(
-                    $"Aggregator '{aggregatorBaseType.FullName}' implements IAsyncDisposable but not IDisposable. " +
+                    $"Aggregator '{href.HandlerType.FullName}' implements IAsyncDisposable but not IDisposable. " +
                     "AggregatorRegistry uses synchronous scope disposal at construction (the aggregator instance is " +
                     "only consulted for BatchSize/Timeout configuration), which is incompatible with IAsyncDisposable-only " +
                     "lifetimes. Either implement IDisposable alongside IAsyncDisposable, or refactor the aggregator's " +
                     "shutdown logic to avoid IAsyncDisposable.");
+            }
+
+            // AggregatorName is derived from handlerType.FullName. A generic subclass
+            // produces a FullName that embeds the assembly-qualified name of its generic
+            // arguments — including Version= — defeating the version-stable naming this
+            // derivation is designed to provide. Require non-generic subclasses.
+            if (href.HandlerType.IsGenericType)
+            {
+                throw new InvalidOperationException(
+                    $"Aggregator '{href.HandlerType.FullName}' is a generic type. Generic aggregator subclasses " +
+                    "produce unstable FullNames that embed assembly version tokens, which orphan persisted state " +
+                    "across deploys. Declare a non-generic subclass for each closed message type.");
             }
 
             var descriptor = BuildDescriptor(href.MessageType, aggregatorBaseType, href.HandlerType, scope.ServiceProvider);
@@ -125,7 +137,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         if (batchSize <= 0 || timeout <= TimeSpan.Zero)
         {
             throw new InvalidOperationException(
-                $"Aggregator '{aggregatorBaseType.FullName}' has BatchSize={batchSize} and Timeout={timeout}. " +
+                $"Aggregator '{handlerType.FullName}' has BatchSize={batchSize} and Timeout={timeout}. " +
                 "Both BatchSize (>0) and Timeout (>TimeSpan.Zero) must be configured; without both, " +
                 "messages can be buffered with no flush path to deliver them.");
         }
