@@ -17,6 +17,10 @@ public interface IMessageBusReadStream
     /// Reads the assembled payload as a single byte array.
     /// </summary>
     /// <returns>The assembled payload.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the stream is not yet complete, or when a packet is missing during assembly.
+    /// A missing-packet condition is unrecoverable; treat the stream as corrupt and discard it.
+    /// </exception>
     byte[] Read();
 
     /// <summary>
@@ -45,6 +49,10 @@ public interface IMessageBusReadStream
     /// Reads the assembled payload as a <see cref="System.Buffers.ReadOnlySequence{T}"/>.
     /// </summary>
     /// <returns>The assembled payload sequence.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the stream is not yet complete, or when a packet is missing during assembly.
+    /// A missing-packet condition is unrecoverable; treat the stream as corrupt and discard it.
+    /// </exception>
     System.Buffers.ReadOnlySequence<byte> ReadSequence()
         => new(Read());
 }

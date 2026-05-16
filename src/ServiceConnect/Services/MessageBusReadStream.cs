@@ -139,7 +139,13 @@ internal sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadS
         Interlocked.Increment(ref _receivedCount);
     }
 
-    /// <inheritdoc />
+    /// <inheritdoc cref="IMessageBusReadStream.Read"/>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the stream is not yet complete, when the assembled sequence has a missing
+    /// packet (packet loss or out-of-order completion signalling), or when the stream's
+    /// <see cref="LastPacketNumber"/> becomes unset between the completeness check and assembly.
+    /// A missing-packet exception is unrecoverable; treat the stream as corrupt and discard it.
+    /// </exception>
     public byte[] Read()
     {
         if (!IsComplete())
@@ -173,7 +179,13 @@ internal sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadS
         return ms.ToArray();
     }
 
-    /// <inheritdoc />
+    /// <inheritdoc cref="IMessageBusReadStream.ReadSequence"/>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the stream is not yet complete, when the assembled sequence has a missing
+    /// packet (packet loss or out-of-order completion signalling), or when the stream's
+    /// <see cref="LastPacketNumber"/> becomes unset between the completeness check and assembly.
+    /// A missing-packet exception is unrecoverable; treat the stream as corrupt and discard it.
+    /// </exception>
     public System.Buffers.ReadOnlySequence<byte> ReadSequence()
     {
         if (!IsComplete())
