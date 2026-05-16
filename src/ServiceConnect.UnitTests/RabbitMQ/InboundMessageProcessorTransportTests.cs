@@ -31,7 +31,6 @@ public sealed class InboundMessageProcessorTransportTests
         var queueConfig = new Mock<IQueueConfiguration>();
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queueConfig.SetupGet(q => q.QueueName).Returns("q");
 
         channelMock
@@ -83,7 +82,6 @@ public sealed class InboundMessageProcessorTransportTests
         var queueConfig = new Mock<IQueueConfiguration>();
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queueConfig.SetupGet(q => q.QueueName).Returns("q");
 
         channelMock
@@ -309,7 +307,6 @@ public sealed class InboundMessageProcessorTransportTests
         var queueConfig = new Mock<IQueueConfiguration>();
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queueConfig.SetupGet(q => q.QueueName).Returns("q");
 
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);

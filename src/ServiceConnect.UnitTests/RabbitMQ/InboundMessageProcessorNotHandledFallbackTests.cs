@@ -35,7 +35,6 @@ public sealed class InboundMessageProcessorNotHandledFallbackTests
         var queueConfig = new Mock<IQueueConfiguration>();
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queueConfig.SetupGet(q => q.QueueName).Returns("main-q");
 
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);

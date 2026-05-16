@@ -455,7 +455,6 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **`SendOptions.Headers`** and **`PublishOptions.Headers`** are typed as `IReadOnlyDictionary<string, string>?`. Pass any `Dictionary<string, string>`; the framework will not iterate a dictionary another thread might be mutating.
 - **`IMessageHandler<T>.Context`** and **`IProcessHandler<T>.Context`** are declared non-nullable. Initialise with `= null!;` to satisfy the nullable-reference analyser — the framework guarantees `Context` is populated before `HandleAsync`.
 - **`OutgoingEventArgs.Headers`** is `init`-only — subscribers can mutate individual entries (e.g. stamp a `traceparent`) but cannot swap the whole dictionary out.
-- **`IQueueConfiguration`** gains **`AuditRoutingKey`** for routing audit publishes into a topic/direct exchange.
 - **`RequestOptions.Default`** returns a fresh instance per access; the previous singleton was mutable and leaked between callers.
 
 ### Mongo timeout-store + lease guards

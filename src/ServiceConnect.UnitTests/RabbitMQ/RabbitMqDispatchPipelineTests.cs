@@ -332,7 +332,6 @@ public sealed class RabbitMqDispatchPipelineTests
         queueConfig.SetupGet(q => q.QueueName).Returns(queueName);
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queueConfig.SetupGet(q => q.ErrorQueueName).Returns("err");
         queueConfig.SetupGet(q => q.DisableErrors).Returns(false);
 

@@ -55,7 +55,6 @@ public sealed class InboundMessageProcessorMetricsTests
         queueConfig.SetupGet(q => q.QueueName).Returns(queueName);
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
 
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);
         var retryHandler = new MessageRetryHandler(maxRetries: 3, errorExchange: "err", consumerQueueName: queueName, NullLogger.Instance);
@@ -112,7 +111,6 @@ public sealed class InboundMessageProcessorMetricsTests
         queueConfig.SetupGet(q => q.QueueName).Returns("q-auditdrop");
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(true);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
 
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);
         var retryHandler = new MessageRetryHandler(maxRetries: 0, errorExchange: "err", consumerQueueName: "q-auditdrop", NullLogger.Instance);

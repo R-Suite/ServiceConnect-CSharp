@@ -57,7 +57,6 @@ public sealed class InboundMessageProcessorAuditCancellationTests
         var queueConfig = new Mock<IQueueConfiguration>();
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(true);
         queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queueConfig.SetupGet(q => q.QueueName).Returns("q");
         var auditPublisher = new MessageAuditPublisher(queueConfig.Object);
 

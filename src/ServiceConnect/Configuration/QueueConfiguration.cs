@@ -13,7 +13,6 @@ internal sealed class QueueConfiguration : IQueueConfiguration
     private string _queueName = "";
     private string _errorQueueName = "errors";
     private string _auditQueueName = "audit";
-    private string _auditRoutingKey = string.Empty;
     private bool _auditingEnabled;
     private bool _disableErrors;
     private bool _purgeQueueOnStartup;
@@ -40,8 +39,6 @@ internal sealed class QueueConfiguration : IQueueConfiguration
     public string ErrorQueueName { get => _errorQueueName; set { ThrowIfFrozen(); _errorQueueName = value; } }
     /// <inheritdoc />
     public string AuditQueueName { get => _auditQueueName; set { ThrowIfFrozen(); _auditQueueName = value; } }
-    /// <inheritdoc />
-    public string AuditRoutingKey { get => _auditRoutingKey; set { ThrowIfFrozen(); _auditRoutingKey = value; } }
     /// <inheritdoc />
     public bool AuditingEnabled { get => _auditingEnabled; set { ThrowIfFrozen(); _auditingEnabled = value; } }
     /// <inheritdoc />

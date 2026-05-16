@@ -21,18 +21,6 @@ public interface IQueueConfiguration
     string AuditQueueName { get; set; }
 
     /// <summary>
-    /// Gets or sets the routing key used when publishing audit copies.
-    /// <para>
-    /// <b>Reserved — currently ignored.</b> The audit direct exchange is bound to the audit
-    /// queue with an empty routing key; any non-empty value configured here would be
-    /// unroutable (<c>mandatory=false</c>) and silently dropped.
-    /// The RabbitMQ audit publisher always publishes with <c>routingKey=""</c> and
-    /// logs a Warning at construction when this property is set to a non-empty value.
-    /// </para>
-    /// </summary>
-    string AuditRoutingKey { get; set; }
-
-    /// <summary>
     /// Gets or sets a value indicating whether message auditing is enabled.
     /// </summary>
     bool AuditingEnabled { get; set; }

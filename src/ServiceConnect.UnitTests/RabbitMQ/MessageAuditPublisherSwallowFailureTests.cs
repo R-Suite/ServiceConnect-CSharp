@@ -28,7 +28,6 @@ public class MessageAuditPublisherSwallowFailureTests
         var cfg = new Mock<IQueueConfiguration>();
         cfg.SetupGet(c => c.AuditingEnabled).Returns(true);
         cfg.SetupGet(c => c.AuditQueueName).Returns("audit");
-        cfg.SetupGet(c => c.AuditRoutingKey).Returns(string.Empty);
         return cfg;
     }
 

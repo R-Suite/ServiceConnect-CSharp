@@ -92,7 +92,6 @@ public sealed class RabbitMqConsumerHostBrokerCancelTests
         queue.SetupGet(q => q.QueueName).Returns("q");
         queue.SetupGet(q => q.ErrorQueueName).Returns("err");
         queue.SetupGet(q => q.AuditQueueName).Returns("audit");
-        queue.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queue.SetupGet(q => q.DisableErrors).Returns(false);
         queue.SetupGet(q => q.AuditingEnabled).Returns(false);
 

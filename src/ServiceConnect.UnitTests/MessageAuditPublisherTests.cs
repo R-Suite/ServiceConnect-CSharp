@@ -18,13 +18,11 @@ public class MessageAuditPublisherTests
 
     private static Mock<IQueueConfiguration> MakeQueueCfg(
         bool auditingEnabled,
-        string auditExchange = "audit",
-        string auditRoutingKey = "")
+        string auditExchange = "audit")
     {
         var cfg = new Mock<IQueueConfiguration>();
         cfg.SetupGet(c => c.AuditingEnabled).Returns(auditingEnabled);
         cfg.SetupGet(c => c.AuditQueueName).Returns(auditExchange);
-        cfg.SetupGet(c => c.AuditRoutingKey).Returns(auditRoutingKey);
         return cfg;
     }
 
@@ -76,30 +74,6 @@ public class MessageAuditPublisherTests
             It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
             It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
             It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task PublishAuditIfEnabledAsync_AlwaysUsesEmptyRoutingKey_EvenWhenConfigured()
-    {
-        // AuditRoutingKey is ignored at publish time: the audit direct exchange is bound
-        // with an empty routing key, so a non-empty value would cause a silent drop.
-        // The publisher forces routingKey="" regardless of the configured value.
-        var channel = new Mock<IChannel>();
-        channel.Setup(c => c.BasicPublishAsync(
-            It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
-            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
-            It.IsAny<CancellationToken>()))
-            .Returns(ValueTask.CompletedTask);
-
-        var publisher = new MessageAuditPublisher(MakeQueueCfg(true, auditRoutingKey: "audit.orders").Object);
-        var headers = new Dictionary<string, object> { [HeaderKeys.MessageType] = "SomeMessage" };
-
-        await publisher.PublishAuditIfEnabledAsync(channel.Object, MakeArgs(), headers);
-
-        channel.Verify(c => c.BasicPublishAsync(
-            "audit", string.Empty, true,
-            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
-            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

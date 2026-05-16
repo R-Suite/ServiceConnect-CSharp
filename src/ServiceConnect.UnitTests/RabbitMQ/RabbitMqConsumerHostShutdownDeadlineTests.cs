@@ -102,7 +102,6 @@ public sealed class RabbitMqConsumerHostShutdownDeadlineTests
         queueConfig.SetupGet(q => q.DisableErrors).Returns(false);
         queueConfig.SetupGet(q => q.ErrorQueueName).Returns("deadline-q.errors");
         queueConfig.SetupGet(q => q.AuditQueueName).Returns(string.Empty);
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
 
         var busConfig = new Mock<IBusConfiguration>();

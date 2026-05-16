@@ -50,7 +50,6 @@ public sealed class RabbitMqConsumerHostRestartCycleTests
         queueConfig.SetupGet(q => q.DisableErrors).Returns(false);
         queueConfig.SetupGet(q => q.ErrorQueueName).Returns("errors");
         queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
-        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
 
         var busConfig = new Mock<IBusConfiguration>();
         busConfig.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
