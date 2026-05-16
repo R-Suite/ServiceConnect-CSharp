@@ -42,6 +42,16 @@ public interface IProcessHandler<TData, TMessage>
     /// Configures the correlation mapping between <typeparamref name="TMessage"/> and
     /// <typeparamref name="TData"/>. The default implementation maps on CorrelationId.
     /// </summary>
+    /// <remarks>
+    /// <para><strong>Purity contract.</strong> Implementations MUST be pure with respect to
+    /// handler instance state. The framework invokes <see cref="ConfigureMapper"/> twice per
+    /// delivery — once before <see cref="HandleAsync"/> to locate the saga state, and once
+    /// during persistence to re-find the saga row for concurrency-safe update. Returning a
+    /// different mapping based on handler-instance mutation between these calls causes the
+    /// second find to resolve a different saga row than the first, with undefined persistence
+    /// behaviour. Read only from the <paramref name="mapper"/> parameter and the type-system;
+    /// do not read mutable instance fields.</para>
+    /// </remarks>
     void ConfigureMapper(IProcessManagerPropertyMapper mapper)
     {
         mapper.ConfigureMapping<TData, TMessage>(d => d.CorrelationId, m => m.CorrelationId);
