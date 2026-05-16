@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using ServiceConnect.Client.RabbitMQ;
@@ -26,16 +25,14 @@ public sealed class ProducerConnectionEnsureExchangeDeclaredTests
     [Fact]
     public async Task EnsureExchangeDeclaredAsync_WhenChannelIsNull_ThrowsChannelTransientException()
     {
-        // Arrange: ProducerConnection with _model forced to null (simulates a concurrent
-        // TearDownChannelAndConnectionAsync racing between generation snapshot and the declare call).
+        // _model is null at construction (no initializer) — same observable state left by
+        // TearDownChannelAndConnectionAsync. That covers both the never-connected case
+        // and the torn-down-between-snapshot-and-declare race: TryGetChannel() returns
+        // null in both, and the production code must surface ChannelTransientException
+        // rather than NRE so the retry classifier in ExecuteRetryingPublishAsync skips
+        // MarkResetRequired.
         var connection = CreateProducerConnection();
 
-        var modelField = typeof(ProducerConnection).GetField(
-            "_model", BindingFlags.NonPublic | BindingFlags.Instance)!;
-        modelField.SetValue(connection, null);
-
-        // Act & Assert: the null channel should surface as ChannelTransientException so
-        // the retry classifier in ExecuteRetryingPublishAsync skips MarkResetRequired.
         await Assert.ThrowsAsync<ChannelTransientException>(
             () => connection.EnsureExchangeDeclaredAsync("test-exchange", "fanout", CancellationToken.None));
     }
