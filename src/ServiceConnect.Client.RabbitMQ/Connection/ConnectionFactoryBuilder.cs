@@ -34,20 +34,23 @@ internal static class ConnectionFactoryBuilder
             : AmqpTcpEndpoint.UseDefaultPort;
 
         // AutomaticRecoveryEnabled restores the TCP connection after a broker restart or
-        // network partition. TopologyRecoveryEnabled is deliberately off: the application
-        // redeclares all topology on every connect via Consumer.StartConsumingAsync
-        // (exchanges, queues, bindings) and ProducerConnection.EnsureExchangeDeclaredAsync
-        // (generation-keyed declare cache). Running both paths is the dangerous middle ground:
-        // under topology drift (e.g., an operator changed queue arguments), the library's
-        // recovery channel is closed by the broker with PRECONDITION_FAILED before consumer
-        // bindings are restored, producing a silent half-recovered state. Application-level
-        // recovery is the canonical path; library-level topology recovery is off.
+        // network partition. TopologyRecoveryEnabled extends that to redeclare exchanges,
+        // queues, and bindings on the recovered connection. Both are enabled together so that
+        // cluster failover to a fresh broker node fully restores consumer subscriptions and
+        // producer routing targets. The library's topology recovery is idempotent for
+        // ServiceConnect's declarations: all exchanges and queues are durable, no passive
+        // declares are used, and arguments are fixed at startup, so the broker will not
+        // reject a redeclare with PRECONDITION_FAILED at runtime. Disabling topology recovery
+        // would break HA failover because the application only redeclares topology during
+        // Consumer.StartConsumingAsync at startup and has no listener on
+        // IConnection.RecoverySucceededAsync; a recovered connection to a fresh node would
+        // find no exchanges, queues, or bindings until the service restarted.
         var factory = new ConnectionFactory
         {
             VirtualHost = "/",
             Port = port,
             AutomaticRecoveryEnabled = true,
-            TopologyRecoveryEnabled = false,
+            TopologyRecoveryEnabled = true,
             RequestedHeartbeat = ResolveHeartbeat(transport, logger ?? NullLogger.Instance),
         };
 
