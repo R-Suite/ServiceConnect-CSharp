@@ -196,6 +196,22 @@ public class AggregatorRegistryTests
     }
 
     [Fact]
+    public void TryGet_RegistersHandlerThroughMultiLevelHierarchy()
+    {
+        // ConcreteMultiLevelAggregator : IntermediateAggregator : Aggregator<MultiLevelMsg>
+        // Previously only handlerType.BaseType was inspected; this two-level chain was silently dropped.
+        var refs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(MultiLevelMsg), HandlerType = typeof(ConcreteMultiLevelAggregator) }
+        };
+        var sp = BuildServiceProvider<MultiLevelMsg, ConcreteMultiLevelAggregator>();
+        var registry = new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
+
+        Assert.True(registry.TryGet(typeof(MultiLevelMsg), out var descriptor));
+        Assert.Equal(typeof(Aggregator<MultiLevelMsg>), descriptor!.AggregatorBaseType);
+    }
+
+    [Fact]
     public void Descriptor_BuildTypedList_ReturnsPopulatedTypedList()
     {
         var refs = new List<HandlerReference>
@@ -289,3 +305,16 @@ file class ArgBarAggregator(int batchSize, TimeSpan timeout) : Aggregator<ArgBar
     public override Task ExecuteAsync(IReadOnlyList<ArgBar> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
+
+file class MultiLevelMsg(Guid c) : Message(c);
+
+// Two-level hierarchy: ConcreteMultiLevelAggregator does not directly extend Aggregator<MultiLevelMsg>.
+file abstract class IntermediateAggregator : Aggregator<MultiLevelMsg>
+{
+    public override int BatchSize() => 1;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(1);
+    public override Task ExecuteAsync(IReadOnlyList<MultiLevelMsg> messages, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+}
+
+file sealed class ConcreteMultiLevelAggregator : IntermediateAggregator { }

@@ -94,22 +94,18 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
 
     private static Type? FindAggregatorBaseType(Type handlerType, Type messageType)
     {
-        if (handlerType.BaseType is not { IsGenericType: true } baseType)
+        var current = handlerType.BaseType;
+        while (current is not null && current != typeof(object))
         {
-            return null;
+            if (current.IsGenericType &&
+                current.GetGenericTypeDefinition() == typeof(Aggregator<>) &&
+                current.GetGenericArguments()[0] == messageType)
+            {
+                return current;
+            }
+            current = current.BaseType;
         }
-
-        if (baseType.GetGenericTypeDefinition() != typeof(Aggregator<>))
-        {
-            return null;
-        }
-
-        if (baseType.GetGenericArguments()[0] != messageType)
-        {
-            return null;
-        }
-
-        return baseType;
+        return null;
     }
 
     private static AggregatorDescriptor BuildDescriptor(Type messageType, Type aggregatorBaseType, Type handlerType, IServiceProvider sp)
