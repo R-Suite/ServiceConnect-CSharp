@@ -72,9 +72,10 @@ public class ProcessManagerTimeoutServiceLifecycleTests
     public async Task PollLoop_RemoveFailsTransiently_CatchUpLoopContinuesDrainingBacklog()
     {
         // When the store's Remove consistently fails, the catch-up loop must keep re-polling
-        // because sentCount (not removedCount) drives the loop signal. With the pre-fix code,
-        // dispatchedCount stayed at zero and the loop exited after one iteration, turning a
-        // full-rate drain into one-batch-per-tick.
+        // because sentCount (not a remove-derived count) drives the loop signal. If the loop
+        // signal were derived from successful removes, a degraded store would stall the loop
+        // after a single batch, reducing drain rate from full-batch-per-inner-iteration to
+        // one-batch-per-tick.
         //
         // Scenario: first 3 calls return a non-empty batch; 4th call returns empty.
         // The catch-up loop should call GetTimeoutsBatchAsync 4 times across 3 inner
