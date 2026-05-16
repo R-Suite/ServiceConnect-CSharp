@@ -43,14 +43,13 @@ public interface IProcessHandler<TData, TMessage>
     /// <typeparamref name="TData"/>. The default implementation maps on CorrelationId.
     /// </summary>
     /// <remarks>
-    /// <para><strong>Purity contract.</strong> Implementations MUST be pure with respect to
-    /// handler instance state. The framework invokes <see cref="ConfigureMapper"/> twice per
-    /// delivery — once before <see cref="HandleAsync"/> to locate the saga state, and once
-    /// during persistence to re-find the saga row for concurrency-safe update. Returning a
-    /// different mapping based on handler-instance mutation between these calls causes the
-    /// second find to resolve a different saga row than the first, with undefined persistence
-    /// behaviour. Read only from the <paramref name="mapper"/> parameter and the type-system;
-    /// do not read mutable instance fields.</para>
+    /// <para><strong>Purity contract.</strong> The framework calls <see cref="ConfigureMapper"/>
+    /// once per delivery and reuses the same mapper instance for both the initial saga lookup
+    /// and the post-handler persistence find. Implementations MUST be pure with respect to
+    /// handler-instance state — read from the <paramref name="mapper"/> parameter and the type
+    /// system, not from mutable handler fields. Returning a mapping that depends on mutable state
+    /// would cause inconsistent behaviour if the framework's call site is ever extended to call
+    /// the method again.</para>
     /// </remarks>
     void ConfigureMapper(IProcessManagerPropertyMapper mapper)
     {
