@@ -622,12 +622,6 @@ internal sealed class Producer : IProducer
         }
     }
 
-    // Internal sentinel for the channel-null TOCTOU between EnsureConnectedAsync (run outside
-    // _publishLock) and the locked action acquiring the lock — see ExecuteRetryingPublishAsync.
-    // Sealed + private so callers cannot construct or catch it externally; the retry classifier
-    // pattern-matches on the type to skip MarkResetRequired (the concurrent teardown that put
-    // _model = null is already the reset).
-    private sealed class ChannelTransientException(string message) : Exception(message);
 
     /// <summary>
     /// Releases the producer's RabbitMQ channel, connection, and synchronization primitives.
@@ -775,3 +769,4 @@ internal sealed class Producer : IProducer
         }
     }
 }
+

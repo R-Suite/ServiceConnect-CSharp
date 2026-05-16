@@ -296,7 +296,14 @@ internal sealed class ProducerConnection
             return;
         }
 
-        await _model!.ExchangeDeclareAsync(exchangeName, type, true, false, null, false, false, cancellationToken).ConfigureAwait(false);
+        // _model can be nulled by a concurrent TearDownChannelAndConnectionAsync between
+        // the generation snapshot above and this call. Snapshot the channel reference
+        // once and check for null so the retriable-publish path classifies this as a
+        // transient channel state and retries on the next iteration after reconnect.
+        var channel = TryGetChannel()
+            ?? throw new ChannelTransientException(
+                "Producer channel was torn down concurrently between generation snapshot and exchange declare; retrying.");
+        await channel.ExchangeDeclareAsync(exchangeName, type, true, false, null, false, false, cancellationToken).ConfigureAwait(false);
         // Stamp with the generation we observed. If a reset slid in between the snapshot
         // and the declare-call, the next caller's lookup will see generation+1 and won't
         // short-circuit — at worst a redundant re-declare on the new connection, never a
