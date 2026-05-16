@@ -19,7 +19,7 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     CancellationToken.None);
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>([]);
+services.AddSingleton<IReadOnlyList<HandlerReference>>([]);
 services.AddExampleBus(settings, "process-manager-starter");
 
 await using var provider = services.BuildServiceProvider();

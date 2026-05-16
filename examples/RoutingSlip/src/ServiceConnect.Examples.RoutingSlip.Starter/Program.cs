@@ -18,7 +18,7 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     CancellationToken.None);
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>([]);
+services.AddSingleton<IReadOnlyList<HandlerReference>>([]);
 services.AddExampleBus(settings, "routing-slip-starter");
 
 await using var provider = services.BuildServiceProvider();

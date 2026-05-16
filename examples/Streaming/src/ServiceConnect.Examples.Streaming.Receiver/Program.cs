@@ -21,7 +21,7 @@ var handlerReferences = new List<HandlerReference>
 };
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 services.AddTransient<IStreamHandler<DocumentUploaded>, DocumentUploadedHandler>();
 services.AddExampleBus(settings, queueName);
 

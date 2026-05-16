@@ -22,7 +22,7 @@ var handlerReferences = new List<HandlerReference>
 };
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 services.AddTransient<IMessageHandler<OrderPlaced>, OrderPlacedHandler>();
 services.AddExampleBus(settings, "billing-subscriber",
     configureBuilder: builder => builder.AddTelemetry());

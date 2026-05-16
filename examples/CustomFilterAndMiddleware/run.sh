@@ -30,6 +30,10 @@ wait_for_rabbitmq() {
     # rapidly during broker startup destabilises the EPMD and causes the
     # container to crash before the broker is ready.
     if nc -z localhost 5672 2>/dev/null; then
+      # RabbitMQ binds the TCP socket before the AMQP layer is fully ready.
+      # Give the broker a short grace period to finish startup so the first
+      # connection.start does not race the broker into a timeout.
+      sleep 3
       return 0
     fi
     sleep 1
@@ -61,7 +65,7 @@ wait_for_rabbitmq
 
 > "$OUTPUT_LOG"
 
-dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer.csproj" >> "$OUTPUT_LOG" 2>&1 &
+dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer.csproj" >> "$OUTPUT_LOG" 2>&1 &
 CONSUMER_PID=$!
 PIDS+=("$CONSUMER_PID")
 
@@ -70,7 +74,7 @@ if ! wait_for_ready; then
   exit 1
 fi
 
-dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.CustomFilterAndMiddleware.Sender/ServiceConnect.Examples.CustomFilterAndMiddleware.Sender.csproj" >> "$OUTPUT_LOG" 2>&1
+dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.CustomFilterAndMiddleware.Sender/ServiceConnect.Examples.CustomFilterAndMiddleware.Sender.csproj" >> "$OUTPUT_LOG" 2>&1
 
 sleep 5
 

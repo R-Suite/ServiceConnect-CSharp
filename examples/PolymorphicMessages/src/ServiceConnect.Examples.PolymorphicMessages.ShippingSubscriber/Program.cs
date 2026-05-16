@@ -19,7 +19,7 @@ var handlerReferences = new List<HandlerReference>
 };
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 services.AddTransient<IMessageHandler<OrderShipped>, OrderShippedHandler>();
 services.AddExampleBus(settings, "shipping-subscriber");
 

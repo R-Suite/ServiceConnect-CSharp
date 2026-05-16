@@ -30,7 +30,7 @@ var handlerReferences = new List<HandlerReference>
 };
 
 var services = new ServiceCollection();
-services.AddSingleton<IList<HandlerReference>>(handlerReferences);
+services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 services.AddSingleton(new WorkflowQueues(workflowQueueName, inventoryQueueName, paymentQueueName));
 services.AddTransient<IProcessHandler<FulfillmentState, OrderSubmitted>, FulfillmentProcessHandler>();
 services.AddTransient<IProcessHandler<FulfillmentState, InventoryReserved>, FulfillmentProcessHandler>();
