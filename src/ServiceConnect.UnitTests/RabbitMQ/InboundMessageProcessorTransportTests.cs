@@ -270,4 +270,91 @@ public sealed class InboundMessageProcessorTransportTests
 
         Assert.Same(transportException, thrown);
     }
+
+    // ── Handler exception forwarded to DLQ (not retry-publish exception) ──────
+
+    [Fact]
+    public async Task ProcessAsync_RetryPublishFails_FallbackCarriesHandlerException_NotRetryException()
+    {
+        // When the retry-publish path throws, the fallback to the error exchange must stamp
+        // the original handler exception (what the operator cares about) into the DLQ
+        // Exception header, not the retry-publish exception that caused the reroute.
+        var channelMock = new Mock<IChannel>();
+        var loggerMock = new Mock<ILogger>();
+        loggerMock.Setup(l => l.IsEnabled(It.IsAny<LogLevel>())).Returns(true);
+
+        var handlerException = new InvalidOperationException("handler-failed-sentinel");
+        var retryPublishException = new InvalidOperationException("retry-publish-failed-sentinel");
+
+        // First BasicPublishAsync (retry path) throws; second (error-exchange fallback) succeeds.
+        // Track captured properties on the second call to inspect the Exception header.
+        BasicProperties? capturedProps = null;
+        int callCount = 0;
+        channelMock
+            .Setup(c => c.BasicPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((string _exchange, string _rk, bool _mandatory, BasicProperties props, ReadOnlyMemory<byte> _body, CancellationToken _ct) =>
+            {
+                callCount++;
+                if (callCount == 1)
+                {
+                    return ValueTask.FromException(retryPublishException);
+                }
+                capturedProps = props;
+                return ValueTask.CompletedTask;
+            });
+
+        var queueConfig = new Mock<IQueueConfiguration>();
+        queueConfig.SetupGet(q => q.AuditingEnabled).Returns(false);
+        queueConfig.SetupGet(q => q.AuditQueueName).Returns("audit");
+        queueConfig.SetupGet(q => q.AuditRoutingKey).Returns(string.Empty);
+        queueConfig.SetupGet(q => q.QueueName).Returns("q");
+
+        var auditPublisher = new MessageAuditPublisher(queueConfig.Object);
+        var retryHandler = new MessageRetryHandler(
+            maxRetries: 3,
+            errorExchange: "err",
+            consumerQueueName: "q",
+            logger: loggerMock.Object);
+
+        // Handler throws the sentinel exception directly.
+        Task<ConsumeEventResult> HandleAsync(ReadOnlyMemory<byte> _, string __, IDictionary<string, object> ___, CancellationToken ____) =>
+            Task.FromException<ConsumeEventResult>(handlerException);
+
+        var processor = new InboundMessageProcessor(
+            consumerEventHandler: (ConsumerEventHandler)HandleAsync,
+            retryHandler: retryHandler,
+            auditPublisher: auditPublisher,
+            queueConfiguration: queueConfig.Object,
+            timeProvider: TimeProvider.System,
+            logger: loggerMock.Object,
+            retryQueueName: "q.retries",
+            errorsDisabled: false,
+            deadLetterUnhandledMessages: false,
+            includeMachineNameInHeaders: false,
+            shutdownTimedOut: () => false,
+            shutdownPublishToken: () => CancellationToken.None);
+
+        var processed = await processor.ProcessAsync(channelMock.Object, MakeArgs(), copiedHeaders: null, CancellationToken.None);
+
+        // Fallback completed — message is acked.
+        Assert.True(processed);
+
+        // The second BasicPublishAsync call must have fired (the error-exchange fallback).
+        Assert.Equal(2, callCount);
+        Assert.NotNull(capturedProps);
+
+        // The Exception header must contain the handler exception message, not the retry
+        // exception, so the DLQ entry identifies the business-logic failure.
+        var exceptionHeaderRaw = capturedProps!.Headers?["Exception"];
+        Assert.NotNull(exceptionHeaderRaw);
+        var exceptionJson = exceptionHeaderRaw is byte[] bytes
+            ? System.Text.Encoding.UTF8.GetString(bytes)
+            : exceptionHeaderRaw as string;
+        Assert.NotNull(exceptionJson);
+        Assert.Contains("handler-failed-sentinel", exceptionJson, StringComparison.Ordinal);
+        Assert.DoesNotContain("retry-publish-failed-sentinel", exceptionJson, StringComparison.Ordinal);
+    }
 }

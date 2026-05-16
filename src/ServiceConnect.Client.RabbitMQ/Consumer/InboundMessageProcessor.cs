@@ -315,7 +315,10 @@ internal sealed class InboundMessageProcessor(
                     publishChannel,
                     args,
                     headers,
-                    retryEx,
+                    // Use the original handler exception so the DLQ Exception header identifies
+                    // the actual handler failure. retryEx is logged separately above so operators
+                    // still see why the retry path failed.
+                    handlerException ?? retryEx,
                     shutdownToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (shutdownToken.IsCancellationRequested)
