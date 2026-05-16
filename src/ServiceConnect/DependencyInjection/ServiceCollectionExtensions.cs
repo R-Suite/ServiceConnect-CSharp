@@ -50,6 +50,10 @@ public static partial class ServiceCollectionExtensions
         var builder = new ServiceConnectBuilder();
         configure(builder);
 
+        // Catch the case where the user omits ConfigureQueues entirely: an empty QueueName
+        // would otherwise produce an opaque AMQP error at broker-connect time.
+        ServiceConnectBuilder.ValidateQueues(builder.BusConfig.Queues);
+
         RegisterConfiguration(services, builder);
         RegisterCoreServices(services);
         RegisterProcessors(services);

@@ -119,6 +119,31 @@ public class ServiceConnectBuilderTests
         Assert.Same(builder, result);
     }
 
+    [Fact]
+    public void ConfigureQueues_EmptyQueueName_Throws()
+    {
+        var builder = new ServiceConnectBuilder();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => builder.ConfigureQueues(q => q.QueueName = ""));
+
+        Assert.Contains("QueueName", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(" ")]
+    [InlineData("\t")]
+    [InlineData("   ")]
+    public void ConfigureQueues_WhitespaceQueueName_Throws(string whitespace)
+    {
+        var builder = new ServiceConnectBuilder();
+
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => builder.ConfigureQueues(q => q.QueueName = whitespace));
+
+        Assert.Contains("QueueName", ex.Message);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

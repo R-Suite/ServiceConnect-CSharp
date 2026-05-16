@@ -399,6 +399,7 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddServiceConnect(b =>
         {
+            b.ConfigureQueues(q => q.QueueName = "test");
             b.ConfigureBus(c => c.ScanForMessageHandlers = false);
             b.ScanAssemblies(typeof(TestHandlerFixture).Assembly);
         });
@@ -416,7 +417,9 @@ public class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddSingleton<IMessageHandler<TestHandlerFixture.SampleMessage>>(
             _ => new TestHandlerFixture.SampleHandler());
-        services.AddServiceConnect(b => b.ScanAssemblies(typeof(TestHandlerFixture).Assembly));
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ScanAssemblies(typeof(TestHandlerFixture).Assembly));
 
         using var provider = services.BuildServiceProvider();
         var handlers = provider.GetServices<IMessageHandler<TestHandlerFixture.SampleMessage>>().ToList();
@@ -438,13 +441,29 @@ public class ServiceCollectionExtensionsTests
             _ => new TestHandlerFixture.SampleHandler());
 
         // Scanner would otherwise find TestHandlerFixture.SampleHandler too.
-        services.AddServiceConnect(b => b.ScanAssemblies(typeof(TestHandlerFixture).Assembly));
+        services.AddServiceConnect(b => b
+            .ConfigureQueues(q => q.QueueName = "test")
+            .ScanAssemblies(typeof(TestHandlerFixture).Assembly));
 
         using var provider = services.BuildServiceProvider();
         var handlers = provider.GetServices<IMessageHandler<TestHandlerFixture.SampleMessage>>().ToList();
 
         // User registration is authoritative — no duplicate from scanner.
         Assert.Single(handlers);
+    }
+
+    [Fact]
+    public void AddServiceConnect_MissingConfigureQueues_Throws()
+    {
+        // When the user never calls ConfigureQueues, QueueName stays at its default
+        // empty string. AddServiceConnect must surface an actionable error immediately
+        // rather than failing with an opaque AMQP error at broker-connect time.
+        var services = new ServiceCollection();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            services.AddServiceConnect(b => { /* no ConfigureQueues */ }));
+
+        Assert.Contains("QueueName", ex.Message);
     }
 
     [Fact]

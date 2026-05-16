@@ -22,6 +22,7 @@ public class OnConsumedSuccessfullyFiltersValidationTests
         {
             services.AddServiceConnect(b =>
             {
+                b.ConfigureQueues(q => q.QueueName = "test");
                 b.AddOnConsumedSuccessfullyFilter<UnregisteredFilter>();
             });
         });

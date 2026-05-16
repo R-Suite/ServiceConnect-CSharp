@@ -102,7 +102,19 @@ public sealed class ServiceConnectBuilder
     public ServiceConnectBuilder ConfigureQueues(Action<IQueueConfiguration> configure)
     {
         configure(BusConfig.Queues);
+        ValidateQueues(BusConfig.Queues);
         return this;
+    }
+
+    // Empty/whitespace QueueName produces an opaque AMQP error at broker-connect time.
+    // Catching it here surfaces an actionable message at startup.
+    internal static void ValidateQueues(IQueueConfiguration queues)
+    {
+        if (string.IsNullOrWhiteSpace(queues.QueueName))
+        {
+            throw new InvalidOperationException(
+                "QueueConfiguration.QueueName must be a non-empty, non-whitespace string.");
+        }
     }
 
     /// <summary>
