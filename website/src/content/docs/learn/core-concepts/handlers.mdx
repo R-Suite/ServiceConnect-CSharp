@@ -108,7 +108,7 @@ services.AddServiceConnect(builder =>
 For tests, examples, or when you want a single place to see every handler, register a `HandlerReference` list manually:
 
 ```csharp
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
 {
     new() { HandlerType = typeof(WorkSubmittedHandler),   MessageType = typeof(WorkSubmitted) },
     new() { HandlerType = typeof(OrderPlacedAuditHandler), MessageType = typeof(OrderPlaced) },

@@ -58,6 +58,8 @@ When retries are exhausted, the message lands in the error queue unchanged excep
 
 Only the exception **type name and message** are stored. Stack traces are deliberately not serialised to the error queue — they are unbounded, sometimes sensitive, and already in your logs keyed to the same `MessageId`. Correlate the two via `MessageId` when triaging.
 
+The `Exception` header always identifies the **handler** failure that caused the message to enter retry — not any retry-publish or fallback-publish exception that may have occurred during error routing. If a retry-publish itself fails, that failure is logged separately and counted on `messaging.serviceconnect.retry.drops`; the original handler exception remains on the DLQ entry.
+
 The error queue is a normal RabbitMQ queue. You are not expected to consume it programmatically; it is an operator dashboard — `rabbitmqadmin get queue=errors`, a UI, a scheduled drain, a manual replay. Replay is: pull the message, fix the downstream condition, publish it back to the original queue.
 
 ## Disabling the error queue

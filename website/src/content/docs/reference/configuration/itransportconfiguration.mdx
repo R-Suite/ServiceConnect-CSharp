@@ -205,6 +205,20 @@ Gets or sets the callback used to validate the remote broker certificate. A cust
 
 ---
 
+### `SuppressPlaintextWarning`
+
+```csharp
+bool SuppressPlaintextWarning { get; set; }
+```
+
+Gets or sets a value indicating whether the startup warning for plaintext connections to non-loopback hosts is suppressed.
+
+**Default:** `false`.
+
+**Remarks.** When `SslEnabled = false` and the configured `Host` resolves to a non-loopback address, ServiceConnect emits a `Warning`-level log under the `ServiceConnect` category at startup. Set this to `true` when plaintext is intentional — Docker Compose networks, dev clusters, isolated internal LANs — to silence the warning without adjusting log-level filters.
+
+---
+
 ### `ClientSettings`
 
 ```csharp

@@ -10,6 +10,7 @@ ServiceConnect honours the host's shutdown token end-to-end. When `IHostApplicat
 ## What the bus promises
 
 - The handler's `CancellationToken` flows from the consumer host's lifecycle. When shutdown begins, the dispatcher rethrows `OperationCanceledException` from the catch path; the broker leaves the message unacked for redelivery on the next start.
+- When a handler throws both a non-OCE failure and an `OperationCanceledException` for the cancelled dispatch `CancellationToken`, the framework surfaces the OCE directly — it does **not** wrap it into `AggregateException`. Callers that previously caught `AggregateException` and unwrapped to detect cancellation must now catch `OperationCanceledException` first.
 - After-consuming filters still run in the dispatcher's `finally` block on every path — even when the handler threw OCE during shutdown.
 - Audit publishes and telemetry header injection are fire-and-forget — they don't block shutdown and don't surface OCE as application errors.
 

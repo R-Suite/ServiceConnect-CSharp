@@ -11,6 +11,10 @@ import { Aside } from '@astrojs/starlight/components';
 
 See [Aggregator](/ServiceConnect-CSharp/learn/messaging-patterns/aggregator/) for the conceptual tour.
 
+<Aside type="note" title="Generic subclasses are not supported">
+  Aggregator subclasses that are themselves generic — e.g. `class MyAggregator&lt;T&gt; : Aggregator&lt;MyMessage&gt;` — are rejected at registry construction with `InvalidOperationException`. A generic subclass's `FullName` embeds the assembly-qualified name of its type argument (including version and public-key token), which defeats the version-stable name derivation the persistence layer depends on. Declare all aggregators as concrete (non-generic) classes.
+</Aside>
+
 ## Aggregator\<T\>
 
 ```csharp

@@ -68,7 +68,7 @@ If your broker runs without TLS — typically the official `rabbitmq:3-managemen
 transport.SslEnabled = false;          // local-dev plaintext; production must use TLS
 ```
 
-ServiceConnect logs a `Warning`-level message under the `ServiceConnect.Client.RabbitMQ` category when plaintext is configured against a non-loopback host. To silence the warning in environments where plaintext is intentional (e.g. an isolated VPC), raise the category's minimum level to `Error` via standard `Microsoft.Extensions.Logging` filter configuration.
+ServiceConnect logs a `Warning`-level message under the `ServiceConnect` category when plaintext is configured against a non-loopback host. To silence the warning in environments where plaintext is intentional (e.g. an isolated VPC, Docker Compose network, internal LAN), set `SuppressPlaintextWarning = true` on the transport configuration — this is the supported mechanism. Adjusting the log-level filter is a secondary option but does not signal intent to the framework.
 
 ### Provider-specific settings
 
@@ -180,14 +180,18 @@ builder.ConfigureBus(bus =>
 
 A few worth a note:
 
-- **`ScanForMessageHandlers`** — when `true`, loaded assemblies are scanned for `IMessageHandler<T>` implementations. Deterministic, testable code sets this `false` and registers handlers explicitly via `IList<HandlerReference>` ([Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/)).
+- **`ScanForMessageHandlers`** — when `true`, loaded assemblies are scanned for `IMessageHandler<T>` implementations. Deterministic, testable code sets this `false` and registers handlers explicitly via `IReadOnlyList<HandlerReference>` ([Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/)).
 - **`AutoStartConsuming`** — when `true`, the bus starts consuming when the host starts; when `false`, you call `bus.StartConsumingAsync()` yourself. [Hosting & Lifecycle](/ServiceConnect-CSharp/learn/operations/hosting/) covers the trade-off.
 - **`ConsumerCount`** — how many parallel dispatch loops the bus runs. See [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for when to raise it.
 - **`IncludeMachineNameInHeaders`** — adds `SourceMachine`/`DestinationMachine` headers. Off by default because the hostname leak is a problem in shared-broker deployments.
 
+## Configuration is immutable after build
+
+`BusConfiguration` and all four sub-configurations (`Transport`, `Queues`, `Persistence`, `Pipeline`) are frozen at the end of `AddServiceConnect`. Any setter mutation on these objects after that point throws `InvalidOperationException`. This includes resolving `ITransportConfiguration` from DI and mutating it — a pattern that was previously silently accepted. Treat the configuration objects as sealed once the service provider is built.
+
 ## Validation is at startup, not runtime
 
-The builder validates as you go: a missing `Host`, a negative `MaxRetries`, a negative `GracefulShutdownTimeoutMilliseconds` — any of these throw when `AddServiceConnect` runs. That is by design; configuration errors should fail the process at startup, not surface as confusing broker errors hours later.
+The builder validates as you go: a missing `Host`, a negative `MaxRetries`, a negative `GracefulShutdownTimeoutMilliseconds`, an empty or whitespace-only `QueueName` — any of these throw `InvalidOperationException` when `AddServiceConnect` runs. That is by design; configuration errors should fail the process at startup, not surface as confusing broker errors hours later.
 
 If you're writing a config file or a builder helper, structure it so every required setting runs through `ConfigureTransport`, `ConfigureQueues`, and so on — not through field assignment on a bare options object. That's what gets you the validation.
 

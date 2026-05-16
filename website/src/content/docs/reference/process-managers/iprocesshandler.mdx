@@ -84,6 +84,10 @@ Configures the correlation between `TMessage` and `TData`. The default implement
   When one class implements `IProcessHandler<TData, TMessage>` for several `TMessage` types, override `ConfigureMapper` via an explicit interface implementation (`void IProcessHandler<TData, OrderPlaced>.ConfigureMapper(...)`). Otherwise the explicit-implementation requirement of default-interface-member overrides will silently fall back to the default `CorrelationId`-to-`CorrelationId` mapping.
 </Aside>
 
+<Aside type="caution" title="ConfigureMapper must be pure">
+  The framework invokes `ConfigureMapper` twice per delivery: once before `HandleAsync` (to resolve the correlation key for the load) and once during persist (to write back the state record). Implementations must be pure with respect to handler-instance state — `ConfigureMapper` must not read or write instance fields, allocate shared resources, or produce side effects. A mapper that mutates state on the first call will produce incorrect behaviour on the second call within the same dispatch.
+</Aside>
+
 ## Usage
 
 ### Reacting to `OrderPlaced` in a shipping saga

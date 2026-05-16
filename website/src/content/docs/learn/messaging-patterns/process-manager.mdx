@@ -160,7 +160,7 @@ services.AddTransient<IProcessHandler<FulfillmentState, OrderSubmitted>, Fulfill
 services.AddTransient<IProcessHandler<FulfillmentState, InventoryReserved>, FulfillmentProcessHandler>();
 services.AddTransient<IProcessHandler<FulfillmentState, PaymentCaptured>, FulfillmentProcessHandler>();
 
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
 {
     new() { HandlerType = typeof(FulfillmentProcessHandler), MessageType = typeof(OrderSubmitted) },
     new() { HandlerType = typeof(FulfillmentProcessHandler), MessageType = typeof(InventoryReserved) },

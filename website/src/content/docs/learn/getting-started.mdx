@@ -162,7 +162,7 @@ using ServiceConnect.Interfaces;
 
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
 {
     new() { HandlerType = typeof(WorkSubmittedHandler), MessageType = typeof(WorkSubmitted) }
 });

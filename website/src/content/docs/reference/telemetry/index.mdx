@@ -51,6 +51,8 @@ Registers `TelemetrySendMiddleware` and `TelemetryProcessingMiddleware` as the o
 
 Two `AddTelemetry` calls in the same process (for example, two independently-scoped `AddServiceConnect` registrations) produce two distinct `ServiceConnectInstrumentationOptions` instances. Options are not shared across bus registrations; enrichment delegates and enable-flags are independent.
 
+The configured `ServiceConnectInstrumentationOptions` is frozen at the end of the `configure` callback passed to `AddTelemetry`. Any setter mutation on the options object after that point throws `InvalidOperationException`.
+
 ## ServiceConnectInstrumentationOptions
 
 ```csharp
@@ -211,11 +213,13 @@ services.AddServiceConnect(builder =>
 | `MessagingDestinationAnonymous` | `messaging.destination.anonymous` | Boolean — set to `true` when the operation has no resolvable destination. |
 | `MessagingDestinationRoutingKey` | `messaging.rabbitmq.destination.routing_key` | RabbitMQ routing key for publishes that target a topic exchange. |
 | `MessagingOperationType` | `messaging.operation.type` | `publish` for sends/publishes, `process` for consumer-side handler dispatch. (Semconv 1.x.) |
-| `MessagingOperationName` | `messaging.operation.name` | `publish` for sends/publishes, `receive` for consumer-side handler dispatch. (Semconv 1.x.) |
+| `MessagingOperationName` | `messaging.operation.name` | `publish` for sends/publishes, `process` for consumer-side handler dispatch. (Semconv 1.x.) |
 | `MessageId` | `messaging.message.id` | Per-delivery unique id stamped by the producer. |
 | `MessageConversationId` | `messaging.message.conversation_id` | The `CorrelationId` — stable across a request/reply round-trip or a saga's full life. |
 | `MessagingMessageBodySize` | `messaging.message.body.size` | Serialised payload size in bytes. |
-| `ErrorType` | `error.type` | Mapped exception type for failure paths. Closed allow-list (`cancelled`, `timeout`, `forbidden`, …); never the exception message. |
+| `ErrorType` | `error.type` | Mapped exception type for failure paths. Stable values: `cancelled`, `timeout`, `channel_closed`, `broker_unreachable`, `publish_nacked`, `broker_interrupted`; falls back to the exception's `Type.Name` for anything else. Never the exception message. |
+| `ServerAddress` | `server.address` | Broker hostname or IP — the first entry of a comma-separated cluster list from `ITransportConfiguration.Host`. |
+| `ServerPort` | `server.port` | Broker TCP port from `ITransportConfiguration.ClientSettings["Port"]` when present. |
 | `MessagingClientId` | `messaging.client.id` | Optional consumer-side stable identifier; populated when an enrichment delegate supplies one. |
 
 The legacy pre-1.x `messaging.operation` attribute is intentionally NOT emitted — v7 emits the `operation.type` + `operation.name` split prescribed by semconv 1.x. Dashboards that filtered on the legacy attribute should switch to `messaging.operation.type`.

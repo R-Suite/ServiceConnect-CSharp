@@ -58,6 +58,10 @@ Three things to notice:
 - **Both size and time are optional knobs.** Return `0` from `BatchSize()` to disable size-based flushing; leave the default `Timeout.InfiniteTimeSpan` from `Timeout()` to disable time-based flushing. Whichever you override with a positive value is the flush trigger. Setting both — as above — flushes on whichever happens first.
 - **There is no correlation key.** One aggregator instance buffers every message of its type that arrives on its queue. If you need per-group batching ("aggregate *per order*"), use a [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) keyed on the group id; aggregator is the right shape only when one big pool is what you want.
 
+## Generic subclasses are not supported
+
+Generic aggregator subclasses — `class MyAggregator<T> : Aggregator<MyMessage>` — are rejected at registry construction with `InvalidOperationException`. A generic subclass's `FullName` embeds the assembly-qualified name of its type argument (including version and public-key token), which defeats the version-stable name derivation the persistence layer depends on. Use a concrete (non-generic) class for every aggregator.
+
 ## Registration and persistence
 
 An aggregator is registered like a handler — it consumes a message type from a queue — but it is bound to its base class, not to `IMessageHandler<T>`:
@@ -66,7 +70,7 @@ An aggregator is registered like a handler — it consumes a message type from a
 // Consumer/Program.cs
 services.AddTransient<Aggregator<TelemetrySlice>, TelemetrySliceAggregator>();
 
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
 {
     new() { HandlerType = typeof(TelemetrySliceAggregator), MessageType = typeof(TelemetrySlice) },
 });

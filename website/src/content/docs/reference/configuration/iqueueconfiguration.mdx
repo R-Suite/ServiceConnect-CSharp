@@ -19,7 +19,7 @@ string QueueName { get; set; }
 
 Gets or sets the primary queue name used by the bus.
 
-**Remarks.** This is the inbox consumed by `IBus.StartConsumingAsync` and the `SourceAddress` header stamped on outgoing messages. An empty value causes consumption to fail at startup.
+**Remarks.** This is the inbox consumed by `IBus.StartConsumingAsync` and the `SourceAddress` header stamped on outgoing messages. Empty or whitespace-only values are rejected at `AddServiceConnect` time with `InvalidOperationException` — the validation is fail-fast at startup, not at broker connect.
 
 ---
 

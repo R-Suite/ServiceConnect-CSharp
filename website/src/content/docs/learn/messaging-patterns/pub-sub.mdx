@@ -87,7 +87,7 @@ And a bootstrap that registers the handler, starts consuming, and waits:
 // AnalyticsSubscriber/Program.cs
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
 {
     new() { HandlerType = typeof(OrderPlacedAnalyticsHandler), MessageType = typeof(OrderPlaced) },
 });

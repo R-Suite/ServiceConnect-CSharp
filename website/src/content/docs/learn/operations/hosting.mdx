@@ -13,7 +13,7 @@ Register the services, set `AutoStartConsuming = true`, and the bus participates
 // Program.cs
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>
+builder.Services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
 {
     new() { HandlerType = typeof(OrderPlacedHandler), MessageType = typeof(OrderPlaced) },
 });
@@ -57,7 +57,7 @@ Short-lived scripts, request-only producers, and samples don't need the generic 
 ```csharp
 var services = new ServiceCollection();
 services.AddLogging();
-services.AddSingleton<IList<HandlerReference>>(new List<HandlerReference>());
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>());
 services.AddServiceConnect(sc =>
 {
     sc.UseRabbitMQ(t => { t.Host = "rabbit"; });
