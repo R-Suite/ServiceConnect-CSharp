@@ -63,7 +63,11 @@ public interface ITransportConfiguration
     /// (e.g. Docker Compose service names such as <c>"rabbitmq"</c> that resolve to an internal
     /// network address but are not loopback). Defaults to <see langword="false"/>.
     /// </summary>
-    bool SuppressPlaintextWarning { get; set; }
+    /// <remarks>
+    /// Default implementation returns <see langword="false"/> and ignores writes; override either
+    /// accessor as needed.
+    /// </remarks>
+    bool SuppressPlaintextWarning { get => false; set { } }
 
     /// <summary>
     /// Gets or sets the TLS policy errors that are tolerated during remote certificate validation.
