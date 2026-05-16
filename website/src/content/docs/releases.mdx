@@ -221,6 +221,50 @@ ServiceConnect emits a `Warning`-level log under the `ServiceConnect.Client.Rabb
 
 v7 added `AuditRoutingKey` but the audit publish path always bound to the audit exchange with the empty routing key — the configured value was reserved and never honoured. The knob is removed in v8 to keep the public API honest. Callers that set this property must drop the assignment; the resulting audit topology is identical to what they were getting in v7. If the feature lands later it will be reintroduced without breaking change at that point.
 
+### Breaking — Aggregator persistor `Name` partition value changed
+
+The `name` partition key passed to `IAggregatorPersistor` changed from the closed-generic base type's `FullName` to the concrete user-subclass `FullName`.
+
+**Before (v7):** the framework called `typeof(Aggregator<OrderShipped>).FullName`, which embeds the full assembly-qualified type argument:
+
+```
+ServiceConnect.Aggregator`1[[MyApp.Sagas.OrderShipped, MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]
+```
+
+**After (v8):** the framework calls `typeof(OrderShippedAggregator).FullName`, which is just the concrete subclass name:
+
+```
+MyApp.Sagas.OrderShippedAggregator
+```
+
+Any MongoDB rows (or other persistent store rows) written by v7 carry the old `Name` value. v8 code queries on the new value and never sees those rows — they accumulate indefinitely, consuming storage and causing aggregation conditions to stall.
+
+#### Migration — rename existing aggregator state
+
+**Run this BEFORE restarting your services on v8.** Rows under the old `Name` are invisible to v8 code and accumulate indefinitely.
+
+For each aggregator in your codebase, find the old name (`typeof(Aggregator<YourMessage>).FullName`, with the embedded assembly-qualified type argument) and the new name (`typeof(YourConcreteAggregator).FullName`), then run the following against your MongoDB database. The collection name is `Aggregator` (the default; substitute if you passed a custom collection name to the persistor constructor).
+
+```javascript
+// Old name: typeof(Aggregator<MyApp.Sagas.OrderShipped>).FullName
+//   "ServiceConnect.Aggregator`1[[MyApp.Sagas.OrderShipped, MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
+// New name: typeof(MyApp.Sagas.OrderShippedAggregator).FullName
+//   "MyApp.Sagas.OrderShippedAggregator"
+
+db.Aggregator.updateMany(
+  { Name: "ServiceConnect.Aggregator`1[[MyApp.Sagas.OrderShipped, MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]" },
+  { $set: { Name: "MyApp.Sagas.OrderShippedAggregator" } }
+);
+```
+
+Repeat once per aggregator type. After renaming, verify with:
+
+```javascript
+// Confirm no rows remain under the old name:
+db.Aggregator.countDocuments({ Name: { $regex: /^ServiceConnect\.Aggregator`1\[/ } });
+// Should return 0.
+```
+
 ### Feature — operator metrics + connection-lifecycle logs
 
 ServiceConnect now emits operator-grade metrics via `System.Diagnostics.Metrics`. Four instruments under the OTel `messaging.*` namespace (publish/process duration histograms, published/consumed message counters with outcome dimensions) plus five ServiceConnect-specific extensions (`messaging.serviceconnect.retry.attempts / retry.drops / publish.confirm_timeouts / audit.drops / outgoing_filters.blocked`) and an in-flight UpDownCounter.
