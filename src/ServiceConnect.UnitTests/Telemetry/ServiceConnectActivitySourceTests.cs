@@ -1316,9 +1316,9 @@ public sealed class ServiceConnectActivitySource_PropagationOnlyTests
     [Fact]
     public async Task Publish_ViaSendMiddleware_StampsAnonymousDestination()
     {
-        // Pre-fix the middleware stamped messaging.destination.name = MessageType.FullName.
-        // Post-fix it leaves Exchange empty so the span surfaces as anonymous, and only the
-        // routing-key tag is stamped (RabbitMQ-specific routing observability is preserved).
+        // The send middleware leaves Exchange empty for anonymous publishes so the span
+        // surfaces as anonymous; the routing-key tag is still stamped to preserve
+        // RabbitMQ-specific routing observability.
         Activity? captured = null;
         using var capture = new ActivityListener
         {
