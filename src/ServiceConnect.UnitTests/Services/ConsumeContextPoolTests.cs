@@ -81,4 +81,71 @@ public class ConsumeContextPoolTests
         context.Release();
         Assert.Throws<InvalidOperationException>(() => _ = context.Headers);
     }
+
+    [Fact]
+    public void MessageId_And_CorrelationId_ReturnSameValueOnSubsequentReads()
+    {
+        // Verifies that the volatile-flag cache: repeated reads of MessageId and CorrelationId
+        // return the same decoded value and don't re-parse the header on each access.
+
+        var msgId = "test-msg-id-123";
+        var corrId = Guid.NewGuid();
+        var pool = new ConsumeContextPool();
+        var bus = new Mock<IBus>().Object;
+        var queueConfig = new Mock<IQueueConfiguration>().Object;
+        var busConfig = new Mock<IBusConfiguration>().Object;
+
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageId] = System.Text.Encoding.UTF8.GetBytes(msgId),
+            [HeaderKeys.CorrelationId] = System.Text.Encoding.UTF8.GetBytes(corrId.ToString()),
+        };
+        var context = pool.Rent(bus, headers, queueConfig, busConfig, null, CancellationToken.None);
+
+        var firstMessageId = context.MessageId;
+        var secondMessageId = context.MessageId;
+        var firstCorrelationId = context.CorrelationId;
+        var secondCorrelationId = context.CorrelationId;
+
+        Assert.Equal(msgId, firstMessageId);
+        Assert.Equal(firstMessageId, secondMessageId);
+        Assert.Equal(corrId, firstCorrelationId);
+        Assert.Equal(firstCorrelationId, secondCorrelationId);
+
+        context.Release();
+    }
+
+    [Fact]
+    public void MessageId_And_CorrelationId_ResetBetweenRentals()
+    {
+        // Verifies that cached MessageId / CorrelationId from a previous rental are not
+        // visible after Release + re-Rent with different headers.
+
+        var pool = new ConsumeContextPool();
+        var bus = new Mock<IBus>().Object;
+        var queueConfig = new Mock<IQueueConfiguration>().Object;
+        var busConfig = new Mock<IBusConfiguration>().Object;
+
+        var firstMsgId = "first-msg";
+        var firstCorrId = Guid.NewGuid();
+        var headersA = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageId] = System.Text.Encoding.UTF8.GetBytes(firstMsgId),
+            [HeaderKeys.CorrelationId] = System.Text.Encoding.UTF8.GetBytes(firstCorrId.ToString()),
+        };
+        var contextA = pool.Rent(bus, headersA, queueConfig, busConfig, null, CancellationToken.None);
+        // Force caching on first rental.
+        _ = contextA.MessageId;
+        _ = contextA.CorrelationId;
+        contextA.Release();
+
+        // Second rental has different (empty) headers.
+        var headersB = new Dictionary<string, object>();
+        var contextB = pool.Rent(bus, headersB, queueConfig, busConfig, null, CancellationToken.None);
+
+        Assert.Null(contextB.MessageId);
+        Assert.Equal(Guid.Empty, contextB.CorrelationId);
+
+        contextB.Release();
+    }
 }

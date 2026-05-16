@@ -97,8 +97,15 @@ internal sealed class ConsumeContextPool
         private IBusConfiguration _busConfig = null!;
         private IReplyStatusRequestReplyManager? _replyStatusRequestReplyManager;
         private string? _messageId;
-        private bool _messageIdCached;
-        private Guid? _correlationId;
+        // Cached backing fields — same memory-model contract as ConsumeContext: each payload
+        // field is plain; the volatile bool flag publishes it. Writers MUST write the payload
+        // before the flag (release barrier); readers MUST check the flag before reading the
+        // payload. Volatile flag-clear in Release/Initialize happens BEFORE the payload clear
+        // so a reader who sees the flag false never observes a stale payload from the
+        // previous rental.
+        private volatile bool _messageIdCached;
+        private Guid _correlationIdValue;
+        private volatile bool _correlationIdCached;
 
         // Rent-token guard: every Initialize bumps the instance token; Release bumps it
         // again. The RentalHandle struct captures the token at rent time. If a caller holds
@@ -136,17 +143,21 @@ internal sealed class ConsumeContextPool
             {
                 _messageId = _headers.TryGetValue(HeaderKeys.MessageId, out var value)
                     ? HeaderDecoder.Decode(value) : null;
-                _messageIdCached = true;
+                _messageIdCached = true;  // volatile write — release barrier publishes _messageId
             }
             return _messageId;
         }
 
         internal Guid GetOrCacheCorrelationId()
         {
-            _correlationId ??= _headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
-                    && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
+            if (!_correlationIdCached)
+            {
+                _correlationIdValue = _headers.TryGetValue(HeaderKeys.CorrelationId, out var value)
+                        && Guid.TryParse(HeaderDecoder.Decode(value), out var id)
                     ? id : Guid.Empty;
-            return _correlationId.Value;
+                _correlationIdCached = true;  // volatile write — release barrier publishes _correlationIdValue
+            }
+            return _correlationIdValue;
         }
 
         internal long Initialize(
@@ -170,9 +181,12 @@ internal sealed class ConsumeContextPool
             _replyStatusRequestReplyManager = replyStatusRequestReplyManager;
             CancellationTokenUnsafe = cancellationToken;
             _headers = headers as Dictionary<string, object> ?? new Dictionary<string, object>(headers, StringComparer.Ordinal);
-            _messageId = null;
+            // Flag-clear before payload-clear: a reader who sees the flag false never
+            // observes a stale payload from the previous rental.
             _messageIdCached = false;
-            _correlationId = null;
+            _messageId = null;
+            _correlationIdCached = false;
+            _correlationIdValue = default;
             // Re-arm the idempotency guard so a future Release can transition active->pooled
             // exactly once. Sequenced before the token bump so an EnsureActive reader who
             // sees the new token never observes _pooled=1 (which would indicate the context
@@ -252,9 +266,12 @@ internal sealed class ConsumeContextPool
             BusUnsafe = null!;
             CancellationTokenUnsafe = default;
             _replyStatusRequestReplyManager = null;
-            _messageId = null;
+            // Flag-clear before payload-clear: a reader who sees the flag false never
+            // observes a stale payload from the previous rental.
             _messageIdCached = false;
-            _correlationId = null;
+            _messageId = null;
+            _correlationIdCached = false;
+            _correlationIdValue = default;
 
             // Idempotency guard: only the first Release call after Initialize transitions
             // _pooled from 0 to 1; a defensive double-Release CAS-fails the second call
