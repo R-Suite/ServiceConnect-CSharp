@@ -99,17 +99,17 @@ internal sealed class HandlerProcessor(
 
                 if (handlerExceptions is not null)
                 {
-                    // If the CT is cancelled and any collected exception is OCE, surface the
-                    // OCE directly so upstream dispatch applies shutdown semantics, not retry
-                    // semantics. This handles the race where the when-filter evaluated false
-                    // at catch time but the CT was cancelled by the time the loop drained.
-                    if (cancellationToken.IsCancellationRequested)
+                    // If the CT is cancelled and any collected exception is OCE, surface
+                    // cancellation via ThrowIfCancellationRequested so the thrown OCE carries
+                    // the caller's token. The collected OCE may carry a different token (e.g.
+                    // a handler's own linked CT); throwing from the caller's CT ensures
+                    // upstream dispatch applies shutdown semantics, not retry semantics.
+                    // This also handles the race where the when-filter evaluated false at
+                    // catch time but the CT was cancelled by the time the loop drained.
+                    if (cancellationToken.IsCancellationRequested && handlerExceptions.Any(e => e is OperationCanceledException))
                     {
-                        var oce = handlerExceptions.OfType<OperationCanceledException>().FirstOrDefault();
-                        if (oce is not null)
-                        {
-                            throw oce;
-                        }
+                        // Throws OCE with the caller's CT; the collected OCE may carry a different token.
+                        cancellationToken.ThrowIfCancellationRequested();
                     }
 
                     throw new AggregateException(
