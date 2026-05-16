@@ -14,11 +14,22 @@ public static class MessagingAttributes
     /// <summary>
     /// Attribute name for the logical message identifier.
     /// </summary>
+    /// <remarks>
+    /// HIGH CARDINALITY. Permitted on spans (where backends cap retention by time) but
+    /// MUST NOT be added to a <see cref="System.Diagnostics.TagList"/> passed to a
+    /// metric instrument. A per-message GUID dimension on a Counter or Histogram fans
+    /// out to unbounded series and will exhaust a Prometheus / VictoriaMetrics backend's
+    /// cardinality budget.
+    /// </remarks>
     public const string MessageId = "messaging.message.id";
 
     /// <summary>
     /// Attribute name for the conversation or correlation identifier.
     /// </summary>
+    /// <remarks>
+    /// HIGH CARDINALITY. Same constraint as <see cref="MessageId"/>: span-only;
+    /// never a metric tag.
+    /// </remarks>
     public const string MessageConversationId = "messaging.message.conversation_id";
 
     /// <summary>
