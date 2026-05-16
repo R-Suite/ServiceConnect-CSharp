@@ -381,9 +381,19 @@ internal sealed class AggregatorProcessor(
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
-                    // Cooperative shutdown mid-cleanup — propagate so the broker leaves the
-                    // delivery unacked; the lease expires naturally and the next bus instance
-                    // reclaims. Distinct from transient persistor faults below.
+                    // Handler succeeded; release the lease eagerly so the redelivery's next
+                    // GetSnapshotAsync can re-claim immediately instead of waiting for TTL.
+                    // Use CancellationToken.None so the release runs even though dispatch was cancelled.
+                    try
+                    {
+                        await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch (Exception releaseEx)
+                    {
+                        logger.LogWarning(releaseEx,
+                            "Aggregator {AggregatorName} lease release on cancel path failed; lease-expiry will reclaim.",
+                            descriptor.AggregatorName);
+                    }
                     throw;
                 }
                 catch (Exception removeEx)

@@ -1015,6 +1015,83 @@ public class AggregatorProcessorTests
         Assert.Equal(0, staleAggregator.Hits);
         Assert.Equal(1, freshAggregator.Hits);
     }
+
+    [Fact]
+    public async Task FlushAggregator_CancelDuringRemoveSnapshot_ReleasesLeaseBeforeRethrowing()
+    {
+        // When RemoveSnapshotAsync throws OCE (token cancelled after handler dispatch
+        // succeeds), the processor must call ReleaseSnapshotAsync with CancellationToken.None
+        // before re-throwing so the redelivery's next GetSnapshotAsync can re-claim
+        // immediately rather than waiting for the lease TTL.
+        var cts = new CancellationTokenSource();
+
+        var messages = new List<AggTestMessage>
+        {
+            new(Guid.NewGuid()) { Value = "A" },
+            new(Guid.NewGuid()) { Value = "B" },
+            new(Guid.NewGuid()) { Value = "C" },
+        };
+
+        var releaseCallCount = 0;
+        var handlerExecuted = false;
+
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var insertCount = 0;
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => ++insertCount);
+
+        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(() => SnapshotOf(messages));
+
+        // RemoveSnapshotAsync cancels the token and then throws OCE, simulating
+        // cooperative shutdown arriving mid-cleanup after handler dispatch.
+        persistorMock.Setup(p => p.RemoveSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns<string, IAggregatorSnapshot, CancellationToken>((_, _, _) =>
+            {
+                cts.Cancel();
+                return Task.FromCanceled(cts.Token);
+            });
+
+        persistorMock.Setup(p => p.ReleaseSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Callback(() => Interlocked.Increment(ref releaseCallCount))
+            .Returns(Task.CompletedTask);
+
+        var cancellingAggregator = new CancelOnExecuteAggregator(() => handlerExecuted = true);
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(AggTestMessage), HandlerType = typeof(CancelOnExecuteAggregator) }
+        };
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
+        services.AddSingleton<Aggregator<AggTestMessage>>(cancellingAggregator);
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs, provider.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance);
+        var (accessor, scopeHandle, scopeFactory) = BuildScopeContext(provider);
+        using var _scopeAgg = scopeHandle;
+        await using var processor = new AggregatorProcessor(registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        // The first two messages buffer; the third triggers the flush.
+        // Pass cts.Token so the OCE from RemoveSnapshotAsync propagates as a
+        // cancellation on the dispatch token.
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), messages[0], headers, envelope, cts.Token);
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), messages[1], headers, envelope, cts.Token);
+
+        var ex = await Record.ExceptionAsync(() =>
+            processor.ProcessAsync(new byte[] { 1 }, typeof(AggTestMessage), messages[2], headers, envelope, cts.Token));
+        Assert.IsAssignableFrom<OperationCanceledException>(ex);
+
+        Assert.True(handlerExecuted);
+        // ReleaseSnapshotAsync must be called exactly once on the cancel path.
+        Assert.Equal(1, Volatile.Read(ref releaseCallCount));
+    }
 }
 
 file sealed class ResetTimerProbeMessage(Guid correlationId) : Message(correlationId);
@@ -1137,4 +1214,18 @@ file sealed class ThrowingAggregator : Aggregator<AggTestMessage>
     public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
     public override Task ExecuteAsync(IReadOnlyList<AggTestMessage> messages, CancellationToken cancellationToken = default)
         => throw new InvalidOperationException("handler failure — batch must remain for retry");
+}
+
+// Records execution and completes without error; cancellation arrives after this
+// returns (at the RemoveSnapshotAsync step), not during the handler itself.
+file sealed class CancelOnExecuteAggregator(Action onExecute) : Aggregator<AggTestMessage>
+{
+    public override int BatchSize() => 3;
+    public override TimeSpan Timeout() => TimeSpan.FromMinutes(5);
+
+    public override Task ExecuteAsync(IReadOnlyList<AggTestMessage> messages, CancellationToken cancellationToken = default)
+    {
+        onExecute();
+        return Task.CompletedTask;
+    }
 }
