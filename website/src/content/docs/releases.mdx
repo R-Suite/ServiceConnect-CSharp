@@ -217,6 +217,10 @@ ServiceConnect emits a `Warning`-level log under the `ServiceConnect.Client.Rabb
 
 **Why.** ServiceConnect-CSharp v7 defaulted to plaintext for ergonomic localhost dev. v8 inverts the default to align with secure-by-default norms — production deployments connecting over plaintext to a non-loopback broker are almost always a misconfiguration, and the warning catches the rest.
 
+### Breaking — `IQueueConfiguration.AuditRoutingKey` removed
+
+v7 added `AuditRoutingKey` but the audit publish path always bound to the audit exchange with the empty routing key — the configured value was reserved and never honoured. The knob is removed in v8 to keep the public API honest. Callers that set this property must drop the assignment; the resulting audit topology is identical to what they were getting in v7. If the feature lands later it will be reintroduced without breaking change at that point.
+
 ### Feature — operator metrics + connection-lifecycle logs
 
 ServiceConnect now emits operator-grade metrics via `System.Diagnostics.Metrics`. Four instruments under the OTel `messaging.*` namespace (publish/process duration histograms, published/consumed message counters with outcome dimensions) plus five ServiceConnect-specific extensions (`messaging.serviceconnect.retry.attempts / retry.drops / publish.confirm_timeouts / audit.drops / outgoing_filters.blocked`) and an in-flight UpDownCounter.
@@ -455,6 +459,7 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **`SendOptions.Headers`** and **`PublishOptions.Headers`** are typed as `IReadOnlyDictionary<string, string>?`. Pass any `Dictionary<string, string>`; the framework will not iterate a dictionary another thread might be mutating.
 - **`IMessageHandler<T>.Context`** and **`IProcessHandler<T>.Context`** are declared non-nullable. Initialise with `= null!;` to satisfy the nullable-reference analyser — the framework guarantees `Context` is populated before `HandleAsync`.
 - **`OutgoingEventArgs.Headers`** is `init`-only — subscribers can mutate individual entries (e.g. stamp a `traceparent`) but cannot swap the whole dictionary out.
+- **`IQueueConfiguration`** gains **`AuditRoutingKey`** for routing audit publishes into a topic/direct exchange. (Removed again in v8 — see the v8 breaking-changes list.)
 - **`RequestOptions.Default`** returns a fresh instance per access; the previous singleton was mutable and leaked between callers.
 
 ### Mongo timeout-store + lease guards
