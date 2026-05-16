@@ -10,7 +10,7 @@ namespace ServiceConnect.UnitTests.RabbitMQ;
 /// Verifies that all public publish/send entry points reject null type arguments
 /// with <see cref="ArgumentNullException"/> before touching the message body.
 /// Body parameters are <see cref="ReadOnlyMemory{T}"/> (a value type), so null is
-/// not representable; null-body tests are no longer applicable post-Phase-A.2.
+/// not representable; null-body tests are not applicable.
 /// </summary>
 public sealed class ProducerNullArgumentTests
 {

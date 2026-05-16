@@ -294,9 +294,9 @@ internal sealed class InMemoryProcessManagerFinder : IProcessManagerFinder
             });
 
             // Reflect the store-side increment back to the caller so consecutive updates
-            // using the same MemoryData<T> instance don't fail concurrency check. Mongo
-            // persistor returns the post-update document via FindOneAndUpdate; InMemory
-            // previously diverged.
+            // using the same MemoryData<T> instance don't fail the concurrency check.
+            // Matches the Mongo persistor behaviour: FindOneAndUpdate returns the post-update
+            // document, so the caller's Version stays in sync with the store.
             newData.Version++;
         }
         finally

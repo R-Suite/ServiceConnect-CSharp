@@ -1009,7 +1009,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         ambient.Dispose();
     }
 
-    // ---------------- Task 14: MaxTagValueLength truncation ----------------
+    // ---------------- MaxTagValueLength truncation ----------------
 
     [Fact]
     public void Publish_HeaderValueExceedsMaxTagValueLength_TruncatesTag()
@@ -1055,7 +1055,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal(shortRoutingKey, routingKeyTag);
     }
 
-    // ---------------- Task 15: ExceptionMessageSanitiser ----------------
+    // ---------------- ExceptionMessageSanitiser ----------------
 
     [Fact]
     public void SetError_WithSanitiser_AppliesToStatusAndExceptionEventTag()
@@ -1105,14 +1105,14 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         }
     }
 
-    // ---------------- Task 16: IsAllDataRequested guards ----------------
+    // ---------------- IsAllDataRequested guards ----------------
 
     // NOTE: This test cannot use the fixture's pre-registered AllData listener because AllData
     // beats PropagationData and IsAllDataRequested would always be true. The test is placed here
     // for organisational proximity but uses its own isolated listener pattern: see
     // ServiceConnectActivitySource_PropagationOnlyTests below for the actual guard coverage.
 
-    // ---------------- Task 17: Empty-Guid CorrelationId regression ----------------
+    // ---------------- Empty-Guid CorrelationId ----------------
 
     [Fact]
     public void Publish_EmptyCorrelationId_DoesNotSetConversationIdTag()
@@ -1145,7 +1145,7 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         Assert.Equal(cid.ToString(), activity.GetTagItem(MessagingAttributes.MessageConversationId)?.ToString());
     }
 
-    // ---------------- Task 19: Single ActivitySource verification ----------------
+    // ---------------- Single ActivitySource verification ----------------
 
     [Fact]
     public void Publish_Send_Consume_AllEmitOnSingleActivitySource()

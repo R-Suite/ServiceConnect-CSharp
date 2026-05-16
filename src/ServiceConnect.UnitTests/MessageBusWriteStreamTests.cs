@@ -44,8 +44,7 @@ public class MessageBusWriteStreamTests
     [Fact]
     public async Task WriteAsync_SliceViaAsMemory_SendsCorrectBytes()
     {
-        // Callers that previously used WriteAsync(buffer, offset, count) now slice
-        // via buffer.AsMemory(offset, count) before calling WriteAsync.
+        // WriteAsync accepts ReadOnlyMemory<byte>; callers slice via buffer.AsMemory(offset, count).
         await using var stream = new MessageBusWriteStream(_producer.Object, "dest", typeof(FakeStreamMsg));
         var buffer = new byte[] { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 };
 

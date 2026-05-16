@@ -12,11 +12,10 @@ namespace ServiceConnect.UnitTests.RabbitMQ;
 /// <summary>
 /// Verifies that RabbitMqConsumerHost captures the IConnection reference at subscribe time
 /// and uses the same captured reference when unsubscribing in DisposeAsync.
-///
-/// The bug being tested: previously DisposeAsync re-fetched _connection.UnderlyingConnection,
-/// which returns null after the parent Connection's DisposeAsync has run. The result was
-/// that the four connection-level event handlers were never unsubscribed, leaking them on
-/// the original IConnection until GC reclaimed it.
+/// DisposeAsync must not re-fetch _connection.UnderlyingConnection: that property returns
+/// null after the parent Connection's DisposeAsync has run, which would leave the four
+/// connection-level event handlers unsubscribed — leaking them on the original IConnection
+/// until GC reclaims it.
 /// </summary>
 public sealed class RabbitMqConsumerHostConnectionEventCaptureTests
 {

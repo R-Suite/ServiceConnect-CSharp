@@ -24,7 +24,7 @@ internal sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinde
     // AvailableWaitHandle, so disposal is a functional no-op. A concurrent caller's Release()
     // on a disposed semaphore would throw ObjectDisposedException out of the unwind path,
     // which we cannot prevent without holding GC references to every caller. Mirrors the
-    // Connection / ProducerConnection / Producer / Bus pattern (Phases 4 + 6 + 7).
+    // Connection / ProducerConnection / Producer / Bus pattern.
     private readonly SemaphoreSlim _indexCreationSemaphore = new(1, 1);
     private static readonly HashSet<int> BenignIndexCodes = [85, 86]; // IndexOptionsConflict, IndexKeySpecsConflict
 

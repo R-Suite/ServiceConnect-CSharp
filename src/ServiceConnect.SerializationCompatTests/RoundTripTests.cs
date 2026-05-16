@@ -22,9 +22,9 @@ public class RoundTripTests
 {
     private static readonly SystemTextJsonMessageSerializer Stj = new();
 
-    // Adapter: the production IMessageSerializer interface dropped its byte[]-returning
-    // Serialize<T>(T) overload in Phase A.2. The compat tests still want byte[] for the
-    // JSON-DOM equivalence assertions, so we route through ArrayBufferWriter here.
+    // Adapter: the production IMessageSerializer interface uses IBufferWriter<byte>, not
+    // byte[]. The compat tests need byte[] for JSON-DOM equivalence assertions, so we
+    // route through ArrayBufferWriter here.
     private static byte[] StjSerialize(Message message)
     {
         var bw = new ArrayBufferWriter<byte>();

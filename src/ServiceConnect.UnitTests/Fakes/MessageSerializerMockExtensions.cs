@@ -8,10 +8,10 @@ namespace ServiceConnect.UnitTests.Fakes;
 
 /// <summary>
 /// Test helpers that re-create the v7 byte[]-returning Serialize<T>(T) shape on top of
-/// the v8 IBufferWriter-based interface. The Phase A.2 atomic migration narrowed
-/// IMessageSerializer to three methods; many existing unit tests only care that
-/// Serialize was invoked with a given message and that a known body propagates onward.
-/// These helpers preserve those semantics without re-writing each test individually.
+/// the v8 IBufferWriter-based interface. IMessageSerializer exposes three methods; many
+/// unit tests only care that Serialize was invoked with a given message and that a known
+/// body propagates onward. These helpers preserve those semantics without re-writing
+/// each test individually.
 /// </summary>
 internal static class MessageSerializerMockExtensions
 {

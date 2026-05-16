@@ -682,11 +682,11 @@ public class RequestReplyManagerTests
     [Fact]
     public async Task PublishRequestAsync_NullExpectedCount_NoReplies_CompletesAtTimeoutWithoutException()
     {
-        // After Phase A.3 dropped RequestOptions.EndPoints, ExpectedReplyCount no longer
-        // falls back to "EndPoints.Count". With null/zero/negative ExpectedReplyCount,
-        // PublishRequestAsync must wait the full Timeout and complete successfully — even
-        // when zero replies arrive — rather than throwing RequestTimeoutException. This
-        // path is the silent-success branch in the timeout handler: the call is a "fire
+        // RequestOptions has no EndPoints property; ExpectedReplyCount has no implicit
+        // fallback. With null/zero/negative ExpectedReplyCount, PublishRequestAsync must
+        // wait the full Timeout and complete successfully — even when zero replies arrive —
+        // rather than throwing RequestTimeoutException. This path is the silent-success
+        // branch in the timeout handler: the call is a "fire
         // and collect whatever shows up" pattern, common for broadcast scatter-gather.
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
@@ -1107,7 +1107,7 @@ public class RequestReplyManagerTests
         await Assert.ThrowsAsync<RequestSendCancelledException>(() => requestTask);
     }
 
-    // --- CancellationToken tests (Task 8) ---
+    // --- CancellationToken tests ---
 
     [Fact]
     public async Task SendRequestAsync_ExternalCancel_ThrowsOCE_NotRequestTimeoutException()

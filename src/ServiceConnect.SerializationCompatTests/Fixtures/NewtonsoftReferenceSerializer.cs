@@ -6,9 +6,10 @@ namespace ServiceConnect.SerializationCompatTests.Fixtures;
 
 /// <summary>
 /// Reference v7 wire-format serializer — Newtonsoft.Json with the exact settings the
-/// production NewtonsoftJsonMessageSerializer used pre-Phase-A.2. Decoupled from
-/// <see cref="IMessageSerializer"/> by design: the production interface reduces in
-/// Phase A.2 Task 6, and this fixture must keep representing v7 behaviour after that.
+/// production NewtonsoftJsonMessageSerializer uses. Decoupled from
+/// <see cref="IMessageSerializer"/> by design: the production interface exposes an
+/// IBufferWriter-based API, and this fixture keeps representing v7 wire behaviour
+/// independently so the compat tests remain valid regardless of interface changes.
 /// </summary>
 internal static class NewtonsoftReferenceSerializer
 {

@@ -383,11 +383,10 @@ internal sealed class InboundMessageProcessor(
                 "Audit publish cancelled by shutdown for delivery {DeliveryTag}; continuing to ack the original message",
                 args.DeliveryTag);
         }
-        // Non-cancellation failures are now swallowed inside MessageAuditPublisher itself,
+        // Non-cancellation failures are swallowed inside MessageAuditPublisher itself,
         // which logs at Warning and increments the messaging.serviceconnect.audit.drops
-        // counter. The defensive catch that previously lived here would now be dead code;
-        // a future regression that lets an exception escape the publisher should propagate
-        // and surface as a loud nack rather than be silently swallowed twice.
+        // counter. Any exception that escapes the publisher should propagate and surface
+        // as a loud nack rather than be silently swallowed twice.
     }
 
     // Avoid StringBuilder allocation inside DateTime.ToString("O").

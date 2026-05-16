@@ -52,11 +52,10 @@ internal sealed class ProducerConnection
     private volatile IConnection? _connection;
     // ConcurrencyLimiter is the bound on outstanding publisher confirms passed into
     // RabbitMQ.Client's CreateChannelOptions. The driver does not own user-supplied
-    // limiters, so each reconnect previously allocated a fresh limiter and abandoned
-    // the previous one (still rooted internally by the closed channel for as long as
-    // the channel object lived). Holding the reference here lets TearDown dispose it
-    // and CreateConnectionAsync defensively dispose any predecessor before installing
-    // its replacement.
+    // limiters; each connection owns its limiter for its lifetime. Holding the reference
+    // here lets TearDown dispose it, and CreateConnectionAsync defensively disposes any
+    // predecessor before installing the replacement — preventing a limiter rooted by the
+    // closed channel from accumulating unreleased counts across reconnects.
     private RateLimiter? _publisherRateLimiter;
     private volatile bool _connected;
 

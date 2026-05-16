@@ -106,10 +106,9 @@ public sealed class RabbitMqConsumerHostInflightCounterTests
     // ── Harness ───────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Builds a <see cref="RabbitMqConsumerHost"/> with mocked channels. Copied from
-    /// RabbitMqConsumerHostHeaderSizeTests (Task 6) and parameterised to accept the
-    /// handler delegate so the inflight-counter test can pass a yielding handler that
-    /// maximises interleaving.
+    /// Builds a <see cref="RabbitMqConsumerHost"/> with mocked channels. Parameterised to
+    /// accept the handler delegate so the inflight-counter test can pass a yielding handler
+    /// that maximises interleaving.
     /// </summary>
     private static async Task<(
         RabbitMqConsumerHost Host,
