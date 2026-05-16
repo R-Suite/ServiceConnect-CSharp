@@ -19,7 +19,9 @@ internal sealed class SlidingDetails
 
     private TimeSpan RelativeExpiry { get; set; }
 
-    private DateTimeOffset ExpireAt { get; set; }
+    // Stored as UTC ticks so Volatile.Read/Write provide atomic 64-bit access.
+    // DateTimeOffset is 16 bytes and can tear on weak memory models.
+    private long _expireAtUtcTicks;
 
     /// <summary>
     /// Returns true if the sliding window has elapsed. When false, <paramref name="tryAfter"/>
@@ -27,7 +29,9 @@ internal sealed class SlidingDetails
     /// </summary>
     public bool CanExpire(out TimeSpan tryAfter)
     {
-        tryAfter = ExpireAt - _timeProvider.GetUtcNow();
+        var expireTicks = Volatile.Read(ref _expireAtUtcTicks);
+        var nowTicks = _timeProvider.GetUtcNow().UtcTicks;
+        tryAfter = TimeSpan.FromTicks(expireTicks - nowTicks);
         return tryAfter.Ticks <= 0;
     }
 
@@ -36,6 +40,7 @@ internal sealed class SlidingDetails
     /// </summary>
     public void Slide()
     {
-        ExpireAt = _timeProvider.GetUtcNow().Add(RelativeExpiry);
+        var newTicks = _timeProvider.GetUtcNow().Add(RelativeExpiry).UtcTicks;
+        Volatile.Write(ref _expireAtUtcTicks, newTicks);
     }
 }
