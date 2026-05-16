@@ -96,7 +96,8 @@ public class MongoDbAggregatorPersistorCancelOrphanTests
             .ReturnsAsync(new UpdateResult.Acknowledged(0, 0, null));
 
         // The read-back FindAsync throws OCE, simulating cancellation observed after the
-        // claim committed server-side.
+        // claim committed server-side. Production calls Find().Sort().ToListAsync(), which
+        // the MongoDB driver routes through FindAsync internally — mock that overload.
         collection
             .Setup(c => c.FindAsync(
                 It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
@@ -174,7 +175,8 @@ public class MongoDbAggregatorPersistorCancelOrphanTests
                     throw new MongoException("simulated release failure");
                 });
 
-        // Read-back FindAsync throws OCE, triggering the catch path.
+        // Read-back FindAsync throws OCE, triggering the catch path. Production calls
+        // Find().Sort().ToListAsync(); the driver routes that through FindAsync internally.
         collection
             .Setup(c => c.FindAsync(
                 It.IsAny<FilterDefinition<MongoDbAggregatorPersistor.AggregatorDocument>>(),
