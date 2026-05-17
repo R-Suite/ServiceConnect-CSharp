@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Moq;
 using ServiceConnect.Configuration;
@@ -141,6 +142,59 @@ public class ConsumeContextStrictReplyValidationTests
                 o.Value.Headers != null &&
                 o.Value.Headers["ResponseMessageId"] == requestMessageId)),
             Times.Once);
+    }
+
+    [Fact]
+    public void IsKnownQueue_LargeMappingSet_LooksUpCorrectly()
+    {
+        // Build 1000 mappings × 10 queues each.
+        var mappings = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        for (int i = 0; i < 1000; i++)
+        {
+            mappings[$"msg.type.{i}"] = [.. Enumerable.Range(0, 10).Select(j => $"queue.{i}.{j}")];
+        }
+
+        var config = new Mock<IQueueConfiguration>();
+        config.SetupGet(c => c.QueueName).Returns("self");
+        config.SetupGet(c => c.ErrorQueueName).Returns("self.error");
+        config.SetupGet(c => c.AuditQueueName).Returns("self.audit");
+        config.SetupGet(c => c.QueueMappings).Returns(mappings);
+
+        Assert.True(ConsumeContext.IsKnownQueue("queue.999.9", config.Object));
+        Assert.False(ConsumeContext.IsKnownQueue("nope", config.Object));
+        Assert.True(ConsumeContext.IsKnownQueue("QUEUE.999.9", config.Object)); // case-insensitive
+        Assert.True(ConsumeContext.IsKnownQueue("self", config.Object));
+        Assert.True(ConsumeContext.IsKnownQueue("self.error", config.Object));
+        Assert.True(ConsumeContext.IsKnownQueue("self.audit", config.Object));
+    }
+
+    [Fact]
+    public void IsKnownQueue_RepeatedLookups_StayUnderPerfBudget()
+    {
+        var mappings = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        for (int i = 0; i < 1000; i++)
+        {
+            mappings[$"msg.type.{i}"] = [.. Enumerable.Range(0, 10).Select(j => $"queue.{i}.{j}")];
+        }
+
+        var config = new Mock<IQueueConfiguration>();
+        config.SetupGet(c => c.QueueName).Returns("self");
+        config.SetupGet(c => c.ErrorQueueName).Returns("self.error");
+        config.SetupGet(c => c.AuditQueueName).Returns("self.audit");
+        config.SetupGet(c => c.QueueMappings).Returns(mappings);
+
+        // Warm up the cache (so first-call flattening cost doesn't dominate).
+        ConsumeContext.IsKnownQueue("warmup", config.Object);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        for (int i = 0; i < 10_000; i++)
+        {
+            ConsumeContext.IsKnownQueue($"queue.{i % 1000}.{i % 10}", config.Object);
+        }
+
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds < 50,
+            $"IsKnownQueue is too slow: {sw.ElapsedMilliseconds}ms for 10k lookups against 10k mappings");
     }
 
     private static Dictionary<string, object> BuildFallbackEnvelopeHeaders() =>

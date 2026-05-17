@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Runtime.CompilerServices;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Options;
@@ -145,35 +147,49 @@ internal sealed class ConsumeContext : IConsumeContext
         await Bus.SendAsync(message, sendOptions, cancellationToken).ConfigureAwait(false);
     }
 
+    // Per-IQueueConfiguration cache of the flattened reply-allow-list. ConditionalWeakTable
+    // keys by reference identity and GCs entries with their owning config, so a long-lived
+    // bus instance computes the set once and a transient test config doesn't pin memory.
+    // The factory's HashSet captures the well-known queue names alongside every mapped
+    // queue, all under OrdinalIgnoreCase to match the original string.Equals contract.
+    private static readonly ConditionalWeakTable<IQueueConfiguration, HashSet<string>> KnownQueueCache = [];
+
     internal static bool IsKnownQueue(string address, IQueueConfiguration queueConfig)
     {
-        if (string.Equals(address, queueConfig.QueueName, StringComparison.OrdinalIgnoreCase))
+        var set = KnownQueueCache.GetValue(queueConfig, BuildKnownQueueSet);
+        return set.Contains(address);
+    }
+
+    private static HashSet<string> BuildKnownQueueSet(IQueueConfiguration queueConfig)
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(queueConfig.QueueName))
         {
-            return true;
+            set.Add(queueConfig.QueueName);
         }
 
-        if (string.Equals(address, queueConfig.ErrorQueueName, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(queueConfig.ErrorQueueName))
         {
-            return true;
+            set.Add(queueConfig.ErrorQueueName);
         }
 
-        if (string.Equals(address, queueConfig.AuditQueueName, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrEmpty(queueConfig.AuditQueueName))
         {
-            return true;
+            set.Add(queueConfig.AuditQueueName);
         }
 
         foreach (var kvp in queueConfig.QueueMappings)
         {
             foreach (var queue in kvp.Value)
             {
-                if (string.Equals(address, queue, StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrEmpty(queue))
                 {
-                    return true;
+                    set.Add(queue);
                 }
             }
         }
 
-        return false;
+        return set;
     }
 
     /// <summary>
