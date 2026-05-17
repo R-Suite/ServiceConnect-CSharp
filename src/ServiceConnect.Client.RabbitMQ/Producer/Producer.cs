@@ -43,6 +43,13 @@ internal sealed class Producer : IProducer
     }
 
     /// <summary>
+    /// Test seam: when set, replaces the <c>Task.Delay</c> calls in the retry loop.
+    /// The delegate receives the computed jittered delay and the caller's cancellation token.
+    /// Production code leaves this null and calls <c>Task.Delay</c> directly.
+    /// </summary>
+    internal Func<TimeSpan, CancellationToken, Task>? RetryDelayForTests;
+
+    /// <summary>
     /// Initializes a new producer instance using the supplied ServiceConnect configuration.
     /// </summary>
     /// <param name="transportConfiguration">Transport settings used to configure RabbitMQ connectivity and retries.</param>
@@ -203,7 +210,8 @@ internal sealed class Producer : IProducer
                         attempt + 1,
                         _retryCount + 1,
                         _retryTimeInSeconds);
-                    await Task.Delay(TimeSpan.FromSeconds(_retryTimeInSeconds), cancellationToken).ConfigureAwait(false);
+                    var transientDelay = JitteredRetryDelay();
+                    await (RetryDelayForTests?.Invoke(transientDelay, cancellationToken) ?? Task.Delay(transientDelay, cancellationToken)).ConfigureAwait(false);
                     continue;
                 }
                 throw;
@@ -221,10 +229,12 @@ internal sealed class Producer : IProducer
                         _retryCount + 1,
                         _retryTimeInSeconds);
                     // Inter-attempt delay also runs OUTSIDE the lock so other publishers can interleave.
-                    // The delay is intentionally fixed (not exponential) — connection-create inside
-                    // EnsureConnectedAsync already does its own exponential backoff via Retry.DoAsync,
-                    // so layering exponentials would double-grow the wall-clock budget.
-                    await Task.Delay(TimeSpan.FromSeconds(_retryTimeInSeconds), cancellationToken).ConfigureAwait(false);
+                    // Mean is fixed (not exponential) — connection-create inside EnsureConnectedAsync
+                    // already does its own exponential backoff via Retry.DoAsync, so layering exponentials
+                    // would double-grow the wall-clock budget. ±50% jitter is applied per attempt so
+                    // concurrent producers do not reconnect in lockstep after a broker restart.
+                    var retriableDelay = JitteredRetryDelay();
+                    await (RetryDelayForTests?.Invoke(retriableDelay, cancellationToken) ?? Task.Delay(retriableDelay, cancellationToken)).ConfigureAwait(false);
                     continue;
                 }
                 throw;
@@ -234,6 +244,19 @@ internal sealed class Producer : IProducer
         // Defensive: every loop arm either returns or throws; this is a regression guard.
         throw lastException ?? new InvalidOperationException(
             "ExecuteRetryingPublishAsync exited without success or exception.");
+    }
+
+    // Produces a uniformly-distributed delay in [mean*0.5, mean*1.5) around the configured
+    // retry mean. Random.Shared is thread-safe under .NET 6+. Keeping the mean fixed (rather
+    // than exponential) avoids stacking two independent exponential growth curves: the
+    // connection-creation path inside EnsureConnectedAsync already applies exponential backoff
+    // via Retry.DoAsync. The ±50% jitter ensures concurrent producers don't all retry in
+    // lockstep after a broker restart even though the mean wall-clock budget is unchanged.
+    private TimeSpan JitteredRetryDelay()
+    {
+        var meanSeconds = _retryTimeInSeconds;
+        var jitterFactor = 0.5 + Random.Shared.NextDouble(); // [0.5, 1.5)
+        return TimeSpan.FromSeconds(meanSeconds * jitterFactor);
     }
 
     // Broker-side nacks (PublishException) are usually poison messages — rejected by a
