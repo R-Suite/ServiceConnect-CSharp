@@ -41,10 +41,10 @@ public class InMemoryProcessManagerFinderPolymorphicTests
     {
         // Multi-saga support: a worker can host >1 saga type. InsertDataAsync wraps the
         // SagaTypeA record as MemoryData<SagaTypeA>; the InMemory flat-dictionary scan
-        // for SagaTypeB MUST skip the SagaTypeA entry (no match) rather than throw.
-        // The pre-v7 behaviour threw `InvalidOperationException`, which is not
-        // `ConcurrencyException`, so the dispatcher had no retry path and the worker
-        // surfaced permanently-failed dispatches whenever it hosted multiple saga types.
+        // for SagaTypeB MUST skip the SagaTypeA entry (no match) rather than throw
+        // InvalidOperationException. Throwing InvalidOperationException would not be a
+        // ConcurrencyException, so the dispatcher has no retry path and the worker would
+        // surface permanently-failed dispatches whenever it hosts multiple saga types.
         var correlationId = Guid.NewGuid();
         var cache = new ProcessManagerPredicateCache();
         var state = new InMemoryPersistenceState(new FakeTimeProvider());

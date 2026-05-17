@@ -115,7 +115,7 @@ public class AggregatorProcessorUnresolvedGateTests
         // not stranded under the lease for the full TTL.
         persistorMock.Verify(
             p => p.ReleaseSnapshotAsync(
-                It.Is<string>(n => n == aggregator.GetType().FullName || true), // any aggregator name
+                It.IsAny<string>(),
                 snapshot,
                 It.IsAny<CancellationToken>()),
             Times.Once);

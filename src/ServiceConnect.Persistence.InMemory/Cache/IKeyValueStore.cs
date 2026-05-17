@@ -16,8 +16,9 @@ internal interface IKeyValueStore
     /// <returns>
     /// <see langword="true"/> if the key is present (the stored value is written to
     /// <paramref name="value"/>); <see langword="false"/> otherwise. Distinguishes
-    /// "key absent" from "key present with null value" — pre-v8's <c>Get</c> returned
-    /// <c>default!</c> in both cases.
+    /// "key absent" from "key present with null value" — a null stored value writes
+    /// <see langword="null"/> to <paramref name="value"/> and still returns
+    /// <see langword="true"/>.
     /// </returns>
     /// <remarks>
     /// For reference-type <typeparamref name="TValue"/>, <paramref name="value"/> may

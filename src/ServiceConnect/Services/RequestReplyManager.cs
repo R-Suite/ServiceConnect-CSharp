@@ -182,20 +182,9 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
     /// used in this implementation.
     /// </para>
     /// <para>
-    /// <b>Under-delivery semantics (v8 behaviour change).</b> When
-    /// <see cref="RequestOptions.ExpectedReplyCount"/> is a positive integer N, the call
-    /// expects exactly N replies. If fewer than N arrive before
-    /// <see cref="RequestOptions.Timeout"/> expires, the task throws
-    /// <see cref="RequestTimeoutException"/>; the partial replies received before the
-    /// timeout are exposed on <see cref="RequestTimeoutException.PartialReplies"/> for
-    /// callers that want to recover them. When <c>ExpectedReplyCount</c> is zero,
-    /// negative, or null, no under-delivery check applies — the call returns every
-    /// reply received during the window (the pre-v8 semantics on every code path).
-    /// </para>
-    /// <para>
-    /// Caller-token cancellation continues to surface as
-    /// <see cref="OperationCanceledException"/>. Outbound-pipeline cancel-before-delivery
-    /// continues to surface as <see cref="RequestSendCancelledException"/>.
+    /// Caller-token cancellation surfaces as <see cref="OperationCanceledException"/>.
+    /// Outbound-pipeline cancel-before-delivery surfaces as
+    /// <see cref="RequestSendCancelledException"/>.
     /// </para>
     /// </remarks>
     public async Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
