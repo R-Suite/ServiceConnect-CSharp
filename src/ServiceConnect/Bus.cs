@@ -949,6 +949,10 @@ internal sealed class Bus : IBus
     /// any of these keys are silently ignored so the bus remains the single source
     /// of truth for message identity.
     /// </summary>
+    // StringComparer.Ordinal (case-sensitive) — AMQP wire-header names are
+    // case-sensitive per spec; matching with OrdinalIgnoreCase would treat
+    // "MessageId" and "messageid" as the same key when a malformed producer
+    // could be sending both.
     private static readonly HashSet<string> ReservedHeaders = new(StringComparer.Ordinal)
     {
         HeaderKeys.CorrelationId,
