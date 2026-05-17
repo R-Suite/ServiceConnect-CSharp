@@ -160,6 +160,10 @@ internal sealed class ConsumeContext : IConsumeContext
         return set.Contains(address);
     }
 
+    // Callers must populate all queue mappings on IQueueConfiguration before the first
+    // IsKnownQueue lookup; the cache entry is computed once per config instance and is
+    // never invalidated. Production wiring (QueueConfiguration.Freeze) enforces this
+    // today by sealing the config before message dispatch starts.
     private static HashSet<string> BuildKnownQueueSet(IQueueConfiguration queueConfig)
     {
         var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

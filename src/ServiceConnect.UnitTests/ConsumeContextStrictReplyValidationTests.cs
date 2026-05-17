@@ -183,18 +183,25 @@ public class ConsumeContextStrictReplyValidationTests
         config.SetupGet(c => c.AuditQueueName).Returns("self.audit");
         config.SetupGet(c => c.QueueMappings).Returns(mappings);
 
+        // Pre-build probe strings outside the timed window so the benchmark isolates
+        // hash-lookup speed from string-allocation throughput. Without this the timed
+        // loop is dominated by 10k small-string allocations on a slow CI runner.
+        var probes = Enumerable.Range(0, 10_000)
+            .Select(i => $"queue.{i % 1000}.{i % 10}")
+            .ToArray();
+
         // Warm up the cache (so first-call flattening cost doesn't dominate).
         ConsumeContext.IsKnownQueue("warmup", config.Object);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        for (int i = 0; i < 10_000; i++)
+        foreach (var probe in probes)
         {
-            ConsumeContext.IsKnownQueue($"queue.{i % 1000}.{i % 10}", config.Object);
+            ConsumeContext.IsKnownQueue(probe, config.Object);
         }
 
         sw.Stop();
-        Assert.True(sw.ElapsedMilliseconds < 50,
-            $"IsKnownQueue is too slow: {sw.ElapsedMilliseconds}ms for 10k lookups against 10k mappings");
+        Assert.True(sw.Elapsed.TotalMilliseconds < 50,
+            $"IsKnownQueue is too slow: {sw.Elapsed.TotalMilliseconds:0.##}ms for 10k lookups against 10k mappings");
     }
 
     private static Dictionary<string, object> BuildFallbackEnvelopeHeaders() =>
