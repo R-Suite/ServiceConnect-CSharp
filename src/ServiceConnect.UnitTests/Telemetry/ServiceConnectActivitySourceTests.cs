@@ -1317,6 +1317,35 @@ public sealed class ServiceConnectActivitySource_PropagationOnlyTests
         }
     }
 
+    [Fact]
+    public void Consume_SampleDroppedActivity_DoesNotSetBodySizeTag()
+    {
+        var droppingListener = new ActivityListener
+        {
+            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
+            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.PropagationData,
+        };
+        ActivitySource.AddActivityListener(droppingListener);
+        try
+        {
+            var args = new ConsumeEventArgs
+            {
+                Message = [1, 2, 3],
+                Headers = new Dictionary<string, object>(),
+            };
+
+            using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
+            Assert.NotNull(activity);
+            Assert.False(activity.IsAllDataRequested);
+
+            Assert.Null(activity.GetTagItem(MessagingAttributes.MessagingBodySize));
+        }
+        finally
+        {
+            droppingListener.Dispose();
+        }
+    }
+
     // ---------------- TelemetrySendMiddleware: anonymous destination on Publish ----------------
 
     [Fact]
