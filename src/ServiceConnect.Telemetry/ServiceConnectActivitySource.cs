@@ -211,18 +211,19 @@ public static class ServiceConnectActivitySource
                 {
                     activity.SetTag(MessagingAttributes.MessagingDestinationAnonymous, true);
                 }
+
+                // BodySize is the on-wire byte count, populated by the consume middleware even
+                // when eventArgs.Message is the empty-sentinel array (no enricher configured —
+                // bytes were not materialised to save the per-delivery allocation). Fall back to
+                // eventArgs.Message.Length for direct callers of Consume() that pre-date BodySize
+                // and only set Message; without the fallback, those callers would suddenly emit
+                // body-size=0 on every span.
+                var bodySize = eventArgs.BodySize > 0
+                    ? eventArgs.BodySize
+                    : (eventArgs.Message?.Length ?? 0);
+                activity.SetTag(MessagingAttributes.MessagingBodySize, bodySize);
             }
 
-            // BodySize is the on-wire byte count, populated by the consume middleware even
-            // when eventArgs.Message is the empty-sentinel array (no enricher configured —
-            // bytes were not materialised to save the per-delivery allocation). Fall back to
-            // eventArgs.Message.Length for direct callers of Consume() that pre-date BodySize
-            // and only set Message; without the fallback, those callers would suddenly emit
-            // body-size=0 on every span.
-            var bodySize = eventArgs.BodySize > 0
-                ? eventArgs.BodySize
-                : (eventArgs.Message?.Length ?? 0);
-            activity.SetTag(MessagingAttributes.MessagingBodySize, bodySize);
             if (eventArgs.Message is { Length: > 0 })
             {
                 TryEnrich(activity, eventArgs.Message, options);
