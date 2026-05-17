@@ -349,7 +349,9 @@ internal sealed class Consumer : IConsumer
         if (!lifecycleAcquired)
         {
             _logger.LogWarning(
-                "Consumer.DisposeAsync timed out waiting for in-flight StartConsumingAsync after {Timeout}; forcing teardown.",
+                "Consumer.DisposeAsync timed out waiting for in-flight StartConsumingAsync after {Timeout}. " +
+                "The setup channel and connection remain owned by the wedged start; _started is left set so a " +
+                "subsequent StartConsumingAsync fails fast instead of deadlocking. Resolve the wedge (process restart) before resuming consumption.",
                 lifecycleTimeout);
         }
 

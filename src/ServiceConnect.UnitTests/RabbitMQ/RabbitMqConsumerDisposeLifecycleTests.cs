@@ -16,36 +16,30 @@ namespace ServiceConnect.UnitTests;
 /// </summary>
 public class RabbitMqConsumerDisposeLifecycleTests
 {
-    private static Mock<ITransportConfiguration> MakeTransportCfg()
-    {
-        var cfg = new Mock<ITransportConfiguration>();
-        cfg.SetupGet(c => c.MaxRetries).Returns(3);
-        cfg.SetupGet(c => c.RetryDelay).Returns(1000);
-        cfg.SetupGet(c => c.ClientSettings).Returns(new Dictionary<string, object>());
-        return cfg;
-    }
-
-    private static Mock<IQueueConfiguration> MakeQueueCfg()
-    {
-        var cfg = new Mock<IQueueConfiguration>();
-        cfg.SetupGet(c => c.QueueName).Returns("q");
-        cfg.SetupGet(c => c.ErrorQueueName).Returns("err");
-        cfg.SetupGet(c => c.AuditQueueName).Returns("audit");
-        cfg.SetupGet(c => c.PurgeQueueOnStartup).Returns(false);
-        cfg.SetupGet(c => c.AuditingEnabled).Returns(false);
-        return cfg;
-    }
-
     /// <summary>
-    /// Returns a bus configuration mock with a short DisposeTimeout so tests complete quickly
-    /// when the lifecycle semaphore is artificially drained.
+    /// Returns a Consumer configured with ConsumerCount=1 and the supplied DisposeTimeout.
+    /// The transport and queue mocks are wired with minimal defaults sufficient to construct
+    /// a Consumer without triggering any real I/O.
     /// </summary>
-    private static Mock<IBusConfiguration> MakeBusCfg(TimeSpan disposeTimeout)
+    private static Consumer CreateConsumer(TimeSpan disposeTimeout, IServiceConnectConnection? connection = null)
     {
-        var cfg = new Mock<IBusConfiguration>();
-        cfg.SetupGet(c => c.ConsumerCount).Returns(1);
-        cfg.SetupGet(c => c.DisposeTimeout).Returns(disposeTimeout);
-        return cfg;
+        var transport = new Mock<ITransportConfiguration>();
+        transport.SetupGet(t => t.MaxRetries).Returns(3);
+        transport.SetupGet(t => t.RetryDelay).Returns(1000);
+        transport.SetupGet(t => t.ClientSettings).Returns(new Dictionary<string, object>());
+
+        var queue = new Mock<IQueueConfiguration>();
+        queue.SetupGet(q => q.QueueName).Returns("q");
+        queue.SetupGet(q => q.ErrorQueueName).Returns("err");
+        queue.SetupGet(q => q.AuditQueueName).Returns("audit");
+        queue.SetupGet(q => q.PurgeQueueOnStartup).Returns(false);
+        queue.SetupGet(q => q.AuditingEnabled).Returns(false);
+
+        var bus = new Mock<IBusConfiguration>();
+        bus.SetupGet(b => b.ConsumerCount).Returns(1);
+        bus.SetupGet(b => b.DisposeTimeout).Returns(disposeTimeout);
+
+        return new Consumer(transport.Object, queue.Object, bus.Object, NullLogger<Consumer>.Instance, connection);
     }
 
     /// <summary>
@@ -84,12 +78,7 @@ public class RabbitMqConsumerDisposeLifecycleTests
     {
         // Arrange: construct a consumer with ConsumerCount=1 and a short DisposeTimeout.
         var connection = new Mock<IServiceConnectConnection>();
-        var consumer = new Consumer(
-            MakeTransportCfg().Object,
-            MakeQueueCfg().Object,
-            MakeBusCfg(TimeSpan.FromMilliseconds(100)).Object,
-            NullLogger<Consumer>.Instance,
-            connection.Object);
+        var consumer = CreateConsumer(TimeSpan.FromMilliseconds(200), connection.Object);
 
         // Simulate that StartConsumingAsync has CAS'd _started to 1 and is mid-setup,
         // holding the semaphore.
@@ -111,12 +100,7 @@ public class RabbitMqConsumerDisposeLifecycleTests
     {
         // Arrange: construct a consumer with a short DisposeTimeout.
         var connection = new Mock<IServiceConnectConnection>();
-        var consumer = new Consumer(
-            MakeTransportCfg().Object,
-            MakeQueueCfg().Object,
-            MakeBusCfg(TimeSpan.FromMilliseconds(100)).Object,
-            NullLogger<Consumer>.Instance,
-            connection.Object);
+        var consumer = CreateConsumer(TimeSpan.FromMilliseconds(200), connection.Object);
 
         // Set up a sentinel channel to represent the setup channel that an in-flight
         // StartConsumingAsync has assigned to _model.
