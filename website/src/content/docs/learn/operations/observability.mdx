@@ -73,7 +73,7 @@ There are also two opt-in headers:
 
 ## Tracing (OpenTelemetry)
 
-The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbing for distributed tracing. It exposes a single source — `"ServiceConnect.Bus"` (`ServiceConnectActivitySource.ActivitySourceName`) — that emits publish, send, and consume spans, each tagged with the OTel messaging semantic conventions (`messaging.system`, `messaging.destination.name`, `messaging.rabbitmq.destination.routing_key`, `messaging.message.id`, `messaging.message.conversation_id`). For RabbitMQ, `messaging.destination.name` carries the broker-side destination — the exchange name for publishes and the queue name for sends — and `messaging.rabbitmq.destination.routing_key` carries the publish routing key when present. Operation classification follows the OTel messaging semconv 1.x attributes: `messaging.operation.type` is `publish` for the producer side (sends and publishes alike) and `process` for the consumer side, and `messaging.operation.name` mirrors that with `publish` / `process`. The span also carries `server.address` (broker hostname or first entry of a cluster list) and `server.port` (broker TCP port from `ITransportConfiguration.ClientSettings["Port"]` when present). Backends can aggregate each shape separately by filtering on `messaging.operation.type`.
+The **`ServiceConnect.Telemetry`** package provides the `ActivitySource` plumbing for distributed tracing. It exposes a single source (`ServiceConnectActivitySource.ActivitySourceName`) that emits publish, send, and consume spans, each tagged with the OTel messaging semantic conventions (`messaging.system`, `messaging.destination.name`, `messaging.rabbitmq.destination.routing_key`, `messaging.message.id`, `messaging.message.conversation_id`). For RabbitMQ, `messaging.destination.name` carries the broker-side destination — the exchange name for publishes and the queue name for sends — and `messaging.rabbitmq.destination.routing_key` carries the publish routing key when present. Operation classification follows the OTel messaging semconv 1.x attributes: `messaging.operation.type` is `publish` for the producer side (sends and publishes alike) and `process` for the consumer side, and `messaging.operation.name` mirrors that with `publish` / `process`. The span also carries `server.address` (broker hostname or first entry of a cluster list) and `server.port` (broker TCP port from `ITransportConfiguration.ClientSettings["Port"]` when present). Backends can aggregate each shape separately by filtering on `messaging.operation.type`.
 
 ```bash
 dotnet add package ServiceConnect.Telemetry
@@ -94,8 +94,7 @@ services.AddServiceConnect(builder =>
 
 services.AddOpenTelemetry()
     .WithTracing(tracing => tracing
-        .AddSource(ServiceConnectActivitySource.ActivitySourceName)
-        // or equivalently: .AddSource("ServiceConnect.Bus")
+        .AddServiceConnectInstrumentation()
         .AddOtlpExporter());
 ```
 

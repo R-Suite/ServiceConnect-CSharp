@@ -23,7 +23,7 @@ services.AddExampleBus(settings, "telemetry-publisher",
 
 // To export to a real OTel pipeline, replace the listener registration above with:
 // services.AddOpenTelemetry()
-//     .WithTracing(t => t.AddSource(ServiceConnectActivitySource.ActivitySourceName).AddConsoleExporter());
+//     .WithTracing(t => t.AddServiceConnectInstrumentation().AddConsoleExporter());
 
 await using var provider = services.BuildServiceProvider();
 var bus = provider.GetRequiredService<IBus>();

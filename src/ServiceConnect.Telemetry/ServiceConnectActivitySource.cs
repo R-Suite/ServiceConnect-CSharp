@@ -14,7 +14,9 @@ public static class ServiceConnectActivitySource
 
     /// <summary>
     /// Gets the activity-source name used for all publish, send, and consume spans.
-    /// Register listeners via <c>AddSource("ServiceConnect.Bus")</c>.
+    /// Prefer <see cref="TelemetryTracerExtensions.AddServiceConnectInstrumentation"/>
+    /// over registering this string directly so a future rename cannot silently
+    /// disable telemetry for callers that hard-coded the literal.
     /// </summary>
     public static readonly string ActivitySourceName = (typeof(ServiceConnectActivitySource).Assembly.GetName().Name ?? "ServiceConnect") + ".Bus";
 

@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`ServiceConnect.Telemetry` is the optional package that emits OpenTelemetry-compatible activities for every publish, send, and consume on the bus. It is implemented as a pair of pipeline middleware (`TelemetrySendMiddleware`, `TelemetryProcessingMiddleware`) backed by a static `ServiceConnectActivitySource` that owns a single `ActivitySource` named `"ServiceConnect.Bus"`.
+`ServiceConnect.Telemetry` is the optional package that emits OpenTelemetry-compatible activities for every publish, send, and consume on the bus. It is implemented as a pair of pipeline middleware (`TelemetrySendMiddleware`, `TelemetryProcessingMiddleware`) backed by a static `ServiceConnectActivitySource` that owns a single `ActivitySource` (name exposed via `ServiceConnectActivitySource.ActivitySourceName`).
 
 When registered, the package:
 
@@ -52,6 +52,53 @@ Registers `TelemetrySendMiddleware` and `TelemetryProcessingMiddleware` as the o
 Two `AddTelemetry` calls in the same process (for example, two independently-scoped `AddServiceConnect` registrations) produce two distinct `ServiceConnectInstrumentationOptions` instances. Options are not shared across bus registrations; enrichment delegates and enable-flags are independent.
 
 The configured `ServiceConnectInstrumentationOptions` is frozen at the end of the `configure` callback passed to `AddTelemetry`. Any setter mutation on the options object after that point throws `InvalidOperationException`.
+
+## TelemetryTracerExtensions
+
+### `AddServiceConnectInstrumentation`
+
+```csharp
+public static TracerProviderBuilder AddServiceConnectInstrumentation(
+    this TracerProviderBuilder builder);
+```
+
+Subscribes the OpenTelemetry tracer provider to the activity source emitted by `ServiceConnectActivitySource`. Equivalent to `builder.AddSource(ServiceConnectActivitySource.ActivitySourceName)`, but keeps the source name in one place so a rename cannot silently disable a caller's telemetry.
+
+**Parameters**
+- `builder` — the `TracerProviderBuilder` from `Sdk.CreateTracerProviderBuilder()` or `services.AddOpenTelemetry().WithTracing(...)`.
+
+**Returns.** The same `builder`, for chaining.
+
+**Throws.** `ArgumentNullException` when `builder` is null.
+
+```csharp
+services.AddOpenTelemetry().WithTracing(b => b
+    .AddServiceConnectInstrumentation()
+    .AddOtlpExporter());
+```
+
+## TelemetryMeterExtensions
+
+### `AddServiceConnectInstrumentation`
+
+```csharp
+public static MeterProviderBuilder AddServiceConnectInstrumentation(
+    this MeterProviderBuilder builder);
+```
+
+Subscribes the OpenTelemetry meter provider to ServiceConnect's `"ServiceConnect.Bus"` meter. Equivalent to `builder.AddMeter(ServiceConnectMeter.MeterName)`.
+
+**Parameters**
+- `builder` — the `MeterProviderBuilder` from `Sdk.CreateMeterProviderBuilder()` or `services.AddOpenTelemetry().WithMetrics(...)`.
+
+**Returns.** The same `builder`, for chaining.
+
+**Throws.** `ArgumentNullException` when `builder` is null.
+
+```csharp
+services.AddOpenTelemetry().WithMetrics(b => b
+    .AddServiceConnectInstrumentation());
+```
 
 ## ServiceConnectInstrumentationOptions
 
@@ -113,7 +160,7 @@ On .NET 9 and later, when `ExceptionMessageSanitiser` is set, `ServiceConnectAct
 ```csharp
 public static class ServiceConnectActivitySource
 {
-    public static readonly string ActivitySourceName;  // "ServiceConnect.Bus"
+    public static readonly string ActivitySourceName;  // computed from assembly name, e.g. "ServiceConnect.Telemetry.Bus"
 
     public static Activity? Publish(
         PublishEventArgs eventArgs,
@@ -149,14 +196,15 @@ All methods that previously read from static `Options` and `MessagingSystemAttri
 
 ### Activity-source name
 
-All activities — publish, send, and consume — are emitted from a single source named `"ServiceConnect.Bus"`, exposed as `ServiceConnectActivitySource.ActivitySourceName`. Register it once with the OTel SDK:
+All activities — publish, send, and consume — are emitted from a single source whose name is exposed as `ServiceConnectActivitySource.ActivitySourceName`. Register it once with the OTel SDK using the dedicated extension:
 
 ```csharp
 services.AddOpenTelemetry().WithTracing(b => b
-    .AddSource(ServiceConnectActivitySource.ActivitySourceName)
+    .AddServiceConnectInstrumentation()
     .AddOtlpExporter());
-// Equivalent literal form:
-// .AddSource("ServiceConnect.Bus")
+// Equivalent: .AddSource(ServiceConnectActivitySource.ActivitySourceName)
+// Do not hard-code the literal "ServiceConnect.Telemetry.Bus" — use the extension
+// or the constant so a rename cannot silently disable telemetry.
 ```
 
 Per-direction sampling is controlled through `EnablePublishTelemetry`, `EnableConsumeTelemetry`, and `EnableSendTelemetry` in `ServiceConnectInstrumentationOptions` rather than through separate source registrations.
@@ -255,11 +303,11 @@ services.AddServiceConnect(builder =>
 });
 
 services.AddOpenTelemetry().WithTracing(b => b
-    .AddSource(ServiceConnectActivitySource.ActivitySourceName)
+    .AddServiceConnectInstrumentation()
     .AddOtlpExporter());
 ```
 
-`AddTelemetry` inserts the telemetry middleware at the head of both pipelines so its activities bracket every other middleware. The OTel SDK is configured to listen for the single ServiceConnect source by name; without that `AddSource` call activities are created but never sampled. The enrichment hook adds a single high-signal tag and deliberately avoids the message body.
+`AddTelemetry` inserts the telemetry middleware at the head of both pipelines so its activities bracket every other middleware. The OTel SDK is configured to listen for the single ServiceConnect source via `AddServiceConnectInstrumentation`; without that call activities are created but never sampled. The enrichment hook adds a single high-signal tag and deliberately avoids the message body.
 
 ### Disabling a single direction
 
