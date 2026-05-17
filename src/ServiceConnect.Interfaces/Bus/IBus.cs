@@ -98,18 +98,15 @@ public interface IBus : IAsyncDisposable
     /// Sends a request and waits for multiple replies from all respondents.
     /// </summary>
     /// <remarks>
-    /// <b>Under-delivery semantics (v8 behaviour change).</b> When
-    /// <see cref="RequestOptions.ExpectedReplyCount"/> is a positive integer N, this call
-    /// expects exactly N replies. If fewer than N arrive before
-    /// <see cref="RequestOptions.Timeout"/> expires, the task throws
+    /// <b>Under-delivery semantics.</b> When <see cref="RequestOptions.ExpectedReplyCount"/>
+    /// is a positive integer N, this call expects exactly N replies. If fewer than N
+    /// arrive before <see cref="RequestOptions.Timeout"/> expires, the task throws
     /// <see cref="Exceptions.RequestTimeoutException"/>; the partials received before the
     /// timeout fired are exposed on
-    /// <see cref="Exceptions.RequestTimeoutException.PartialReplies"/> so callers that want
-    /// to recover them can. When <c>ExpectedReplyCount</c> is zero, negative, or null, no
-    /// under-delivery check applies — the call returns every reply received during the
-    /// window (the pre-v8 behaviour on every code path). Callers relying on the old
-    /// silent-partial-return contract must catch <see cref="Exceptions.RequestTimeoutException"/>
-    /// and read <see cref="Exceptions.RequestTimeoutException.PartialReplies"/>.
+    /// <see cref="Exceptions.RequestTimeoutException.PartialReplies"/> so callers that
+    /// want to recover them can. When <c>ExpectedReplyCount</c> is zero, negative, or
+    /// null, no under-delivery check applies — the call returns every reply received
+    /// during the window.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><c>options.Timeout</c> is negative (other than <see cref="System.Threading.Timeout.Infinite"/>) or zero.</exception>

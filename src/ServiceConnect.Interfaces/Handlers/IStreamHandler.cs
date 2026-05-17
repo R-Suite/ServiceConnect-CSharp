@@ -12,7 +12,8 @@ public interface IStreamHandler<TMessage> where TMessage : Message
     /// Invoked once the full stream has been received and reassembled. Reads the
     /// assembled payload bytes from <paramref name="stream"/>.
     /// </summary>
-    /// <remarks>v8: <c>Stream</c> moved from a property to this parameter (analogous to
-    /// the <c>Context</c> change on <see cref="IMessageHandler{TMessage}"/>).</remarks>
+    /// <param name="message">The control message that initiated the stream.</param>
+    /// <param name="stream">The reassembled byte stream.</param>
+    /// <param name="cancellationToken">Token to observe for cancellation.</param>
     Task ExecuteAsync(TMessage message, IMessageBusReadStream stream, CancellationToken cancellationToken = default);
 }

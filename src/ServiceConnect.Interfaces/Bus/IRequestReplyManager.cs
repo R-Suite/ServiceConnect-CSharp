@@ -42,17 +42,13 @@ public interface IRequestReplyManager
     /// <param name="cancellationToken">A token that cancels the request.</param>
     /// <returns>The replies collected before completion.</returns>
     /// <remarks>
-    /// <b>Under-delivery semantics (v8 behaviour change).</b> When
-    /// <see cref="RequestOptions.ExpectedReplyCount"/> is a positive integer N, this call
-    /// expects exactly N replies. If fewer than N arrive before
-    /// <see cref="RequestOptions.Timeout"/> expires, the task throws
+    /// <b>Under-delivery semantics.</b> When <see cref="RequestOptions.ExpectedReplyCount"/>
+    /// is a positive integer N, this call expects exactly N replies. If fewer than N
+    /// arrive before <see cref="RequestOptions.Timeout"/> expires, the task throws
     /// <see cref="RequestTimeoutException"/>; the partials received before the timeout
     /// fired are exposed on <see cref="RequestTimeoutException.PartialReplies"/>. When
     /// <c>ExpectedReplyCount</c> is zero, negative, or null, no under-delivery check
-    /// applies — the call returns every reply received during the window. Callers
-    /// relying on the pre-v8 silent-partial-return contract must catch
-    /// <see cref="RequestTimeoutException"/> and read
-    /// <see cref="RequestTimeoutException.PartialReplies"/>.
+    /// applies — the call returns every reply received during the window.
     /// </remarks>
     /// <exception cref="RequestTimeoutException">
     /// Thrown when <see cref="RequestOptions.ExpectedReplyCount"/> is positive and fewer
