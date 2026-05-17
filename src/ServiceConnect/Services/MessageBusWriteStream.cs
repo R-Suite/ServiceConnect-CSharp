@@ -299,7 +299,7 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
         {
             await CloseAsync(cts.Token).ConfigureAwait(false);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
             // DisposeAsync is best-effort: surfacing exceptions through `await using` would
             // defeat the documented contract. Swallow every failure mode:
@@ -309,6 +309,15 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
             //     channel already closed, etc. — the broker has no state we need to
             //     release, and the receiver's eviction sweep reclaims the stream after
             //     StreamTimeout)
+            System.Diagnostics.Activity.Current?.AddEvent(
+                new System.Diagnostics.ActivityEvent(
+                    "MessageBusWriteStream.DisposeAsync.ClosePacketFailed",
+                    tags: new System.Diagnostics.ActivityTagsCollection
+                    {
+                        { "exception.type", ex.GetType().FullName },
+                        { "exception.message", ex.Message },
+                        { "sequence_id", _sequenceId },
+                    }));
         }
     }
 

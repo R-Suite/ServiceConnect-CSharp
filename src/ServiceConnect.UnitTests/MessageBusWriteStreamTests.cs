@@ -452,29 +452,10 @@ public class MessageBusWriteStreamTests
         // CloseAsync's SendBytesAsync call can throw (broker unreachable, channel closed,
         // etc.). Surfacing them through `await using` would make callers responsible for
         // handling broker state they cannot act on at dispose time.
-        var producer = new Mock<IProducer>();
-        producer
-            .Setup(p => p.SendBytesAsync(
-                It.IsAny<string>(),
-                It.IsAny<Type>(),
-                It.IsAny<ReadOnlyMemory<byte>>(),
-                It.IsAny<IReadOnlyDictionary<string, string>?>(),
-                It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("simulated broker-unreachable"));
-
-        var stream = new MessageBusWriteStream(
-            producer.Object,
-            "test-q",
-            typeof(FakeStreamMsg),
-            TimeProvider.System,
-            TimeSpan.FromSeconds(30));
-
-        // The first write faults the stream (SendBytesAsync throws). We need the stream
-        // to be un-faulted so CloseAsync actually attempts the close-packet send.
         // Use a producer that succeeds on the data write but fails on the close-packet send.
-        var producer2 = new Mock<IProducer>();
+        var producer = new Mock<IProducer>();
         var callCount = 0;
-        producer2
+        producer
             .Setup(p => p.SendBytesAsync(
                 It.IsAny<string>(),
                 It.IsAny<Type>(),
@@ -493,17 +474,17 @@ public class MessageBusWriteStreamTests
                 throw new InvalidOperationException("simulated broker-unreachable on close");
             });
 
-        var stream2 = new MessageBusWriteStream(
-            producer2.Object,
+        var stream = new MessageBusWriteStream(
+            producer.Object,
             "test-q",
             typeof(FakeStreamMsg),
             TimeProvider.System,
             TimeSpan.FromSeconds(30));
 
-        await stream2.WriteAsync(new byte[] { 1, 2, 3 });
+        await stream.WriteAsync(new byte[] { 1, 2, 3 });
 
         // Best-effort: must not throw despite the close-packet send failing.
-        await stream2.DisposeAsync();
+        await stream.DisposeAsync();
     }
 
     [Fact]

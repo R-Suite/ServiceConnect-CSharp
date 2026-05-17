@@ -6,6 +6,16 @@ namespace ServiceConnect.Interfaces;
 public interface IMessageBusWriteStream : IAsyncDisposable
 {
     /// <summary>
+    /// Closes the stream best-effort, releasing producer resources. Never surfaces
+    /// transport, timeout, or cancellation exceptions through <c>await using</c> —
+    /// a wedged drain, an unreachable broker, or a closed channel will not propagate.
+    /// If the close packet does not reach the receiver, the framework's stream
+    /// eviction sweep reclaims the orphaned read-side state after <c>StreamTimeout</c>.
+    /// </summary>
+    new ValueTask DisposeAsync();
+
+
+    /// <summary>
     /// Writes the supplied buffer to the stream as a single transport packet. The caller
     /// is responsible for chunking large payloads into multiple <c>WriteAsync</c> calls
     /// when packet sizes need to stay below a transport limit.
