@@ -182,4 +182,66 @@ public sealed class BusOutboundPreparationTests
 
         Assert.Equal(token, capturedToken);
     }
+
+    [Fact]
+    public async Task PrepareOutboundForRequestAsync_NoFilters_SkipsSerializeAndReturnsDirectHeaders()
+    {
+        var (bus, filterPipeline, mockSerializer) = BuildBus(hasOutgoingFilters: false);
+        var message = new FakeMessage1(Guid.NewGuid());
+        var correlationId = message.CorrelationId;
+
+        var result = await bus.PrepareOutboundForRequestAsync(message, callerHeaders: null, CancellationToken.None);
+
+        Assert.False(result.Stopped);
+        Assert.NotNull(result.Headers);
+        Assert.True(result.Headers.TryGetValue("CorrelationId", out var cid));
+        Assert.Equal(correlationId.ToString(), cid);
+
+        // The request path skips the local serialise when no filters are registered
+        // because RequestReplyManager re-serialises downstream.
+        mockSerializer.VerifySerialize(message, Times.Never());
+        filterPipeline.Verify(
+            x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task PrepareOutboundForRequestAsync_FiltersAccept_SerializesAndReturnsHeaders()
+    {
+        var (bus, filterPipeline, mockSerializer) = BuildBus(hasOutgoingFilters: true);
+        var message = new FakeMessage1(Guid.NewGuid());
+        var correlationId = message.CorrelationId;
+
+        filterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Continue);
+
+        var result = await bus.PrepareOutboundForRequestAsync(message, callerHeaders: null, CancellationToken.None);
+
+        Assert.False(result.Stopped);
+        Assert.NotNull(result.Headers);
+        Assert.True(result.Headers.TryGetValue("CorrelationId", out var cid));
+        Assert.Equal(correlationId.ToString(), cid);
+
+        // The filter path requires a local serialise so the envelope's wire body can be inspected.
+        mockSerializer.VerifySerialize(message, Times.Once());
+        filterPipeline.Verify(
+            x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PrepareOutboundForRequestAsync_FiltersStop_ReturnsStoppedTrue()
+    {
+        var (bus, filterPipeline, _) = BuildBus(hasOutgoingFilters: true);
+        var message = new FakeMessage1(Guid.NewGuid());
+
+        filterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
+
+        var result = await bus.PrepareOutboundForRequestAsync(message, callerHeaders: null, CancellationToken.None);
+
+        Assert.True(result.Stopped);
+    }
 }

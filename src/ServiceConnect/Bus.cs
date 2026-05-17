@@ -1061,6 +1061,48 @@ internal sealed class Bus : IBus
     }
 
     /// <summary>
+    /// Result of the outbound preamble for request paths: the headers to attach and a flag
+    /// indicating whether an outgoing filter requested the request be blocked. Request paths
+    /// re-serialise the message downstream in <c>RequestReplyManager</c>, so this helper
+    /// does not return wire bytes; callers MUST check <see cref="Stopped"/> before reading
+    /// <see cref="Headers"/>.
+    /// </summary>
+    internal readonly record struct RequestPreparation(
+        Dictionary<string, string> Headers,
+        bool Stopped);
+
+    /// <summary>
+    /// Runs the outbound preamble shared by the three request paths (SendRequestAsync,
+    /// SendRequestMultiAsync, PublishRequestAsync). Unlike <c>PrepareOutboundAsync</c>
+    /// this helper does NOT always serialise: when no outgoing filters are registered the
+    /// envelope is never built, so the local serialise can be skipped because
+    /// <c>RequestReplyManager</c> re-serialises on the request leg.
+    /// </summary>
+    internal async Task<RequestPreparation> PrepareOutboundForRequestAsync<T>(
+        T message,
+        IReadOnlyDictionary<string, string>? callerHeaders,
+        CancellationToken cancellationToken) where T : Message
+    {
+        if (_hasOutgoingFilters)
+        {
+            // Serialize here only because outgoing filters need to inspect the wire body.
+            // RequestReplyManager will serialize again on its own path; the duplicate cost
+            // is confined to this branch.
+            var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+            _serializer.Serialize(message, bufferWriter);
+            var messageBytes = bufferWriter.WrittenMemory;
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), callerHeaders);
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
+                return new RequestPreparation(null!, Stopped: true);
+            }
+            return new RequestPreparation(ExtractHeaders(envelope), Stopped: false);
+        }
+
+        return new RequestPreparation(BuildHeadersDirect(message.CorrelationId, callerHeaders), Stopped: false);
+    }
+
+    /// <summary>
     /// Fast-path header builder used when no outgoing filters are registered.
     /// Produces the same <see cref="Dictionary{TKey,TValue}"/> that
     /// <see cref="CreateEnvelope"/> + <see cref="ExtractHeaders"/> would return,
