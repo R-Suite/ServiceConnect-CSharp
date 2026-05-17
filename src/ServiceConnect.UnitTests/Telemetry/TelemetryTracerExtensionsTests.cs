@@ -7,53 +7,33 @@ using Xunit;
 namespace ServiceConnect.UnitTests.Telemetry;
 
 [Collection("ActivityListener")]
-public class TelemetryTracerExtensionsTests : IDisposable
+public sealed class TelemetryTracerExtensionsTests
 {
-    private readonly List<Activity> _exportedActivities = [];
-    private readonly ActivityListener _listener;
-
-    public TelemetryTracerExtensionsTests()
-    {
-        _listener = new ActivityListener
-        {
-            ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
-            Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
-            SampleUsingParentId = (ref ActivityCreationOptions<string> _) => ActivitySamplingResult.AllData,
-            ActivityStopped = _exportedActivities.Add,
-        };
-        ActivitySource.AddActivityListener(_listener);
-    }
-
-    public void Dispose() => _listener.Dispose();
-
     [Fact]
-    public void AddServiceConnectInstrumentation_BuildsTracerProviderWithoutError()
+    public void AddServiceConnectInstrumentation_subscribes_provider_to_ServiceConnect_activity_source()
     {
-        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
+        // Pin: invoking the extension on a TracerProvider must wire it to the
+        // ServiceConnect ActivitySource. A regression that called AddSource with
+        // the wrong name would leave exportedActivities empty.
+        var exportedActivities = new List<Activity>();
+        using var tp = Sdk.CreateTracerProviderBuilder()
             .AddServiceConnectInstrumentation()
+            .AddInMemoryExporter(exportedActivities)
             .Build();
 
-        Assert.NotNull(tracerProvider);
-    }
-
-    [Fact]
-    public void AddServiceConnectInstrumentation_SpanFromActivitySourceFlowsToListener()
-    {
-        // The listener registered in the constructor subscribes to ServiceConnectActivitySource.
-        // Verify that a span emitted from that source is captured, which is the same proof
-        // that AddServiceConnectInstrumentation registers the correct source name.
         using var source = new ActivitySource(ServiceConnectActivitySource.ActivitySourceName);
+        using (source.StartActivity("probe")) { }
 
-        using (var activity = source.StartActivity("test-span"))
-        {
-            Assert.NotNull(activity);
-        }
+        // ForceFlush drains any batched spans before the assertion.
+        tp.ForceFlush();
 
-        Assert.Contains(_exportedActivities, a => a.OperationName == "test-span");
+        Assert.Contains(exportedActivities, a =>
+            a.OperationName == "probe" &&
+            a.Source.Name == ServiceConnectActivitySource.ActivitySourceName);
     }
 
     [Fact]
-    public void AddServiceConnectInstrumentation_ReturnsBuilderForChaining()
+    public void AddServiceConnectInstrumentation_returns_same_builder_for_chaining()
     {
         var builder = Sdk.CreateTracerProviderBuilder();
         var returned = builder.AddServiceConnectInstrumentation();
@@ -61,10 +41,9 @@ public class TelemetryTracerExtensionsTests : IDisposable
     }
 
     [Fact]
-    public void AddServiceConnectInstrumentation_ThrowsOnNullBuilder()
+    public void AddServiceConnectInstrumentation_null_builder_throws()
     {
         TracerProviderBuilder? builder = null;
-        Assert.Throws<ArgumentNullException>(
-            () => TelemetryTracerExtensions.AddServiceConnectInstrumentation(builder!));
+        Assert.Throws<ArgumentNullException>(() => builder!.AddServiceConnectInstrumentation());
     }
 }
