@@ -66,7 +66,7 @@ public class FilterPipelineE2ETests
     {
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int?>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var services = new ServiceCollection();
@@ -89,6 +89,6 @@ public class FilterPipelineE2ETests
         await bus.SendAsync(message, new SendOptions { EndPoint = "test-queue" });
 
         Assert.True(filter.WasCalled);
-        mockProducer.Verify(p => p.SendAsync("test-queue", It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
+        mockProducer.Verify(p => p.SendAsync("test-queue", It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int?>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 }

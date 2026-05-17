@@ -50,8 +50,8 @@ public class RequestReplyTests
 
         var mockProducer = new Mock<IProducer>();
         mockProducer
-            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, Type, ReadOnlyMemory<byte>, IReadOnlyDictionary<string, string>?, CancellationToken>((ep, t, b, h, ct) =>
+            .Setup(p => p.SendAsync(It.IsAny<string>(), It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<int?>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, Type, ReadOnlyMemory<byte>, int?, IReadOnlyDictionary<string, string>?, CancellationToken>((ep, t, b, hops, h, ct) =>
             {
                 if (h is not null && h.TryGetValue("RequestMessageId", out var messageId) && replyManager != null && serializer != null)
                 {
