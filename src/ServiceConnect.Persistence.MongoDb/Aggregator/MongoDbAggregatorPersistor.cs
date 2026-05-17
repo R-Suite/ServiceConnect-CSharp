@@ -722,10 +722,14 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 // GetSnapshotAsync. The single-field Name index narrows by aggregator,
                 // but LockedBy filtering after the Name scan degrades to an in-memory
                 // match at high per-Name cardinality; this compound covers the predicate
-                // end-to-end. The partial filter excludes rows where LockedBy is null —
-                // the vast majority of the collection between lease windows — so the index
-                // only stores leased rows. Both queries that use the index filter on a
-                // non-null sessionId, so the exclusion does not affect correctness.
+                // end-to-end. The partial filter uses $type:Binary so the index only
+                // stores leased rows (Guid serialises as BinData subtype 4) and excludes
+                // the vast majority of the collection where LockedBy is absent or null.
+                // $type is supported in partial-index expressions since MongoDB 4.0;
+                // Filter.Ne(null) serialises to { $not: { $eq: null } }, which MongoDB
+                // rejects in partial-index expressions prior to 7.0. Both queries that
+                // use the index filter on a non-null sessionId, so the $type exclusion
+                // does not affect correctness.
                 var nameLockedByIndex = new CreateIndexModel<AggregatorDocument>(
                     Builders<AggregatorDocument>.IndexKeys
                         .Ascending(x => x.Name)
@@ -733,7 +737,7 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                     new CreateIndexOptions<AggregatorDocument>
                     {
                         PartialFilterExpression = Builders<AggregatorDocument>.Filter
-                            .Ne(x => x.LockedBy, null),
+                            .Type(x => x.LockedBy, BsonType.Binary),
                     });
 
                 await _collection.Indexes.CreateManyAsync(
