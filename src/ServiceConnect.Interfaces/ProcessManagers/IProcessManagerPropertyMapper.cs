@@ -41,5 +41,7 @@ public interface IProcessManagerPropertyMapper
     /// </para>
     /// </remarks>
     /// <exception cref="System.InvalidOperationException">A mapping for <typeparamref name="TMessage"/> has already been registered.</exception>
-    void ConfigureMapping<TProcessManagerData, TMessage>(Expression<Func<TProcessManagerData, object>> processManagerProperty, Expression<Func<TMessage, object>> messageExpression) where TProcessManagerData : IProcessManagerData;
+    void ConfigureMapping<TProcessManagerData, TMessage>(Expression<Func<TProcessManagerData, object>> processManagerProperty, Expression<Func<TMessage, object>> messageExpression)
+        where TProcessManagerData : IProcessManagerData
+        where TMessage : Message;
 }

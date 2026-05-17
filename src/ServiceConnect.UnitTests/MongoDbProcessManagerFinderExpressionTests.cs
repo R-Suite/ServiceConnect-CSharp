@@ -66,6 +66,7 @@ public class MongoDbProcessManagerFinderExpressionTests
             Expression<Func<TProcessManagerData, object>> processManagerProperty,
             Expression<Func<TMessage, object>> messageExpression)
             where TProcessManagerData : IProcessManagerData
+            where TMessage : Message
         {
             // Not used by these tests — the inline Add method is enough.
             throw new NotSupportedException();

@@ -268,6 +268,7 @@ file class DefaultProcessManagerPropertyMapperStub : IProcessManagerPropertyMapp
         System.Linq.Expressions.Expression<Func<TProcessManagerData, object>> processManagerProperty,
         System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
         where TProcessManagerData : IProcessManagerData
+        where TMessage : Message
     {
         _mappings.Add(new ProcessManagerToMessageMap { MessageType = typeof(TMessage), MessageProp = _ => null! });
     }

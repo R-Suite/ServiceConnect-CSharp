@@ -770,6 +770,7 @@ public class TestProcessManagerPropertyMapper : IProcessManagerPropertyMapper
         System.Linq.Expressions.Expression<Func<TProcessManagerData, object>> processManagerProperty,
         System.Linq.Expressions.Expression<Func<TMessage, object>> messageExpression)
         where TProcessManagerData : IProcessManagerData
+        where TMessage : Message
     {
         var propertiesHierarchy = new Dictionary<string, Type>();
 
