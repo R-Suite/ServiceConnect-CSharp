@@ -29,7 +29,7 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
         using var scope = scopeFactory.CreateScope();
         foreach (var href in handlerReferences)
         {
-            var aggregatorBaseType = FindAggregatorBaseType(href.HandlerType, href.MessageType);
+            var aggregatorBaseType = HandlerScanner.FindAggregatorBaseType(href.HandlerType);
             if (aggregatorBaseType == null)
             {
                 continue;
@@ -91,22 +91,6 @@ internal sealed class AggregatorRegistry : IHandlerRegistry
 
     internal bool TryGet(Type messageType, [NotNullWhen(true)] out AggregatorDescriptor? descriptor)
         => _descriptors.TryGetValue(messageType, out descriptor);
-
-    private static Type? FindAggregatorBaseType(Type handlerType, Type messageType)
-    {
-        var current = handlerType.BaseType;
-        while (current is not null && current != typeof(object))
-        {
-            if (current.IsGenericType &&
-                current.GetGenericTypeDefinition() == typeof(Aggregator<>) &&
-                current.GetGenericArguments()[0] == messageType)
-            {
-                return current;
-            }
-            current = current.BaseType;
-        }
-        return null;
-    }
 
     private static AggregatorDescriptor BuildDescriptor(Type messageType, Type aggregatorBaseType, Type handlerType, IServiceProvider sp)
     {

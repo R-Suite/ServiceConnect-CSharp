@@ -43,7 +43,6 @@ internal static class HandlerScanner
         var messageHandlerType = typeof(IMessageHandler<>);
         var processHandlerType = typeof(IProcessHandler<,>);
         var streamHandlerType = typeof(IStreamHandler<>);
-        var aggregatorType = typeof(Aggregator<>);
 
         foreach (var assembly in assemblies)
         {
@@ -153,11 +152,12 @@ internal static class HandlerScanner
                     });
                 }
 
-                // Scan Aggregator<T> subclasses
-                if (type.BaseType is { IsGenericType: true } baseType &&
-                    baseType.GetGenericTypeDefinition() == aggregatorType)
+                // Scan Aggregator<T> subclasses (full hierarchy walk so two+ level
+                // inheritance chains are discovered).
+                var aggregatorBase = FindAggregatorBaseType(type);
+                if (aggregatorBase is not null)
                 {
-                    var messageType = baseType.GetGenericArguments()[0];
+                    var messageType = aggregatorBase.GetGenericArguments()[0];
                     if (!messageType.IsGenericParameter)
                     {
                         handlerReferences.Add(new HandlerReference
@@ -171,5 +171,25 @@ internal static class HandlerScanner
             }
         }
         return handlerReferences;
+    }
+
+    /// <summary>
+    /// Walks the full base-type hierarchy of <paramref name="type"/> and returns the first
+    /// closed <c>Aggregator&lt;T&gt;</c> it finds, or <see langword="null"/> if the type does
+    /// not descend from <c>Aggregator&lt;T&gt;</c>. Handles chains of any depth.
+    /// </summary>
+    internal static Type? FindAggregatorBaseType(Type type)
+    {
+        var current = type.BaseType;
+        while (current is not null && current != typeof(object))
+        {
+            if (current.IsGenericType &&
+                current.GetGenericTypeDefinition() == typeof(Aggregator<>))
+            {
+                return current;
+            }
+            current = current.BaseType;
+        }
+        return null;
     }
 }

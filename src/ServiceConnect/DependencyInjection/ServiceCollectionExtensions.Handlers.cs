@@ -228,8 +228,8 @@ public static partial class ServiceCollectionExtensions
 
             case HandlerInterfaceKind.Aggregator:
             {
-                if (handlerType.BaseType is { IsGenericType: true } baseType
-                    && baseType.GetGenericTypeDefinition() == typeof(Aggregator<>))
+                var baseType = HandlerScanner.FindAggregatorBaseType(handlerType);
+                if (baseType is not null)
                 {
                     // User pre-registration of Aggregator<T> (the closed base type) takes
                     // precedence over a scan-discovered subclass for the same message type.
