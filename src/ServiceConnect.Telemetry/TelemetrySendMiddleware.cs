@@ -51,6 +51,14 @@ internal sealed class TelemetrySendMiddleware(
         {
             await next(context, cancellationToken).ConfigureAwait(false);
         }
+        catch (OperationCanceledException)
+        {
+            // Cooperative cancellation is not a span error per OTel messaging
+            // semconv. The activity is disposed in the finally block; do not
+            // tag it with ActivityStatusCode.Error or downstream SLO dashboards
+            // will record every graceful shutdown as a failed publish.
+            throw;
+        }
         catch (Exception ex)
         {
             ServiceConnectActivitySource.SetError(activity, ex, _options);
