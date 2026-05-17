@@ -21,10 +21,14 @@ public class MongoDbAggregatorPersistorIndexInitTests
         MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
     }
 
+    // Renders an IndexKeysDefinition to its canonical JSON form for shape assertions.
+    // Lives at class scope so the static constructor's Guid serializer registration
+    // (which xUnit runs once per collection) is guaranteed to fire before any call.
     private static string RenderKeys(IndexKeysDefinition<MongoDbAggregatorPersistor.AggregatorDocument> keys) =>
         keys.Render(new RenderArgs<MongoDbAggregatorPersistor.AggregatorDocument>(
             BsonSerializer.LookupSerializer<MongoDbAggregatorPersistor.AggregatorDocument>(),
             BsonSerializer.SerializerRegistry)).ToJson();
+
     [Fact]
     public async Task EnsureIndexesAsync_ConcurrentColdStart_FiresCreateManyExactlyOnce()
     {
@@ -142,11 +146,10 @@ public class MongoDbAggregatorPersistorIndexInitTests
             new TestData { CorrelationId = Guid.NewGuid() }, "test", Guid.NewGuid().ToString());
 
         Assert.NotNull(captured);
-        var keysJsonList = captured!.Select(m => RenderKeys(m.Keys)).ToList();
 
         // Compound (Name, LockedBy) — covers the release filter and the lease-bounded read-back filter.
-        Assert.Contains(keysJsonList, k =>
-            k.Contains("\"Name\" : 1") && k.Contains("\"LockedBy\" : 1"));
+        Assert.Contains(captured!, m =>
+            RenderKeys(m.Keys) == "{ \"Name\" : 1, \"LockedBy\" : 1 }");
     }
 
     private sealed class TestData : IHasCorrelationId

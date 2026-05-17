@@ -655,7 +655,7 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
     }
 
     /// <summary>
-    /// Ensures indexes on Name and the compound (Name, DataBson.CorrelationId) exist.
+    /// Ensures the supporting indexes for this collection exist; idempotent across processes.
     /// A per-instance flag short-circuits subsequent calls after the first success or benign
     /// conflict (codes 85/86), avoiding a MongoDB round-trip on every message operation.
     /// Non-benign errors leave the flag unset so the next caller retries index creation.
@@ -722,11 +722,19 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                 // GetSnapshotAsync. The single-field Name index narrows by aggregator,
                 // but LockedBy filtering after the Name scan degrades to an in-memory
                 // match at high per-Name cardinality; this compound covers the predicate
-                // end-to-end.
+                // end-to-end. The partial filter excludes rows where LockedBy is null —
+                // the vast majority of the collection between lease windows — so the index
+                // only stores leased rows. Both queries that use the index filter on a
+                // non-null sessionId, so the exclusion does not affect correctness.
                 var nameLockedByIndex = new CreateIndexModel<AggregatorDocument>(
                     Builders<AggregatorDocument>.IndexKeys
                         .Ascending(x => x.Name)
-                        .Ascending(x => x.LockedBy));
+                        .Ascending(x => x.LockedBy),
+                    new CreateIndexOptions<AggregatorDocument>
+                    {
+                        PartialFilterExpression = Builders<AggregatorDocument>.Filter
+                            .Ne(x => x.LockedBy, null),
+                    });
 
                 await _collection.Indexes.CreateManyAsync(
                     [nameIndex, nameInsertOrderIndex, nameCorrelationIndex, nameIdempotencyIndex, nameLockedByIndex], cancellationToken).ConfigureAwait(false);
