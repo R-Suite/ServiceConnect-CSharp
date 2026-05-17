@@ -22,6 +22,10 @@ internal sealed class ProcessManagerProcessor(
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
 
+    // Cache the per-(DataType, MessageType) verdict so the reflection cost is paid once
+    // per (handler, message) pair instead of every dispatch.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type DataType, Type MessageType), bool> _keyTypeValidationCache = new();
+
     // Per-saga-key serialization. Two messages targeting the same saga that arrive
     // concurrently must serialize through find→handle→persist or both observe
     // FindData==null, both run the user's HandleAsync (with side effects: bus.Send,
@@ -175,8 +179,26 @@ internal sealed class ProcessManagerProcessor(
                 var value = mapping.MessageProp.Invoke(msg);
                 if (value is not null)
                 {
+                    var valueType = value.GetType();
+                    var ok = _keyTypeValidationCache.GetOrAdd(
+                        (descriptor.DataType, messageType),
+                        _ => IsValueEqualType(valueType));
+                    if (!ok)
+                    {
+                        throw new InvalidOperationException(
+                            $"Process-manager saga lock key for ({descriptor.DataType.Name}, {messageType.Name}) " +
+                            $"resolves to type '{valueType.Name}', which compares by reference equality. The per-saga " +
+                            "concurrency lock requires a value-equal key type — use string, Guid, a primitive, decimal, " +
+                            "or a custom type that overrides Equals(object).");
+                    }
                     return new SagaLockKey(descriptor.DataType, value);
                 }
+            }
+            catch (InvalidOperationException)
+            {
+                // Rethrow the type-validation failure directly; do not swallow it as a
+                // mapping misconfiguration. The broker retry budget will surface the error.
+                throw;
             }
             catch
             {
@@ -349,6 +371,31 @@ internal sealed class ProcessManagerProcessor(
         {
             await PersistAsync(finder, descriptor, mapper, message, persistenceData, data, isNew, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Returns true when <paramref name="t"/> participates in <c>object.Equals</c> by value
+    /// rather than reference. Value types, strings, and reference types that override
+    /// <c>Equals(object)</c> qualify. Arrays and plain reference types do not.
+    /// </summary>
+    internal static bool IsValueEqualType(Type t)
+    {
+        if (t.IsValueType) { return true; }            // structs, primitives, Guid, decimal, enums, DateTime
+        if (t == typeof(string)) { return true; }      // string overrides Equals
+        if (t.IsArray) { return false; }               // arrays use reference equality
+        var current = t;
+        while (current != null && current != typeof(object))
+        {
+            var m = current.GetMethod(
+                nameof(Equals),
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly,
+                binder: null,
+                types: [typeof(object)],
+                modifiers: null);
+            if (m != null && !m.IsAbstract) { return true; }
+            current = current.BaseType;
+        }
+        return false;
     }
 
     private static async Task PersistAsync(
