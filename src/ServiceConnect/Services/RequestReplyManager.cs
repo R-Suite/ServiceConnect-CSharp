@@ -125,10 +125,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // with RequestTimeoutException if the caller-CT and linked-CTS fire near-simultaneously.
             // Today's TrySetCanceled semantics make UnobservedTaskException unreachable on this
             // path — defensive belt-and-braces against a future change to the registration callback.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw;
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
@@ -142,10 +139,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // now and never awaiting tcs.Task, attach a fault observer to prevent the
             // unawaited faulted task from triggering TaskScheduler.UnobservedTaskException
             // at finalization.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw new RequestSendCancelledException(messageId,
                 $"Request {messageId} send pipeline was cancelled before delivery.",
                 linkedCts.Token);
@@ -156,10 +150,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // Genuinely exposed when the send pipeline throws non-OCE (e.g. IOException from
             // a transport disconnect). The registration callback may fault the TCS with
             // RequestTimeoutException; observe to suppress UnobservedTaskException.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw;
         }
 
@@ -319,10 +310,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // with RequestTimeoutException if the caller-CT and linked-CTS fire near-simultaneously.
             // Today's TrySetCanceled semantics make UnobservedTaskException unreachable on this
             // path — defensive belt-and-braces against a future change to the registration callback.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw;
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
@@ -336,10 +324,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // now and never awaiting tcs.Task, attach a fault observer to prevent the
             // unawaited faulted task from triggering TaskScheduler.UnobservedTaskException
             // at finalization.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw new RequestSendCancelledException(messageId,
                 $"Request {messageId} send pipeline was cancelled before delivery.",
                 linkedCts.Token);
@@ -350,10 +335,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // Genuinely exposed when the send pipeline throws non-OCE (e.g. IOException from
             // a transport disconnect). The registration callback may fault the TCS with
             // RequestTimeoutException; observe to suppress UnobservedTaskException.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw;
         }
 
@@ -474,10 +456,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // with RequestTimeoutException if the caller-CT and linked-CTS fire near-simultaneously.
             // Today's TrySetCanceled semantics make UnobservedTaskException unreachable on this
             // path — defensive belt-and-braces against a future change to the registration callback.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw;
         }
         catch (OperationCanceledException) when (linkedCts.IsCancellationRequested && Volatile.Read(ref sendCompleted) == 0)
@@ -491,10 +470,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // now and never awaiting tcs.Task, attach a fault observer to prevent the
             // unawaited faulted task from triggering TaskScheduler.UnobservedTaskException
             // at finalization.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw new RequestSendCancelledException(messageId,
                 $"Publish {messageId} send pipeline was cancelled before delivery.",
                 linkedCts.Token);
@@ -505,10 +481,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
             // Genuinely exposed when the publish pipeline throws non-OCE (e.g. IOException
             // from a transport disconnect). The registration callback may fault the TCS with
             // RequestTimeoutException; observe to suppress UnobservedTaskException.
-            _ = tcs.Task.ContinueWith(static t => _ = t.Exception,
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
+            SuppressUnobservedFault(tcs.Task);
             throw;
         }
 
@@ -596,6 +569,20 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
                 $"Use RequestOptions.Default or new RequestOptions() to get the default {RequestOptions.DefaultTimeoutMs}ms timeout, " +
                 $"or set Timeout = Timeout.Infinite to wait indefinitely.");
         }
+    }
+
+    /// <summary>
+    /// Attaches a fire-and-forget continuation that observes the task's exception if it faults.
+    /// Prevents <see cref="TaskScheduler.UnobservedTaskException"/> at finalization for tasks the
+    /// caller is not awaiting. The OnlyOnFaulted | ExecuteSynchronously flags make the continuation
+    /// a no-op on success paths and avoid scheduling overhead on the fault path.
+    /// </summary>
+    internal static void SuppressUnobservedFault(Task task)
+    {
+        _ = task.ContinueWith(static t => _ = t.Exception,
+            CancellationToken.None,
+            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
     }
 
     /// <summary>
