@@ -378,29 +378,32 @@ internal sealed class Consumer : IConsumer
         // are retained for the lifetime of the Consumer.
         _clients.Clear();
 
-        // Close and dispose the setup channel before nulling it.
-        if (_model is { IsOpen: true })
-        {
-            try { await _model.CloseAsync().ConfigureAwait(false); }
-            catch (Exception ex) { _logger.LogWarning(ex, "Error closing consumer setup channel"); }
-        }
-        _model?.Dispose();
-        _model = null;
-        if (_ownsConnection && _connection != null)
-        {
-            await _connection.DisposeAsync().ConfigureAwait(false);
-            // Null the field so a subsequent StartConsumingAsync recreates the
-            // connection rather than handing back a disposed one. _ownsConnection
-            // is set fresh on the next StartConsumingAsync, so it does not need a
-            // matching reset here.
-            _connection = null;
-        }
-
-        // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
-        Interlocked.Exchange(ref _started, 0);
-
+        // The setup channel and connection are only safe to tear down when we hold
+        // the lifecycle lock. Without it, an in-flight StartConsumingAsync still owns
+        // those handles inside its own finally; closing them here would surface as an
+        // opaque AlreadyClosedException out of topology declares.
         if (lifecycleAcquired)
         {
+            if (_model is { IsOpen: true })
+            {
+                try { await _model.CloseAsync().ConfigureAwait(false); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Error closing consumer setup channel"); }
+            }
+            _model?.Dispose();
+            _model = null;
+            if (_ownsConnection && _connection != null)
+            {
+                await _connection.DisposeAsync().ConfigureAwait(false);
+                // Null the field so a subsequent StartConsumingAsync recreates the
+                // connection rather than handing back a disposed one. _ownsConnection
+                // is set fresh on the next StartConsumingAsync, so it does not need a
+                // matching reset here.
+                _connection = null;
+            }
+
+            // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
+            Interlocked.Exchange(ref _started, 0);
+
             // The semaphore is intentionally NOT disposed: a concurrent late-arriving Start
             // (e.g. test harness restart) would otherwise observe ObjectDisposedException
             // out of WaitAsync. Leaving it un-disposed costs only the un-allocated lazy
@@ -408,6 +411,12 @@ internal sealed class Consumer : IConsumer
             // Consumer instance.
             _lifecycleSemaphore.Release();
         }
+        // When lifecycleAcquired is false the wedged StartConsumingAsync still holds
+        // the semaphore and owns _model / _connection. Leaving _started at 1 makes a
+        // subsequent StartConsumingAsync fail fast with InvalidOperationException
+        // ("already consuming") instead of CAS-ing to 1 and then deadlocking on
+        // WaitAsync against the semaphore that no one will release. Operators must
+        // resolve the wedge (typically process restart) before consumption resumes.
     }
 
     private static Dictionary<string, object?> CoerceToQueueArgs(IReadOnlyDictionary<string, object> settings, string key)

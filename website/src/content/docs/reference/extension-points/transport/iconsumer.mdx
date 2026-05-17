@@ -154,6 +154,10 @@ Observe `cancellationToken` throughout the consume loop. On cancellation:
 
 Do not swallow `OperationCanceledException` — let it propagate so the caller knows the loop exited due to cancellation rather than a broker error.
 
+### DisposeAsync timeout behaviour
+
+If `DisposeAsync` times out waiting for an in-flight `StartConsumingAsync` to complete its setup, the consumer reports `IsConsuming=false` (the stopped latch is set on entry) but the started flag is intentionally left set. A subsequent `StartConsumingAsync` on the same instance throws `InvalidOperationException("Consumer is already consuming. Call DisposeAsync before starting again.")` rather than deadlocking against the lifecycle lock the wedged start still holds. Operators should resolve the wedge (typically a process restart) before consumption resumes.
+
 ### Message-type filtering
 
 The `messageTypes` parameter is the allow-list of wire type names for this consumer. How to apply it depends on the broker:
