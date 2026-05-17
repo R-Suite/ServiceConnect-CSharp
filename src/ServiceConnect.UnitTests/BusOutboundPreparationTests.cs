@@ -244,4 +244,56 @@ public sealed class BusOutboundPreparationTests
 
         Assert.True(result.Stopped);
     }
+
+    [Fact]
+    public async Task PrepareOutboundForRequestAsync_CallerHeaders_FlowToEnvelopeOnFilterPath()
+    {
+        var (bus, filterPipeline, _) = BuildBus(hasOutgoingFilters: true);
+        Envelope? capturedEnvelope = null;
+        filterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .Callback<Envelope, CancellationToken>((env, _) => capturedEnvelope = env)
+            .ReturnsAsync(FilterAction.Continue);
+
+        var message = new FakeMessage1(Guid.NewGuid());
+        var callerHeaders = new Dictionary<string, string> { ["X-Trace-Id"] = "abc123" };
+
+        var result = await bus.PrepareOutboundForRequestAsync(message, callerHeaders, CancellationToken.None);
+
+        Assert.False(result.Stopped);
+        Assert.NotNull(capturedEnvelope);
+        Assert.True(capturedEnvelope!.Headers.ContainsKey("X-Trace-Id"));
+    }
+
+    [Fact]
+    public async Task PrepareOutboundForRequestAsync_CancellationToken_FlowsThroughToFilter()
+    {
+        var (bus, filterPipeline, _) = BuildBus(hasOutgoingFilters: true);
+        CancellationToken capturedToken = default;
+        filterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .Callback<Envelope, CancellationToken>((_, ct) => capturedToken = ct)
+            .ReturnsAsync(FilterAction.Continue);
+
+        var message = new FakeMessage1(Guid.NewGuid());
+        using var cts = new CancellationTokenSource();
+
+        await bus.PrepareOutboundForRequestAsync(message, callerHeaders: null, cts.Token);
+
+        Assert.Equal(cts.Token, capturedToken);
+    }
+
+    [Fact]
+    public async Task PrepareOutboundForRequestAsync_CallerHeaders_FlowToDirectHeadersOnNoFilterPath()
+    {
+        var (bus, _, _) = BuildBus(hasOutgoingFilters: false);
+        var message = new FakeMessage1(Guid.NewGuid());
+        var callerHeaders = new Dictionary<string, string> { ["X-Trace-Id"] = "trace-42" };
+
+        var result = await bus.PrepareOutboundForRequestAsync(message, callerHeaders, CancellationToken.None);
+
+        Assert.False(result.Stopped);
+        Assert.True(result.Headers.TryGetValue("X-Trace-Id", out var v));
+        Assert.Equal("trace-42", v);
+    }
 }

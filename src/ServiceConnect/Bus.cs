@@ -1073,11 +1073,15 @@ internal sealed class Bus : IBus
 
     /// <summary>
     /// Runs the outbound preamble shared by the three request paths (SendRequestAsync,
-    /// SendRequestMultiAsync, PublishRequestAsync). Unlike <c>PrepareOutboundAsync</c>
-    /// this helper does NOT always serialise: when no outgoing filters are registered the
-    /// envelope is never built, so the local serialise can be skipped because
-    /// <c>RequestReplyManager</c> re-serialises on the request leg.
+    /// SendRequestMultiAsync, PublishRequestAsync): serialise the message (only when outgoing
+    /// filters are registered), run the outgoing-filter pipeline if any, and stamp the headers.
     /// </summary>
+    /// <remarks>
+    /// Unlike <c>PrepareOutboundAsync</c> this helper does NOT always serialise: when no
+    /// outgoing filters are configured the envelope is never built, so the local serialise
+    /// can be skipped because <c>RequestReplyManager</c> re-serialises on the request leg.
+    /// Two helpers (rather than one) preserve that optimisation.
+    /// </remarks>
     internal async Task<RequestPreparation> PrepareOutboundForRequestAsync<T>(
         T message,
         IReadOnlyDictionary<string, string>? callerHeaders,
