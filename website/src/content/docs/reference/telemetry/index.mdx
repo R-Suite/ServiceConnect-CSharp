@@ -140,8 +140,6 @@ public static class ServiceConnectActivitySource
     public static bool TryGetExistingContext(
         IDictionary<string, string> headers,
         out ActivityContext context);
-
-    public static void Shutdown();
 }
 ```
 
@@ -170,14 +168,6 @@ Marks an activity as errored using OTel semantic conventions (`Status = Error`, 
 ### `TryGetExistingContext`
 
 Parses a W3C `traceparent` (and optional `tracestate`) out of a header dictionary. Useful when bridging into a non-pipeline activity (for example, a long-running batch job that should resume the trace started on the publish side).
-
-### `Shutdown`
-
-```csharp
-public static void Shutdown();
-```
-
-Disposes the underlying `ActivitySource`. Call this when unloading a collectible AssemblyLoadContext (ALC) that contains `ServiceConnect.Telemetry` — it signals the OTel SDK to detach its `ActivityListener` before the ALC is collected, preventing a use-after-free on the `ActivitySource` object. Normal host shutdown does not require this call; `IHostedService.StopAsync` handles disposal through the DI lifetime.
 
 ## IMessagingSystemAttributes
 

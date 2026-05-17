@@ -213,7 +213,7 @@ Beyond metrics, ServiceConnect emits structured Info logs for connection state t
 |---|---|---|---|
 | 2 | `ConnectionOpened` | Information | A consumer connection establishes |
 | 3 | `ProducerConnectionOpened` | Information | A producer connection establishes |
-| 4 | `ConnectionRecovered` | Information | RabbitMQ.Client's auto-recovery restores the **connection** — topology (exchanges, queues, bindings) is not re-declared automatically (`TopologyRecoveryEnabled = false`); the application owns topology and declares it at startup |
+| 4 | `ConnectionRecovered` | Information | RabbitMQ.Client's auto-recovery restores the connection and replays the topology (exchanges, queues, bindings) on the new channel — `TopologyRecoveryEnabled = true` so consumer bindings survive cluster failover to a fresh broker node |
 | 5 | `ConnectionLost` | Information | The broker initiates `ConnectionShutdown` (e.g. broker restart, cluster failover) — NOT escalated to Warning because broker-initiated shutdowns happen for normal operational reasons |
 | 6 | `AckFailed` | Warning | An ack call fails; carries `MessageId` for correlation |
 | 7 | `NackFailed` | Warning | A nack call fails; carries `MessageId` for correlation |
