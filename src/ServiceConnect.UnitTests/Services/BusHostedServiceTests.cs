@@ -142,8 +142,10 @@ public class BusHostedServiceTests
         var transport = new TransportConfiguration { GracefulShutdownTimeoutMilliseconds = 250 };
         transport.Freeze();
 
+        CancellationToken capturedCt = default;
         var hangingBus = new Mock<IBus>();
         hangingBus.Setup(b => b.StopConsumingAsync(It.IsAny<CancellationToken>()))
+            .Callback((CancellationToken ct) => capturedCt = ct)
             .Returns(async (CancellationToken ct) =>
             {
                 try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
@@ -166,5 +168,89 @@ public class BusHostedServiceTests
                 null,
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
             Times.Once);
+        // After the grace window, the linked CTS passed to the mock should have been cancelled.
+        Assert.True(capturedCt.IsCancellationRequested);
+    }
+
+    [Fact]
+    public async Task StopAsync_OuterCtCancelled_DoesNotLogGraceWarning()
+    {
+        // When the host's outer CT fires (container kill, operator Ctrl+C), StopAsync must
+        // not emit a "grace exceeded" warning — the cancellation is external, not timeout.
+        var transport = new TransportConfiguration { GracefulShutdownTimeoutMilliseconds = 5000 };
+        transport.Freeze();
+
+        var hangingBus = new Mock<IBus>();
+        hangingBus.Setup(b => b.StopConsumingAsync(It.IsAny<CancellationToken>()))
+            .Returns(async (CancellationToken ct) =>
+            {
+                await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false);
+            });
+
+        var mockLogger = new Mock<ILogger<BusHostedService>>();
+        var svc = new BusHostedService(hangingBus.Object, _mockConfig.Object, transport, mockLogger.Object);
+
+        using var outerCts = new CancellationTokenSource(200); // host kill-CT fires after 200ms; grace is 5s
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => svc.StopAsync(outerCts.Token));
+
+        // No "grace exceeded" warning should be logged — the cancellation is the outer host CT, not grace.
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("GracefulShutdownTimeout", StringComparison.OrdinalIgnoreCase)),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task StopAsync_GraceMsZero_DelegatesDirectlyToBusWithoutTimeout()
+    {
+        // GracefulShutdownTimeoutMilliseconds=0 bypasses the WhenAny race entirely;
+        // the bus token is the host's outer CT with no linked grace CTS.
+        var transport = new TransportConfiguration { GracefulShutdownTimeoutMilliseconds = 0 };
+        transport.Freeze();
+
+        var cooperativeBus = new Mock<IBus>();
+        cooperativeBus.Setup(b => b.StopConsumingAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var mockLogger = new Mock<ILogger<BusHostedService>>();
+        var svc = new BusHostedService(cooperativeBus.Object, _mockConfig.Object, transport, mockLogger.Object);
+
+        await svc.StopAsync(CancellationToken.None);
+
+        cooperativeBus.Verify(b => b.StopConsumingAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task StopAsync_CooperativeBusInsideGraceWindow_AwaitsWithoutWarning()
+    {
+        // A cooperative bus that finishes within the grace window must not emit a warning
+        // and must not take longer than the grace window.
+        var transport = new TransportConfiguration { GracefulShutdownTimeoutMilliseconds = 5000 };
+        transport.Freeze();
+
+        var cooperativeBus = new Mock<IBus>();
+        cooperativeBus.Setup(b => b.StopConsumingAsync(It.IsAny<CancellationToken>()))
+            .Returns(Task.Delay(50));
+
+        var mockLogger = new Mock<ILogger<BusHostedService>>();
+        var svc = new BusHostedService(cooperativeBus.Object, _mockConfig.Object, transport, mockLogger.Object);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await svc.StopAsync(CancellationToken.None);
+        sw.Stop();
+
+        Assert.InRange(sw.ElapsedMilliseconds, 30, 500);
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
     }
 }

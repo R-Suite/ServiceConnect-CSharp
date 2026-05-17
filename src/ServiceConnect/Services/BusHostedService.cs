@@ -101,17 +101,27 @@ internal sealed class BusHostedService(
 
         if (winner == graceTask && !stopTask.IsCompleted)
         {
-            logger.LogWarning(
-                "Bus.StopConsumingAsync did not complete within GracefulShutdownTimeoutMilliseconds={GraceMs}; cancelling and continuing host shutdown.",
-                graceMs);
-            await graceCts.CancelAsync().ConfigureAwait(false);
-            // Observe the task to prevent UnobservedTaskException; don't await its completion.
-            _ = stopTask.ContinueWith(t => _ = t.Exception, TaskScheduler.Default);
-            return;
+            if (cancellationToken.IsCancellationRequested)
+            {
+                // The host's outer CT fired (container kill, operator Ctrl+C, host shutdown
+                // grace expired) — not grace exhaustion. Fall through to await stopTask so
+                // the OCE propagates naturally without a misleading "grace exceeded" warning.
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Bus.StopConsumingAsync did not complete within GracefulShutdownTimeoutMilliseconds={GraceMs}; cancelling and continuing host shutdown.",
+                    graceMs);
+                await graceCts.CancelAsync().ConfigureAwait(false);
+                // Observe the task to prevent UnobservedTaskException; don't await its completion.
+                _ = stopTask.ContinueWith(static t => _ = t.Exception, CancellationToken.None, TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                return;
+            }
         }
 
-        // Either stopTask completed inside the grace window, OR the host's outer CT fired.
-        // Awaiting stopTask propagates any consumer-side exception to the host.
+        // Either stopTask completed inside the grace window, OR the host's outer CT fired
+        // (causing both tasks to cancel via the linked CTS). Await stopTask so any
+        // consumer-side exception or OCE propagates naturally.
         await stopTask.ConfigureAwait(false);
     }
 }
