@@ -54,10 +54,13 @@ public abstract class Aggregator<T> where T : Message
     /// replay; that is the framework's contract, not a bug.
     /// </para>
     /// <para>
-    /// Cancellation behaviour: when <paramref name="cancellationToken"/> fires (host shutdown,
-    /// dispatch-budget exhausted), an <see cref="OperationCanceledException"/> propagated out of
-    /// the handler short-circuits the persistor remove and triggers a lease release. The same
-    /// batch is then redelivered on the next eligible flush; idempotency rules above apply.
+    /// Cancellation behaviour: when <paramref name="cancellationToken"/> fires, the framework
+    /// short-circuits the persistor remove and releases the snapshot lease — whether the
+    /// <see cref="OperationCanceledException"/> originates inside the handler or during the
+    /// post-handler <c>RemoveSnapshotAsync</c> call. The same batch is then redeliverable on
+    /// the next eligible flush. Note that cancellation during <c>RemoveSnapshotAsync</c> means
+    /// the handler has already executed and its external side effects have committed;
+    /// idempotency rules above apply on the replay.
     /// </para>
     /// </remarks>
     public abstract Task ExecuteAsync(IReadOnlyList<T> messages, CancellationToken cancellationToken = default);
