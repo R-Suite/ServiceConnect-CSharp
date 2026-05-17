@@ -6,9 +6,11 @@ using Xunit;
 
 namespace ServiceConnect.UnitTests.Aggregation;
 
-// These tests verify that the registry rejects the two invalid flush configurations
-// that previously could arise from the old virtual defaults (BatchSize=0, Timeout=InfiniteTimeSpan).
-// They act as defence-in-depth alongside the parametric coverage in AggregatorRegistryTests.
+// These tests pin the diagnostic message the registry emits when both flush paths are
+// misconfigured: they verify not only that registration fails but that the exception
+// identifies the offending handler type and the bad configuration value by name.
+// AggregatorRegistryTests covers the same failure modes parametrically; these sentinel
+// tests add message-content assertions so the diagnostic contract is explicitly tested.
 public class AggregatorTimeoutSentinelTests
 {
     private sealed class SentinelMessage : Message
@@ -44,8 +46,10 @@ public class AggregatorTimeoutSentinelTests
             new() { MessageType = typeof(SentinelMessage), HandlerType = typeof(InfiniteTimeoutAggregator) },
         };
 
-        Assert.Throws<InvalidOperationException>(() =>
+        var ex = Assert.Throws<InvalidOperationException>(() =>
             new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance));
+        Assert.Contains(typeof(InfiniteTimeoutAggregator).FullName!, ex.Message);
+        Assert.Contains("Timeout=", ex.Message);
     }
 
     [Fact]
@@ -60,7 +64,9 @@ public class AggregatorTimeoutSentinelTests
             new() { MessageType = typeof(SentinelMessage), HandlerType = typeof(ZeroBatchSizeAggregator) },
         };
 
-        Assert.Throws<InvalidOperationException>(() =>
+        var ex = Assert.Throws<InvalidOperationException>(() =>
             new AggregatorRegistry(refs, sp.GetRequiredService<IServiceScopeFactory>(), NullLogger<AggregatorRegistry>.Instance));
+        Assert.Contains(typeof(ZeroBatchSizeAggregator).FullName!, ex.Message);
+        Assert.Contains("BatchSize=0", ex.Message);
     }
 }
