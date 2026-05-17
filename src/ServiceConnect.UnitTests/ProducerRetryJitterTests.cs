@@ -46,6 +46,65 @@ public class ProducerRetryJitterTests
         ProducerInternals.SetField(producer, fieldName, value);
 
     [Fact]
+    public async Task ChannelTransientFailures_UseJitteredDelaysAroundMean()
+    {
+        // Drive ChannelTransientException retries by having ExchangeDeclareAsync throw
+        // ChannelTransientException on every attempt. ChannelTransientException is caught by
+        // ExecuteRetryingPublishAsync without calling MarkResetRequired — the transient path skips
+        // the reconnect budget and retries via EnsureConnectedAsync's fast path.
+        //
+        // Assertions mirror the IsRetriablePublishException test:
+        //   1. Exactly RetryCount delays are observed.
+        //   2. Every delay falls in [mean*0.5, mean*1.5).
+        //   3. At least 2 distinct delays appear across the RetryCount samples.
+        var producer = CreateProducer();
+
+        var capturedDelays = new ConcurrentBag<TimeSpan>();
+        producer.RetryDelayForTests = (delay, _) =>
+        {
+            capturedDelays.Add(delay);
+            return Task.CompletedTask;
+        };
+
+        var channel = new Mock<IChannel>();
+        channel.SetupGet(c => c.IsOpen).Returns(true);
+        channel.Setup(c => c.ExchangeDeclareAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<IDictionary<string, object?>?>(), It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ChannelTransientException("simulated transient channel tear-down"));
+
+        // Set _model and _connected so EnsureConnectedAsync fast-paths on every attempt —
+        // ChannelTransientException does not call MarkResetRequired, so no reconnect runs.
+        SetField(producer, "_model", channel.Object);
+        SetField(producer, "_connected", true);
+
+        // Do NOT stamp _declaredExchanges: EnsureExchangeDeclaredAsync must run so that
+        // ExchangeDeclareAsync is called and throws ChannelTransientException.
+
+        // After RetryCount retries the exception propagates on the final attempt.
+        await Assert.ThrowsAsync<ChannelTransientException>(() =>
+            producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
+
+        var delays = capturedDelays.ToArray();
+        Assert.Equal(RetryCount, delays.Length);
+
+        var meanSeconds = (double)RetrySeconds;
+        var low = TimeSpan.FromSeconds(meanSeconds * 0.5);
+        var high = TimeSpan.FromSeconds(meanSeconds * 1.5);
+        foreach (var d in delays)
+        {
+            Assert.InRange(d, low, high);
+        }
+
+        // Jitter must produce at least 2 distinct values across RetryCount=7 samples.
+        var distinctCount = delays.Distinct().Count();
+        Assert.True(distinctCount >= 2,
+            $"Expected at least 2 distinct retry delays; got {distinctCount} distinct value(s) from {delays.Length} samples. " +
+            "All delays identical indicates no jitter is applied.");
+    }
+
+    [Fact]
     public async Task RetrieablePublishFailures_UseJitteredDelaysAroundMean()
     {
         // Drive BasicPublishAsync failures (classified as retriable by IsRetriablePublishException)

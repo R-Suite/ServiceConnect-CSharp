@@ -205,12 +205,12 @@ internal sealed class Producer : IProducer
                 lastException = ex;
                 if (attempt < _retryCount)
                 {
+                    var transientDelay = JitteredRetryDelay();
                     _logger.LogDebug(
-                        "Publish attempt {Attempt}/{Total} hit transient channel state; retrying after {Delay}s",
+                        "Publish attempt {Attempt}/{Total} hit transient channel state; retrying after {Delay:0.##}s",
                         attempt + 1,
                         _retryCount + 1,
-                        _retryTimeInSeconds);
-                    var transientDelay = JitteredRetryDelay();
+                        transientDelay.TotalSeconds);
                     await (RetryDelayForTests?.Invoke(transientDelay, cancellationToken) ?? Task.Delay(transientDelay, cancellationToken)).ConfigureAwait(false);
                     continue;
                 }
@@ -222,18 +222,18 @@ internal sealed class Producer : IProducer
                 _producerConnection.MarkResetRequired();
                 if (attempt < _retryCount)
                 {
-                    _logger.LogWarning(
-                        ex,
-                        "Publish attempt {Attempt}/{Total} failed; will retry after {Delay}s",
-                        attempt + 1,
-                        _retryCount + 1,
-                        _retryTimeInSeconds);
                     // Inter-attempt delay also runs OUTSIDE the lock so other publishers can interleave.
                     // Mean is fixed (not exponential) — connection-create inside EnsureConnectedAsync
                     // already does its own exponential backoff via Retry.DoAsync, so layering exponentials
                     // would double-grow the wall-clock budget. ±50% jitter is applied per attempt so
                     // concurrent producers do not reconnect in lockstep after a broker restart.
                     var retriableDelay = JitteredRetryDelay();
+                    _logger.LogWarning(
+                        ex,
+                        "Publish attempt {Attempt}/{Total} failed; will retry after {Delay:0.##}s",
+                        attempt + 1,
+                        _retryCount + 1,
+                        retriableDelay.TotalSeconds);
                     await (RetryDelayForTests?.Invoke(retriableDelay, cancellationToken) ?? Task.Delay(retriableDelay, cancellationToken)).ConfigureAwait(false);
                     continue;
                 }
@@ -254,9 +254,8 @@ internal sealed class Producer : IProducer
     // lockstep after a broker restart even though the mean wall-clock budget is unchanged.
     private TimeSpan JitteredRetryDelay()
     {
-        var meanSeconds = _retryTimeInSeconds;
         var jitterFactor = 0.5 + Random.Shared.NextDouble(); // [0.5, 1.5)
-        return TimeSpan.FromSeconds(meanSeconds * jitterFactor);
+        return TimeSpan.FromSeconds(_retryTimeInSeconds * jitterFactor);
     }
 
     // Broker-side nacks (PublishException) are usually poison messages — rejected by a
