@@ -579,6 +579,7 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
     /// </summary>
     internal static void SuppressUnobservedFault(Task task)
     {
+        ArgumentNullException.ThrowIfNull(task);
         _ = task.ContinueWith(static t => _ = t.Exception,
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
