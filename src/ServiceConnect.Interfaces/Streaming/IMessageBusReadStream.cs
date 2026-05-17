@@ -3,6 +3,24 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// Reassembles a streamed sequence of message packets into a readable payload.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <b>SequenceId uniqueness contract.</b> The framework admits stream packets by
+/// <see cref="SequenceId"/>. Producers MUST generate a fresh <see cref="Guid"/> for
+/// every call to <c>IBus.CreateStream&lt;T&gt;</c>; the framework's
+/// <c>IMessageBusWriteStream</c> implementation does so internally. Two producers
+/// that explicitly construct the same <see cref="SequenceId"/> will write into the
+/// same in-flight stream — the receiver cannot distinguish them, and packets from
+/// the second producer will collide at the framework-enforced contiguous
+/// <c>PacketNumber</c> invariant, faulting both senders' streams.
+/// </para>
+/// <para>
+/// The collision is bounded by per-stream caps (active-stream count, total stream
+/// size, packet-number ceiling) so a misbehaving or hostile producer cannot
+/// arbitrarily corrupt unrelated streams, but two cooperating producers must not
+/// share a SequenceId.
+/// </para>
+/// </remarks>
 public interface IMessageBusReadStream
 {
     /// <summary>

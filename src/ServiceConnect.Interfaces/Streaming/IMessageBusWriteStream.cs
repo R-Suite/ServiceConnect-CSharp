@@ -3,6 +3,13 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// Splits a payload into transport packets and writes them to the message bus.
 /// </summary>
+/// <remarks>
+/// The framework allocates a unique <see cref="Guid"/> as the wire-level
+/// <c>SequenceId</c> for each stream. Application code that constructs a custom
+/// stream implementation MUST mint a fresh GUID per stream; sharing a SequenceId
+/// across producers causes the receiver to merge their packets and fault both
+/// streams. See <see cref="IMessageBusReadStream"/> for the full contract.
+/// </remarks>
 public interface IMessageBusWriteStream : IAsyncDisposable
 {
     /// <summary>
