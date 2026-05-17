@@ -69,3 +69,22 @@ double-dispose from a stale snapshot would be harmless regardless.
 `src/ServiceConnect/Services/Processors/AggregatorProcessor.cs:152-172`
 (`ResetTimer`) and `:470-527` (`DisposeAsync`), specifically the
 `lock (_resetTimerLock)` block at lines 509–517.
+
+---
+
+## Bus.BuildRoutingSlip duplicate destination re-validation (review §Findings)
+
+**Claim:** BuildRoutingSlip re-validates destinations already validated at
+RouteAsync:461-482; ~20 dead-defensive lines.
+
+**Verdict:** False positive — kept intentionally. The comment at Bus.cs:1039-1042
+articulates the defence-in-depth rationale: the routing-slip wire format
+(comma-separated) is non-recoverable on the receiving side, so revalidating at
+slip-build time prevents a future internal caller from accidentally producing
+malformed slips. Cost is zero on the success path; benefit is real. Removing
+the second pass would be a regression of design intent.
+
+**Validated:** Tim Watson, 2026-05-17. BuildRoutingSlip caller search confirmed
+only RouteAsync invokes it as of this commit (sole call site at Bus.cs:507 inside
+`RouteAsync`); the audit's "dead code" framing was wrong because it ignored the
+explicit comment articulating why the redundancy is intentional.
