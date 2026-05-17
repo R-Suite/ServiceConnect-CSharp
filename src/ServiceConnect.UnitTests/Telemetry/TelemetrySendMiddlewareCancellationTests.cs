@@ -48,7 +48,7 @@ public sealed class TelemetrySendMiddlewareCancellationTests : IDisposable
             () => sut.ProcessAsync(context, Next, cts.Token));
 
         var span = Assert.Single(_activities);
-        Assert.NotEqual(ActivityStatusCode.Error, span.Status);
+        Assert.Equal(ActivityStatusCode.Unset, span.Status);
     }
 
     [Fact]

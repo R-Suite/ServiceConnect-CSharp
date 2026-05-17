@@ -53,7 +53,7 @@ public sealed class TelemetryProcessingMiddlewareCancellationTests : IDisposable
                 cts.Token));
 
         var span = Assert.Single(_activities);
-        Assert.NotEqual(ActivityStatusCode.Error, span.Status);
+        Assert.Equal(ActivityStatusCode.Unset, span.Status);
     }
 
     [Fact]
@@ -82,6 +82,35 @@ public sealed class TelemetryProcessingMiddlewareCancellationTests : IDisposable
 
         var span = Assert.Single(_activities);
         Assert.Equal(ActivityStatusCode.Error, span.Status);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_when_next_returns_unsuccessful_result_with_OperationCanceled_exception_span_status_is_not_error()
+    {
+        var sut = new TelemetryProcessingMiddleware(_options, _attrs);
+        var envelope = MakeEnvelope();
+
+        static Task<ConsumeEventResult> Next(
+            ReadOnlyMemory<byte> bytes,
+            Type type,
+            object msg,
+            IDictionary<string, object> hdrs,
+            Envelope env,
+            CancellationToken ct) =>
+            Task.FromResult(new ConsumeEventResult { Success = false, Exception = new OperationCanceledException() });
+
+        var result = await sut.ProcessAsync(
+            envelope.Body,
+            typeof(SampleMessage),
+            new SampleMessage(),
+            envelope.Headers,
+            envelope,
+            Next,
+            CancellationToken.None);
+
+        Assert.False(result.Success);
+        var span = Assert.Single(_activities);
+        Assert.Equal(ActivityStatusCode.Unset, span.Status);
     }
 
     private static Envelope MakeEnvelope() => new()

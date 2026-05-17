@@ -85,7 +85,13 @@ internal sealed class TelemetryProcessingMiddleware(
             var result = await next(messageBytes, messageType, message, headers, envelope, cancellationToken).ConfigureAwait(false);
             if (!result.Success)
             {
-                if (result.Exception is not null)
+                if (result.Exception is OperationCanceledException)
+                {
+                    // Cooperative cancellation reported via the result envelope rather than a
+                    // thrown exception still completes the activity with Unset status, mirroring
+                    // the catch (OperationCanceledException) path below.
+                }
+                else if (result.Exception is not null)
                 {
                     ServiceConnectActivitySource.SetError(activity, result.Exception, _options);
                 }
