@@ -793,6 +793,68 @@ public class BusTests
     }
 
     [Fact]
+    public async Task SendRequestAsync_WhenFilterBlocksMessage_ThrowsOutgoingFiltersBlocked()
+    {
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        var ex = await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
+            () => busWithFilters.SendRequestAsync<FakeMessage1, FakeMessage1>(message));
+
+        Assert.Equal("Outgoing filters blocked the request message.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SendRequestMultiAsync_WhenFilterBlocksMessage_ThrowsOutgoingFiltersBlocked()
+    {
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+
+        var ex = await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
+            () => busWithFilters.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(message));
+
+        Assert.Equal("Outgoing filters blocked the request message.", ex.Message);
+    }
+
+    [Fact]
     public async Task RequestTimeoutAsync_WithAmbientConsumeHeaders_PreservesCustomHeadersOnly()
     {
         TimeoutData? captured = null;
