@@ -20,11 +20,11 @@ public sealed class RabbitMqMessagingSystemAttributes : IMessagingSystemAttribut
     {
         ArgumentNullException.ThrowIfNull(transport);
 
-        // Host may be a comma- or semicolon-separated cluster list (e.g. "rabbit1,rabbit2"
-        // or "rabbit1;rabbit2"). The OTel server.address attribute represents a single
-        // endpoint, so use the first entry.
+        // Host may be a comma-separated cluster list (e.g. "rabbit1,rabbit2"). The transport
+        // splits on ',' only; mirror that here so server.address reflects what the connection
+        // factory will actually dial. A semicolon in Host is part of the literal hostname.
         var host = transport.Host ?? string.Empty;
-        var idx = host.IndexOfAny([',', ';']);
+        var idx = host.IndexOf(',');
         var first = idx >= 0 ? host[..idx] : host;
         _serverAddress = first.Trim();
 

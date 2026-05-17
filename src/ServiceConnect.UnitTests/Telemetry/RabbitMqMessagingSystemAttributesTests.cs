@@ -10,7 +10,7 @@ public sealed class RabbitMqMessagingSystemAttributesTests
     [Theory]
     [InlineData("rabbit1", "rabbit1")]
     [InlineData("rabbit1,rabbit2", "rabbit1")]
-    [InlineData("rabbit1;rabbit2", "rabbit1")]
+    [InlineData("rabbit1;rabbit2", "rabbit1;rabbit2")]  // transport treats semicolon as part of hostname
     [InlineData(" rabbit1 , rabbit2 ", "rabbit1")]
     [InlineData("", "")]
     public void ServerAddress_HandlesClusterListSeparators(string host, string expected)
