@@ -125,25 +125,13 @@ internal sealed class Bus : IBus
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
-        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
-        _serializer.Serialize(message, bufferWriter);
-        var messageBytes = bufferWriter.WrittenMemory;
-        Dictionary<string, string> headers;
-
-        if (_hasOutgoingFilters)
+        var prep = await PrepareOutboundAsync(message, options?.Headers, cancellationToken).ConfigureAwait(false);
+        if (prep.Stopped)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), options?.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
-            {
-                return;
-            }
-
-            headers = ExtractHeaders(envelope);
+            return;
         }
-        else
-        {
-            headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
-        }
+        var messageBytes = prep.Bytes;
+        var headers = prep.Headers;
 
         if (options?.RoutingKey is { } routingKey)
         {
@@ -182,25 +170,13 @@ internal sealed class Bus : IBus
         ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
 
-        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
-        _serializer.Serialize(message, bufferWriter);
-        var messageBytes = bufferWriter.WrittenMemory;
-        Dictionary<string, string> headers;
-
-        if (_hasOutgoingFilters)
+        var prep = await PrepareOutboundAsync(message, options?.Headers, cancellationToken).ConfigureAwait(false);
+        if (prep.Stopped)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), options?.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
-            {
-                return;
-            }
-
-            headers = ExtractHeaders(envelope);
+            return;
         }
-        else
-        {
-            headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
-        }
+        var messageBytes = prep.Bytes;
+        var headers = prep.Headers;
 
         var context = new SendContext
         {
@@ -227,25 +203,13 @@ internal sealed class Bus : IBus
             throw new ArgumentException("SendToManyAsync requires at least one endpoint.", nameof(endPoints));
         }
 
-        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
-        _serializer.Serialize(message, bufferWriter);
-        var messageBytes = bufferWriter.WrittenMemory;
-        Dictionary<string, string> headers;
-
-        if (_hasOutgoingFilters)
+        var prep = await PrepareOutboundAsync(message, options?.Headers, cancellationToken).ConfigureAwait(false);
+        if (prep.Stopped)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), options?.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
-            {
-                return;
-            }
-
-            headers = ExtractHeaders(envelope);
+            return;
         }
-        else
-        {
-            headers = BuildHeadersDirect(message.CorrelationId, options?.Headers);
-        }
+        var messageBytes = prep.Bytes;
+        var headers = prep.Headers;
 
         List<Exception>? endpointFailures = null;
         foreach (var endpoint in endPoints)
@@ -482,25 +446,13 @@ internal sealed class Bus : IBus
         }
 
         var firstDestination = snapshot[0];
-        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
-        _serializer.Serialize(message, bufferWriter);
-        var messageBytes = bufferWriter.WrittenMemory;
-        Dictionary<string, string> headers;
-
-        if (_hasOutgoingFilters)
+        var prep = await PrepareOutboundAsync(message, null, cancellationToken).ConfigureAwait(false);
+        if (prep.Stopped)
         {
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T));
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
-            {
-                return;
-            }
-
-            headers = ExtractHeaders(envelope);
+            return;
         }
-        else
-        {
-            headers = BuildHeadersDirect(message.CorrelationId, null);
-        }
+        var messageBytes = prep.Bytes;
+        var headers = prep.Headers;
 
         if (snapshot.Length > 1)
         {
