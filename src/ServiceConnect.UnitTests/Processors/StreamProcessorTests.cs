@@ -396,10 +396,76 @@ public class StreamProcessorTests
         var ex = await Assert.ThrowsAsync<OperationCanceledException>(
             () => processor.ProcessAsync(payload, msgType, null, headers, envelope, callerCts.Token));
 
-        // The escaping OCE must NOT carry the unrelated token. The downstream metrics
-        // pipeline gates cancelled-classification on cancellationToken.IsCancellationRequested;
-        // an OCE carrying a handler-owned token would produce a false graceful-shutdown signal.
-        Assert.NotEqual(unrelatedCts.Token, ex.CancellationToken);
+        // The escaping OCE must carry the caller's token (not the handler-owned one).
+        // The inner exception preserves the original handler-thrown OCE with the unrelated token.
+        Assert.Equal(callerCts.Token, ex.CancellationToken);
+        Assert.False(ex.CancellationToken.IsCancellationRequested);
+        Assert.NotNull(ex.InnerException);
+        Assert.IsType<OperationCanceledException>(ex.InnerException);
+        Assert.Equal(unrelatedCts.Token, ((OperationCanceledException)ex.InnerException).CancellationToken);
+    }
+
+    // When the CALLER cancels and the handler also throws OCE with an unrelated token, the
+    // first catch branch takes priority: the escaping OCE must carry the caller's token,
+    // confirming the cancellation was a genuine caller-initiated shutdown.
+    [Fact]
+    public async Task InvokeHandlerAsync_CallerCancels_OceCarriesCallerToken()
+    {
+        using var unrelatedCts = new CancellationTokenSource();
+        unrelatedCts.Cancel();
+
+        using var callerCts = new CancellationTokenSource();
+        callerCts.Cancel(); // caller IS cancelled this time
+
+        var sequenceId = Guid.NewGuid().ToString();
+        var msgType = typeof(SptMsg);
+
+        var typeRegistry = new MessageTypeRegistry();
+        typeRegistry.Register(msgType);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = msgType, HandlerType = typeof(SptUnrelatedOceHandler) }
+        };
+        var streamHandlerRegistry = new StreamHandlerRegistry(handlerRefs, NullLogger<StreamHandlerRegistry>.Instance);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IStreamHandler<SptMsg>>(new SptUnrelatedOceHandler(unrelatedCts.Token));
+        var provider = services.BuildServiceProvider();
+
+        var msg = new SptMsg(Guid.NewGuid());
+        var serializerMock = new Mock<IMessageSerializer>();
+        serializerMock
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), msgType))
+            .Returns(msg);
+
+        var (accessor, scopeCallerCancels, _) = BuildScopeContext(provider);
+        using var _scopeCallerCancels = scopeCallerCancels;
+        var processor = new StreamProcessor(
+            accessor,
+            NullLogger<StreamProcessor>.Instance,
+            typeRegistry,
+            streamHandlerRegistry,
+            serializerMock.Object,
+            TimeProvider.System);
+
+        var payload = new byte[] { 0x01 };
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+            [HeaderKeys.LastPacketNumber] = "0",
+            [HeaderKeys.FullTypeName] = msgType.FullName!
+        };
+        var envelope = new Envelope { Headers = headers, Body = payload };
+
+        var ex = await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(payload, msgType, null, headers, envelope, callerCts.Token));
+
+        // Caller-cancelled path: OCE must carry the caller's token, which IS cancelled.
+        Assert.Equal(callerCts.Token, ex.CancellationToken);
+        Assert.True(ex.CancellationToken.IsCancellationRequested);
     }
 
     // When MessageBusReadStream.Write throws (e.g. packet number exceeds the
