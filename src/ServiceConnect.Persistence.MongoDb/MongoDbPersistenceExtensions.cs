@@ -141,7 +141,16 @@ public static class MongoDbPersistenceExtensions
             // starts hosted services in registration order, and a default AddHostedService
             // call appends, which would put indexing AFTER consuming starts and leave the
             // race window open during cold-start.
-            services.Insert(0, ServiceDescriptor.Singleton<IHostedService, MongoDbProcessManagerIndexInitializer>());
+            //
+            // Idempotent: two feature modules each calling UseMongoDbPersistence within one
+            // AddServiceConnect must not produce two initializer instances racing the same
+            // index-creation work. TryAddEnumerable would append rather than position-0
+            // insert, defeating the pre-BusHostedService ordering — guard with an explicit
+            // type-check instead.
+            if (!services.Any(d => d.ImplementationType == typeof(MongoDbProcessManagerIndexInitializer)))
+            {
+                services.Insert(0, ServiceDescriptor.Singleton<IHostedService, MongoDbProcessManagerIndexInitializer>());
+            }
             services.TryAddSingleton<MongoDbTimeoutStore>();
             services.TryAddSingleton<IProcessManagerFinder>(sp =>
                 sp.GetRequiredService<MongoDbProcessManagerFinder>());
