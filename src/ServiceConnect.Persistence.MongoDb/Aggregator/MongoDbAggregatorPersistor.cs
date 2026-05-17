@@ -717,8 +717,19 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
                             .Exists(x => x.IdempotencyKey, true),
                     });
 
+                // Compound index on (Name, LockedBy) supports the release filter in
+                // ReleaseSnapshotAsync and the lease-bounded read-back filter in
+                // GetSnapshotAsync. The single-field Name index narrows by aggregator,
+                // but LockedBy filtering after the Name scan degrades to an in-memory
+                // match at high per-Name cardinality; this compound covers the predicate
+                // end-to-end.
+                var nameLockedByIndex = new CreateIndexModel<AggregatorDocument>(
+                    Builders<AggregatorDocument>.IndexKeys
+                        .Ascending(x => x.Name)
+                        .Ascending(x => x.LockedBy));
+
                 await _collection.Indexes.CreateManyAsync(
-                    [nameIndex, nameInsertOrderIndex, nameCorrelationIndex, nameIdempotencyIndex], cancellationToken).ConfigureAwait(false);
+                    [nameIndex, nameInsertOrderIndex, nameCorrelationIndex, nameIdempotencyIndex, nameLockedByIndex], cancellationToken).ConfigureAwait(false);
             }
             catch (MongoCommandException ex) when (BenignIndexCodes.Contains(ex.Code))
             {

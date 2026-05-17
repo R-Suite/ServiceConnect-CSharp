@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using Moq;
 using ServiceConnect.Interfaces;
@@ -10,13 +12,19 @@ namespace ServiceConnect.UnitTests;
 /// <summary>
 /// Verifies that EnsureIndexesAsync uses a single-flight semaphore so that
 /// concurrent cold-start callers do not each fire CreateManyAsync.
-/// Pre-fix: 8 concurrent callers all race past the Volatile.Read fast path and
-/// each call CreateManyAsync. Post-fix: only one wins the semaphore; the others
-/// re-check _indexed inside the lock and short-circuit.
 /// </summary>
 [Collection("Mongo Bson serial")]
 public class MongoDbAggregatorPersistorIndexInitTests
 {
+    static MongoDbAggregatorPersistorIndexInitTests()
+    {
+        MongoDbPersistenceExtensions.EnsureGuidSerializerRegistered();
+    }
+
+    private static string RenderKeys(IndexKeysDefinition<MongoDbAggregatorPersistor.AggregatorDocument> keys) =>
+        keys.Render(new RenderArgs<MongoDbAggregatorPersistor.AggregatorDocument>(
+            BsonSerializer.LookupSerializer<MongoDbAggregatorPersistor.AggregatorDocument>(),
+            BsonSerializer.SerializerRegistry)).ToJson();
     [Fact]
     public async Task EnsureIndexesAsync_ConcurrentColdStart_FiresCreateManyExactlyOnce()
     {
@@ -84,6 +92,61 @@ public class MongoDbAggregatorPersistorIndexInitTests
         await Task.WhenAll(tasks);
 
         Assert.Equal(1, createCount);
+    }
+
+    [Fact]
+    public async Task EnsureIndexesAsync_registers_Name_LockedBy_compound_index()
+    {
+        // ReleaseSnapshotAsync filters by (Name, LockedBy) to release the lease for a
+        // specific session. The lease-bounded tail read in GetSnapshotAsync also filters
+        // by LockedBy after Name. Without a compound index covering both fields the
+        // LockedBy match after the Name scan degrades to an in-memory comparison at high
+        // per-Name cardinality.
+        IEnumerable<CreateIndexModel<MongoDbAggregatorPersistor.AggregatorDocument>>? captured = null;
+
+        var indexManager = new Mock<IMongoIndexManager<MongoDbAggregatorPersistor.AggregatorDocument>>();
+        indexManager
+            .Setup(m => m.CreateManyAsync(
+                It.IsAny<IEnumerable<CreateIndexModel<MongoDbAggregatorPersistor.AggregatorDocument>>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<IEnumerable<CreateIndexModel<MongoDbAggregatorPersistor.AggregatorDocument>>, CancellationToken>(
+                (m, _) => captured = [.. m])
+            .ReturnsAsync(["ok"]);
+
+        var collection = new Mock<IMongoCollection<MongoDbAggregatorPersistor.AggregatorDocument>>();
+        collection.SetupGet(c => c.Indexes).Returns(indexManager.Object);
+        collection
+            .Setup(c => c.InsertOneAsync(
+                It.IsAny<MongoDbAggregatorPersistor.AggregatorDocument>(),
+                It.IsAny<InsertOneOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var database = new Mock<IMongoDatabase>();
+        database.Setup(d => d.GetCollection<MongoDbAggregatorPersistor.AggregatorDocument>(
+                It.IsAny<string>(), It.IsAny<MongoCollectionSettings?>()))
+            .Returns(collection.Object);
+
+        var client = new Mock<IMongoClient>();
+        client.SetupGet(c => c.Settings).Returns(new MongoClientSettings { WriteConcern = WriteConcern.W1 });
+        client.Setup(c => c.GetDatabase(It.IsAny<string>(), It.IsAny<MongoDatabaseSettings?>()))
+              .Returns(database.Object);
+
+        var persistor = new MongoDbAggregatorPersistor(
+            client.Object,
+            new MongoDbPersistenceOptions { DatabaseName = "tests" },
+            Mock.Of<ILogger<MongoDbAggregatorPersistor>>(),
+            Mock.Of<IMessageTypeRegistry>());
+
+        await persistor.InsertDataAsync(
+            new TestData { CorrelationId = Guid.NewGuid() }, "test", Guid.NewGuid().ToString());
+
+        Assert.NotNull(captured);
+        var keysJsonList = captured!.Select(m => RenderKeys(m.Keys)).ToList();
+
+        // Compound (Name, LockedBy) — covers the release filter and the lease-bounded read-back filter.
+        Assert.Contains(keysJsonList, k =>
+            k.Contains("\"Name\" : 1") && k.Contains("\"LockedBy\" : 1"));
     }
 
     private sealed class TestData : IHasCorrelationId
