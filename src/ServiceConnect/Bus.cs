@@ -1066,6 +1066,49 @@ internal sealed class Bus : IBus
     }
 
     /// <summary>
+    /// Result of the outbound preamble: serialised wire bytes, the headers dictionary to attach,
+    /// and a flag indicating whether an outgoing filter requested the message be dropped.
+    /// Callers MUST check <see cref="Stopped"/> before reading <see cref="Bytes"/> or <see cref="Headers"/>;
+    /// the latter two are undefined when the filter pipeline stopped the message.
+    /// </summary>
+    internal readonly record struct OutboundPreparation(
+        ReadOnlyMemory<byte> Bytes,
+        Dictionary<string, string> Headers,
+        bool Stopped);
+
+    /// <summary>
+    /// Runs the outbound preamble shared by Publish/Send/SendToMany/Route: serialise the message,
+    /// then either build headers directly (no outgoing filters configured) or build an envelope,
+    /// invoke the outgoing-filter pipeline, and extract headers from the envelope.
+    /// </summary>
+    /// <remarks>
+    /// The helper always serialises because all callers need the wire bytes for the downstream
+    /// send pipeline. Request paths use a separate helper that conditionally serialises because
+    /// <c>RequestReplyManager</c> re-serialises downstream.
+    /// </remarks>
+    internal async Task<OutboundPreparation> PrepareOutboundAsync<T>(
+        T message,
+        IReadOnlyDictionary<string, string>? callerHeaders,
+        CancellationToken cancellationToken) where T : Message
+    {
+        var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
+        _serializer.Serialize(message, bufferWriter);
+        var messageBytes = bufferWriter.WrittenMemory;
+
+        if (_hasOutgoingFilters)
+        {
+            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(T), callerHeaders);
+            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
+            {
+                return new OutboundPreparation(default, null!, Stopped: true);
+            }
+            return new OutboundPreparation(messageBytes, ExtractHeaders(envelope), Stopped: false);
+        }
+
+        return new OutboundPreparation(messageBytes, BuildHeadersDirect(message.CorrelationId, callerHeaders), Stopped: false);
+    }
+
+    /// <summary>
     /// Fast-path header builder used when no outgoing filters are registered.
     /// Produces the same <see cref="Dictionary{TKey,TValue}"/> that
     /// <see cref="CreateEnvelope"/> + <see cref="ExtractHeaders"/> would return,
