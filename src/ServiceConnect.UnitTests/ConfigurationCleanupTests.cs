@@ -14,7 +14,7 @@ public class ConfigurationCleanupTests
         // after the framework has built it (which would let a subscriber strip
         // required MessageType/CorrelationId entries before the transport send).
         // A null value supplied in the initializer must still be rejected up front.
-        Assert.Throws<ArgumentNullException>(() => new OutgoingEventArgs { Headers = null! });
+        Assert.Throws<ArgumentNullException>(() => new SendEventArgs { Headers = null! });
     }
 
     [Fact]

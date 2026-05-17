@@ -3,8 +3,16 @@ namespace ServiceConnect.Interfaces;
 /// <summary>
 /// Base event payload for outgoing publish and send telemetry.
 /// </summary>
-public class OutgoingEventArgs
+/// <remarks>
+/// Abstract; consumers receive instances of <see cref="PublishEventArgs"/> or
+/// <see cref="SendEventArgs"/>. Future versions may add required members to this base
+/// class — subclassing is reserved to the framework so consumers are not broken by
+/// a future minor-version addition.
+/// </remarks>
+public abstract class OutgoingEventArgs
 {
+    /// <summary>Initialises a new instance of the <see cref="OutgoingEventArgs"/> class.</summary>
+    protected OutgoingEventArgs() { }
     /// <summary>
     /// Gets the outgoing message instance, when available.
     /// </summary>
