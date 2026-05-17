@@ -20,7 +20,7 @@ internal sealed class MessageRetryHandler(
     string consumerQueueName,
     ILogger logger,
     TimeProvider? timeProvider = null,
-    bool errorsDisabled = false)
+    bool errorsDisabled = false) : IMessageRetryHandler
 {
     private readonly int _maxRetries = maxRetries;
     private readonly string _errorExchange = errorExchange ?? throw new ArgumentNullException(nameof(errorExchange));

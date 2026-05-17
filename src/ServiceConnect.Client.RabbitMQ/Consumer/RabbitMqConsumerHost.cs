@@ -152,7 +152,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _maxInboundMessageSize,
             DefaultMaxHeaderCount,
             DefaultMaxHeaderValueBytes,
-            GetShutdownPublishToken);
+            GetShutdownPublishToken,
+            logger);
 
         // Constructed inside the host for the same reason as the validator: the dispatch
         // pipeline's channel-state guards query host-managed flags (_shutdownTimedOut and

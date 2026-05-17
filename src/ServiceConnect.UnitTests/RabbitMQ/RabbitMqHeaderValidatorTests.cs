@@ -228,7 +228,8 @@ public sealed class RabbitMqHeaderValidatorTests
             maxInboundMessageSize: DefaultMaxBodySize,
             maxHeaderCount: DefaultMaxHeaderCount,
             maxHeaderValueBytes: DefaultMaxHeaderValueBytes,
-            shutdownPublishTokenFactory: () => CancellationToken.None));
+            shutdownPublishTokenFactory: () => CancellationToken.None,
+            logger: NullLogger.Instance));
     }
 
     [Fact]
@@ -240,7 +241,8 @@ public sealed class RabbitMqHeaderValidatorTests
             maxInboundMessageSize: DefaultMaxBodySize,
             maxHeaderCount: DefaultMaxHeaderCount,
             maxHeaderValueBytes: DefaultMaxHeaderValueBytes,
-            shutdownPublishTokenFactory: null!));
+            shutdownPublishTokenFactory: null!,
+            logger: NullLogger.Instance));
     }
 
     // ── Harness ──────────────────────────────────────────────────────────────
@@ -281,7 +283,8 @@ public sealed class RabbitMqHeaderValidatorTests
             maxBodySize,
             maxHeaderCount,
             maxHeaderValueBytes,
-            shutdownPublishTokenFactory: () => CancellationToken.None);
+            shutdownPublishTokenFactory: () => CancellationToken.None,
+            logger: NullLogger.Instance);
 
         return (validator, publishChannel, capturedExceptions);
     }

@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 using ServiceConnect.Interfaces;
@@ -7,16 +8,17 @@ namespace ServiceConnect.Client.RabbitMQ;
 
 /// <summary>
 /// Pre-dispatch validation for inbound RabbitMQ deliveries. Rejects malformed or oversized
-/// messages by routing them through <see cref="MessageRetryHandler.HandleTerminalFailureAsync"/>
+/// messages by routing them through <see cref="IMessageRetryHandler.HandleTerminalFailureAsync"/>
 /// before they reach the dispatch pipeline. Permanently-invalid messages are acked by the host
 /// after rejection (not redelivered), since redelivery would just hit the same validation.
 /// </summary>
 internal sealed class RabbitMqHeaderValidator(
-    MessageRetryHandler retryHandler,
+    IMessageRetryHandler retryHandler,
     long maxInboundMessageSize,
     int maxHeaderCount,
     int maxHeaderValueBytes,
-    Func<CancellationToken> shutdownPublishTokenFactory)
+    Func<CancellationToken> shutdownPublishTokenFactory,
+    ILogger logger)
 {
     // AMQP 0-9-1 tables in practice nest only a handful of levels deep; 32 is generous
     // and prevents adversarially-crafted sparse deep chains from exhausting the thread
@@ -24,11 +26,12 @@ internal sealed class RabbitMqHeaderValidator(
     // typical payloads — this guard activates only on pathologically deep nesting.
     private const int MaxNestingDepth = 32;
 
-    private readonly MessageRetryHandler _retryHandler = retryHandler ?? throw new ArgumentNullException(nameof(retryHandler));
+    private readonly IMessageRetryHandler _retryHandler = retryHandler ?? throw new ArgumentNullException(nameof(retryHandler));
     private readonly long _maxInboundMessageSize = maxInboundMessageSize;
     private readonly int _maxHeaderCount = maxHeaderCount;
     private readonly int _maxHeaderValueBytes = maxHeaderValueBytes;
     private readonly Func<CancellationToken> _shutdownPublishTokenFactory = shutdownPublishTokenFactory ?? throw new ArgumentNullException(nameof(shutdownPublishTokenFactory));
+    private readonly ILogger _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <summary>
     /// Validates a delivery against the four pre-dispatch rules. On the first failing rule,
@@ -63,14 +66,13 @@ internal sealed class RabbitMqHeaderValidator(
         // _maxInboundMessageSize as a DoS mitigation.
         if (args.Body.Length > _maxInboundMessageSize)
         {
-            await _retryHandler.HandleTerminalFailureAsync(
+            return await SafePublishTerminalAsync(
                 publishChannel,
                 args,
                 copiedHeaders,
                 new InvalidOperationException(
                     $"Inbound message size {args.Body.Length} bytes exceeds configured limit {_maxInboundMessageSize} bytes."),
-                _shutdownPublishTokenFactory()).ConfigureAwait(false);
-            return HeaderValidationResult.Reject("oversized body");
+                "oversized body").ConfigureAwait(false);
         }
 
         // Rule 2: missing type-name header. Body size is now known to be within the cap, so
@@ -79,27 +81,25 @@ internal sealed class RabbitMqHeaderValidator(
             (!HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.TypeName) &&
              !HasNonNullValue(args.BasicProperties.Headers, HeaderKeys.FullTypeName)))
         {
-            await _retryHandler.HandleTerminalFailureAsync(
+            return await SafePublishTerminalAsync(
                 publishChannel,
                 args,
                 copiedHeaders,
                 new InvalidOperationException("Message headers must contain type name."),
-                _shutdownPublishTokenFactory()).ConfigureAwait(false);
-            return HeaderValidationResult.Reject("missing type-name header");
+                "missing type-name header").ConfigureAwait(false);
         }
 
         // Rule 3: too many headers
         var inboundHeaders = args.BasicProperties.Headers;
         if (inboundHeaders != null && inboundHeaders.Count > _maxHeaderCount)
         {
-            await _retryHandler.HandleTerminalFailureAsync(
+            return await SafePublishTerminalAsync(
                 publishChannel,
                 args,
                 copiedHeaders,
                 new InvalidOperationException(
                     $"Inbound header count {inboundHeaders.Count} exceeds configured limit {_maxHeaderCount}."),
-                _shutdownPublishTokenFactory()).ConfigureAwait(false);
-            return HeaderValidationResult.Reject("too many headers");
+                "too many headers").ConfigureAwait(false);
         }
 
         // Rule 4: oversized individual header value (recursive — descends into AMQP nested
@@ -126,44 +126,88 @@ internal sealed class RabbitMqHeaderValidator(
                 aggregate += Encoding.UTF8.GetByteCount(kvp.Key);
                 if (aggregate > _maxInboundMessageSize)
                 {
-                    await _retryHandler.HandleTerminalFailureAsync(
+                    return await SafePublishTerminalAsync(
                         publishChannel,
                         args,
                         copiedHeaders,
                         new InvalidOperationException(
                             $"Inbound header aggregate size {aggregate} bytes exceeds the message-size budget of {_maxInboundMessageSize} bytes."),
-                        _shutdownPublishTokenFactory()).ConfigureAwait(false);
-                    return HeaderValidationResult.Reject("oversized header aggregate");
+                        "oversized header aggregate").ConfigureAwait(false);
                 }
 
                 var cost = ComputeHeaderValueByteCost(kvp.Value, _maxHeaderValueBytes);
                 if (cost is null)
                 {
-                    await _retryHandler.HandleTerminalFailureAsync(
+                    return await SafePublishTerminalAsync(
                         publishChannel,
                         args,
                         copiedHeaders,
                         new InvalidOperationException(
                             $"Inbound header '{kvp.Key}' exceeds configured per-value limit {_maxHeaderValueBytes} bytes (or its nested AMQP table/array does)."),
-                        _shutdownPublishTokenFactory()).ConfigureAwait(false);
-                    return HeaderValidationResult.Reject("oversized header value");
+                        "oversized header value").ConfigureAwait(false);
                 }
                 aggregate += cost.Value;
                 if (aggregate > _maxInboundMessageSize)
                 {
-                    await _retryHandler.HandleTerminalFailureAsync(
+                    return await SafePublishTerminalAsync(
                         publishChannel,
                         args,
                         copiedHeaders,
                         new InvalidOperationException(
                             $"Inbound header aggregate size {aggregate} bytes exceeds the message-size budget of {_maxInboundMessageSize} bytes."),
-                        _shutdownPublishTokenFactory()).ConfigureAwait(false);
-                    return HeaderValidationResult.Reject("oversized header aggregate");
+                        "oversized header aggregate").ConfigureAwait(false);
                 }
             }
         }
 
         return HeaderValidationResult.Accept();
+    }
+
+    /// <summary>
+    /// Attempts to publish a terminal failure to the error exchange, then returns a
+    /// <see cref="HeaderValidationResult.Reject"/> regardless of whether the publish
+    /// succeeded. Broker exceptions (<see cref="global::RabbitMQ.Client.Exceptions.AlreadyClosedException"/>,
+    /// <see cref="global::RabbitMQ.Client.Exceptions.OperationInterruptedException"/>,
+    /// <see cref="global::RabbitMQ.Client.Exceptions.BrokerUnreachableException"/>) are
+    /// swallowed with a warning log so that a closed publish channel does not prevent the
+    /// caller from acking the inbound delivery. The message is permanently invalid regardless
+    /// of whether the error-exchange publish succeeds; requeuing it would loop the same rule.
+    /// <see cref="OperationCanceledException"/> is re-thrown so cooperative shutdown is
+    /// distinguishable from a broker failure.
+    /// </summary>
+    private async Task<HeaderValidationResult> SafePublishTerminalAsync(
+        IChannel publishChannel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> copiedHeaders,
+        Exception failure,
+        string rejectReason)
+    {
+        try
+        {
+            await _retryHandler.HandleTerminalFailureAsync(
+                publishChannel, args, copiedHeaders, failure, _shutdownPublishTokenFactory()).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (
+            ex is global::RabbitMQ.Client.Exceptions.AlreadyClosedException
+                or global::RabbitMQ.Client.Exceptions.OperationInterruptedException
+                or global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
+        {
+            // Publish channel is unhealthy. Swallow so the caller still receives a Reject
+            // and acks the original delivery: the message is permanently invalid (it failed
+            // header validation), so requeuing for redelivery while the broker is degraded
+            // would loop the same message indefinitely. The error queue publish is the
+            // best-effort observability path; a closed publish channel means the
+            // message is dropped but the ack still removes it from the inbound queue,
+            // matching the IQueueConfiguration.DisableErrors contract shape.
+            _logger.LogWarning(ex,
+                "RabbitMqHeaderValidator could not publish terminal failure to error exchange ({Reason}); dropping the inbound message after ack.",
+                rejectReason);
+        }
+        return HeaderValidationResult.Reject(rejectReason);
     }
 
     /// <summary>
