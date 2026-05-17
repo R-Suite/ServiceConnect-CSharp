@@ -579,7 +579,7 @@ public static class ServiceConnectActivitySource
         }
     }
 
-    private static string Truncate(string? value, int maxLength)
+    internal static string Truncate(string? value, int maxLength)
     {
         if (value is null)
         {
@@ -591,7 +591,17 @@ public static class ServiceConnectActivitySource
             return value;
         }
 
-        return value[..maxLength];
+        // value[..maxLength] cuts on a UTF-16 code-unit boundary. If position
+        // maxLength falls inside a surrogate pair (high surrogate at maxLength-1,
+        // low surrogate at maxLength), the slice orphans the high surrogate and
+        // OTLP exporters emit invalid UTF-8. Trim one extra char in that case.
+        var end = maxLength;
+        if (char.IsHighSurrogate(value[end - 1]))
+        {
+            end--;
+        }
+
+        return value[..end];
     }
 
     // Test seams — internal so the unit-test project can exercise the warning path.
