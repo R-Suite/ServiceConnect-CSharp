@@ -79,7 +79,7 @@ internal static class ConnectionFactoryBuilder
 
         if (transport.SslEnabled)
         {
-            factory.Ssl = SslConfigurationBuilder.BuildSslOptions(transport);
+            factory.Ssl = SslConfigurationBuilder.BuildSslOptions(transport, logger ?? NullLogger.Instance);
             // Only fall back to the default AMQPS port when the user didn't supply one.
             // Respecting an explicit port lets TLS deployments on non-default ports connect.
             if (!explicitPortConfigured)
