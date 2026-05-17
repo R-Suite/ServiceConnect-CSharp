@@ -88,3 +88,35 @@ the second pass would be a regression of design intent.
 only RouteAsync invokes it as of this commit (sole call site at Bus.cs:507 inside
 `RouteAsync`); the audit's "dead code" framing was wrong because it ignored the
 explicit comment articulating why the redundancy is intentional.
+
+---
+
+## Bus.ReadInboundHopsCompleted utility extraction (review §Findings)
+
+**Claim:** Extract a `TryParseInt32Header(headers, key, out int v)` utility from
+`ReadInboundHopsCompleted` for reuse.
+
+**Verdict:** False positive — YAGNI. A grep across `src/ServiceConnect` and
+`src/ServiceConnect.Client.RabbitMQ` found 4 sites doing
+TryGetValue → HeaderDecoder.Decode → numeric TryParse, but only one is
+`ReadInboundHopsCompleted` itself doing TryGetValue → Decode → **int**.TryParse
+for the same domain:
+
+- `Bus.cs:540-561` — the site in question: int.TryParse, negative-value guard,
+  clamped to `_busConfig.MaxRoutingSlipHops` (routing-slip hop count).
+- `MessageRetryHandler.cs:41-54` — int.TryParse, but includes a `raw is int`
+  native fast-path, and the domain semantics are entirely different (retry
+  count capping, not hop counting). No shared abstraction is appropriate.
+- `StreamProcessor.cs:110-120` — **long**.TryParse for `PacketNumber`; different
+  type, different domain.
+- `StreamProcessor.cs:349-355` — **long**.TryParse for `LastPacketNumber`;
+  same mismatch.
+
+The extracted helper would have one `int`-typed caller. The caller's logic
+(non-negative validation, clamping to `MaxRoutingSlipHops`) is domain-specific
+to routing-slip hop counting — not a generic utility. Adding abstraction for
+zero real reuse is YAGNI.
+
+**Validated:** Tim Watson, 2026-05-17. Caller search at commit
+`31445d7daf009c832bc450891a07b75f21119958` confirmed single-site usage of the
+int.TryParse sequence matching the proposed extraction.
