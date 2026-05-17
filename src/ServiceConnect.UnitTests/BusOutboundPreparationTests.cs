@@ -114,7 +114,7 @@ public sealed class BusOutboundPreparationTests
     [Fact]
     public async Task PrepareOutboundAsync_FiltersStop_ReturnsStoppedTrue()
     {
-        var (bus, filterPipeline, _) = BuildBus(hasOutgoingFilters: true);
+        var (bus, filterPipeline, mockSerializer) = BuildBus(hasOutgoingFilters: true);
         var message = new FakeMessage1(Guid.NewGuid());
 
         filterPipeline
@@ -125,6 +125,9 @@ public sealed class BusOutboundPreparationTests
 
         // Callers must check Stopped before reading Bytes or Headers.
         Assert.True(result.Stopped);
+
+        // Serialisation must have run before the filter — the helper always serialises first.
+        mockSerializer.VerifySerialize(message, Times.Once());
     }
 
     [Fact]
@@ -145,6 +148,20 @@ public sealed class BusOutboundPreparationTests
         Assert.NotNull(capturedEnvelope);
         Assert.True(capturedEnvelope.Headers.TryGetValue("X-Trace-Id", out var traceId));
         Assert.Equal("abc123", traceId?.ToString());
+    }
+
+    [Fact]
+    public async Task PrepareOutboundAsync_CallerHeaders_FlowToDirectHeadersOnNoFilterPath()
+    {
+        var (bus, _, _) = BuildBus(hasOutgoingFilters: false);
+        var message = new FakeMessage1(Guid.NewGuid());
+        var callerHeaders = new Dictionary<string, string> { ["X-Trace-Id"] = "trace-42" };
+
+        var result = await bus.PrepareOutboundAsync(message, callerHeaders, CancellationToken.None);
+
+        Assert.False(result.Stopped);
+        Assert.True(result.Headers.TryGetValue("X-Trace-Id", out var v));
+        Assert.Equal("trace-42", v);
     }
 
     [Fact]
