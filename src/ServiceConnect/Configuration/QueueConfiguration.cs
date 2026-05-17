@@ -65,7 +65,7 @@ internal sealed class QueueConfiguration : IQueueConfiguration
     /// <inheritdoc />
     /// <remarks>
     /// Cache invalidation on mutation is not synchronised; callers must not mutate
-    /// (<see cref="AddQueueMapping(Type, string)"/> / <see cref="AddQueueMapping(Type, IList{string})"/>)
+    /// (<see cref="AddQueueMapping(Type, string)"/> / <see cref="AddQueueMapping(Type, IReadOnlyList{string})"/>)
     /// concurrently with reads. Mappings are intended to be populated at startup and
     /// read at dispatch time.
     /// </remarks>
@@ -91,7 +91,7 @@ internal sealed class QueueConfiguration : IQueueConfiguration
     }
 
     /// <inheritdoc />
-    public void AddQueueMapping(Type messageType, IList<string> queues)
+    public void AddQueueMapping(Type messageType, IReadOnlyList<string> queues)
     {
         ThrowIfFrozen();
         ArgumentNullException.ThrowIfNull(messageType);

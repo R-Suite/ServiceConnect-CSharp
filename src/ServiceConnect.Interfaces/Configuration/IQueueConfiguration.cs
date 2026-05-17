@@ -71,8 +71,9 @@ public interface IQueueConfiguration
     /// Adds multiple queue mappings for the specified message type.
     /// </summary>
     /// <param name="messageType">The message type to route.</param>
-    /// <param name="queues">The destination queue names.</param>
-    void AddQueueMapping(Type messageType, IList<string> queues);
+    /// <param name="queues">The destination queue names. The framework snapshots the
+    /// caller's collection on entry; subsequent mutations do not affect the routing table.</param>
+    void AddQueueMapping(Type messageType, IReadOnlyList<string> queues);
 
     /// <summary>
     /// Attempts to resolve the configured queue mappings for a message type.
