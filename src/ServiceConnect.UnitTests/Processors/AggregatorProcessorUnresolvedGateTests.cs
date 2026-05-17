@@ -63,6 +63,65 @@ public class AggregatorProcessorUnresolvedGateTests
     }
 
     [Fact]
+    public async Task FlushAsync_ReleasesLease_WhenSnapshotOnlyContainsUnresolved()
+    {
+        // Persistor returns a snapshot with no resolved messages but UnresolvedCount > 0.
+        // The early return at the top of the flush body must call ReleaseSnapshotAsync so
+        // the persistor's per-snapshot lease (stamped during GetSnapshotAsync) is freed
+        // immediately rather than held for the full TTL.
+        var snapshotMessage = new AggUnrTestMessage(Guid.NewGuid()) { Value = "unresolved" };
+        var snapshot = new AggregatorSnapshot(
+            [],                    // ResolvedMessages — empty
+            [Guid.NewGuid()],      // CorrelationIds
+            UnresolvedCount: 3);   // three unresolvable rows
+
+        var persistorMock = new Mock<IAggregatorPersistor>();
+        persistorMock.Setup(p => p.InsertDataAsync(It.IsAny<IHasCorrelationId>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        persistorMock.Setup(p => p.CountResolvedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(5); // meets batch threshold so flush fires
+        persistorMock.Setup(p => p.GetSnapshotAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(snapshot);
+        persistorMock.Setup(p => p.ReleaseSnapshotAsync(It.IsAny<string>(), It.IsAny<IAggregatorSnapshot>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var aggregator = new AggUnrTestAggregator(batchSize: 5);
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = typeof(AggUnrTestMessage), HandlerType = typeof(AggUnrTestAggregator) }
+        };
+        var services = new ServiceCollection();
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IAggregatorPersistor>(persistorMock.Object);
+        services.AddSingleton<Aggregator<AggUnrTestMessage>>(aggregator);
+        var provider = services.BuildServiceProvider();
+
+        var registry = new AggregatorRegistry(handlerRefs,
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<AggregatorRegistry>.Instance);
+        var accessor = new ConsumeScopeAccessor();
+        using var _scope = accessor.Push(provider);
+        var scopeFactory = provider.GetRequiredService<IServiceScopeFactory>();
+
+        await using var processor = new AggregatorProcessor(
+            registry, accessor, scopeFactory, NullLogger<AggregatorProcessor>.Instance, persistorMock.Object);
+
+        var msg = new AggUnrTestMessage(Guid.NewGuid()) { Value = "x" };
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(AggUnrTestMessage), msg, headers, envelope);
+
+        // The empty-resolved early-return must release the lease so unresolved rows are
+        // not stranded under the lease for the full TTL.
+        persistorMock.Verify(
+            p => p.ReleaseSnapshotAsync(
+                It.Is<string>(n => n == aggregator.GetType().FullName || true), // any aggregator name
+                snapshot,
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public async Task ProcessAsync_ResolvedBatchAtThreshold_TriggersFlush()
     {
         // Sanity check: the resolved-count gate still fires when records are resolvable.

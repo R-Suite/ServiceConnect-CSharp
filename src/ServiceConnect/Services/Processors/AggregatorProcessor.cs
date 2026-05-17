@@ -303,6 +303,23 @@ internal sealed class AggregatorProcessor(
                         descriptor.AggregatorName, snapshot.UnresolvedCount);
                 }
 
+                // The persistor may have leased the unresolved rows during snapshot acquisition
+                // (Mongo's per-snapshot lease stamps LockedBy/LockExpiresAt up front, regardless
+                // of which rows survive the resolved/unresolved partition). Release defensively
+                // so the next flush — when the unresolvable type becomes available, or when a
+                // retry sweeps stale unresolved rows — can re-claim immediately rather than
+                // waiting out the lease TTL. CT.None: cleanup must run even if the dispatch
+                // token has fired.
+                try
+                {
+                    await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx,
+                        "Aggregator {AggregatorName} lease release on empty-resolved snapshot failed; lease-expiry will reclaim.",
+                        descriptor.AggregatorName);
+                }
                 return;
             }
 
@@ -327,114 +344,126 @@ internal sealed class AggregatorProcessor(
                 return;
             }
 
-            // BuildTypedList expects IList<object>; copy the read-only snapshot into a fresh
-            // mutable list. The snapshot itself stays immutable; this is the handler-facing
-            // payload. IReadOnlyList<IHasCorrelationId> is not co-variant to IList<object>,
-            // so an as-cast cannot avoid this allocation.
-            List<object> resolvedList = [.. snapshot.ResolvedMessages];
-            var typedList = descriptor.BuildTypedList(resolvedList);
-
-            // The batch path passes its dispatcher-pushed scope through ambientScope. The timer
-            // path passes null because the Timer captured the dispatcher's ExecutionContext at
-            // construction, so reading the AsyncLocal here would return the now-disposed scope.
-            IServiceScope? localScope = null;
-            var handlerThrew = false;
-            try
-            {
-                var resolverProvider = ambientScope ?? (localScope = scopeFactory.CreateScope()).ServiceProvider;
-
-                var aggregator = resolverProvider.GetService(descriptor.AggregatorBaseType);
-                if (aggregator == null)
-                {
-                    return;
-                }
-
-                // Execute first, then remove on success. On handler exception we propagate
-                // without removing so the broker redelivers and the snapshot is re-flushable.
-                // Cancellation also leaves the snapshot in place — by-design for retry on
-                // next admission. The catch below releases the persistor lease so the next
-                // redelivery's GetSnapshotAsync can re-claim immediately; without the
-                // release, the rows sit under the failed session's lease for the full TTL
-                // (5 minutes on the Mongo persistor) and the redelivery sees an empty
-                // snapshot — handler is never re-invoked until the lease expires.
-                try
-                {
-                    await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);
-                }
-                catch
-                {
-                    handlerThrew = true;
-                    throw;
-                }
-                // RemoveSnapshotAsync is a best-effort cleanup. The handler has ALREADY committed
-                // its side effects; if the persistor write fails transiently (Mongo blip, network
-                // drop), propagating the exception would NACK the broker → redelivery → the next
-                // flush mints a fresh LeaseSessionId, re-claims the still-present rows, and runs
-                // the handler AGAIN with the same payload — duplicate dispatch on a handler whose
-                // side effects we already committed. Log and swallow; the rows stay under the
-                // current lease until it expires, at which point a peer (or the same worker)
-                // re-claims and re-attempts the remove. In the worst case the broker observes a
-                // duplicate dispatch ONLY after the lease expires, not on every transient blip.
-                try
-                {
-                    await persistor.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    // Handler succeeded; release the lease eagerly so the redelivery's next
-                    // GetSnapshotAsync can re-claim immediately instead of waiting for TTL.
-                    // Use CancellationToken.None so the release runs even though dispatch was cancelled.
-                    try
-                    {
-                        await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
-                    }
-                    catch (Exception releaseEx)
-                    {
-                        logger.LogWarning(releaseEx,
-                            "Aggregator {AggregatorName} lease release on cancel path failed; lease-expiry will reclaim.",
-                            descriptor.AggregatorName);
-                    }
-                    throw;
-                }
-                catch (Exception removeEx)
-                {
-                    logger.LogWarning(removeEx,
-                        "Aggregator {AggregatorName} RemoveSnapshotAsync failed after successful handler dispatch; rows remain under lease and will be reclaimed when the lease expires. Handler side effects are NOT replayed by NACKing the broker.",
-                        descriptor.AggregatorName);
-                }
-
-                if (snapshot.UnresolvedCount > 0)
-                {
-                    logger.LogWarning(
-                        "Aggregator {AggregatorName} dispatched {Count} record(s); {UnresolvedCount} unresolved record(s) retained for a later flush",
-                        descriptor.AggregatorName, snapshot.ResolvedMessages.Count, snapshot.UnresolvedCount);
-                }
-            }
-            finally
-            {
-                // Best-effort lease release on handler failure so the redelivery's
-                // GetSnapshotAsync can re-claim immediately. Uses CancellationToken.None
-                // to ensure cleanup runs even if the dispatch token was cancelled. The
-                // ReleaseSnapshotAsync DIM is a no-op for non-leasing persistors.
-                if (handlerThrew && persistor is not null)
-                {
-                    try
-                    {
-                        await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
-                    }
-                    catch (Exception releaseEx)
-                    {
-                        logger.LogWarning(releaseEx,
-                            "Aggregator {AggregatorName} lease release after handler failure failed; lease-expiry will reclaim.",
-                            descriptor.AggregatorName);
-                    }
-                }
-                localScope?.Dispose();
-            }
+            await DispatchResolvedAsync(descriptor, snapshot, ambientScope, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             flushLock.Release();
+        }
+    }
+
+    // Resolves the aggregator handler, invokes it with the snapshot payload, removes the
+    // snapshot on success, and releases the lease on failure/cancellation. Extracted so
+    // FlushAggregatorAsync stays within the MA0051 method-length limit.
+    private async Task DispatchResolvedAsync(
+        AggregatorDescriptor descriptor,
+        IAggregatorSnapshot snapshot,
+        IServiceProvider? ambientScope,
+        CancellationToken cancellationToken)
+    {
+        // BuildTypedList expects IList<object>; copy the read-only snapshot into a fresh
+        // mutable list. The snapshot itself stays immutable; this is the handler-facing
+        // payload. IReadOnlyList<IHasCorrelationId> is not co-variant to IList<object>,
+        // so an as-cast cannot avoid this allocation.
+        List<object> resolvedList = [.. snapshot.ResolvedMessages];
+        var typedList = descriptor.BuildTypedList(resolvedList);
+
+        // The batch path passes its dispatcher-pushed scope through ambientScope. The timer
+        // path passes null because the Timer captured the dispatcher's ExecutionContext at
+        // construction, so reading the AsyncLocal here would return the now-disposed scope.
+        IServiceScope? localScope = null;
+        var handlerThrew = false;
+        try
+        {
+            var resolverProvider = ambientScope ?? (localScope = scopeFactory.CreateScope()).ServiceProvider;
+
+            var aggregator = resolverProvider.GetService(descriptor.AggregatorBaseType);
+            if (aggregator == null)
+            {
+                return;
+            }
+
+            // Execute first, then remove on success. On handler exception we propagate
+            // without removing so the broker redelivers and the snapshot is re-flushable.
+            // Cancellation also leaves the snapshot in place — by-design for retry on
+            // next admission. The catch below releases the persistor lease so the next
+            // redelivery's GetSnapshotAsync can re-claim immediately; without the
+            // release, the rows sit under the failed session's lease for the full TTL
+            // (5 minutes on the Mongo persistor) and the redelivery sees an empty
+            // snapshot — handler is never re-invoked until the lease expires.
+            try
+            {
+                await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                handlerThrew = true;
+                throw;
+            }
+            // RemoveSnapshotAsync is a best-effort cleanup. The handler has ALREADY committed
+            // its side effects; if the persistor write fails transiently (Mongo blip, network
+            // drop), propagating the exception would NACK the broker → redelivery → the next
+            // flush mints a fresh LeaseSessionId, re-claims the still-present rows, and runs
+            // the handler AGAIN with the same payload — duplicate dispatch on a handler whose
+            // side effects we already committed. Log and swallow; the rows stay under the
+            // current lease until it expires, at which point a peer (or the same worker)
+            // re-claims and re-attempts the remove. In the worst case the broker observes a
+            // duplicate dispatch ONLY after the lease expires, not on every transient blip.
+            try
+            {
+                await persistor!.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Handler succeeded; release the lease eagerly so the redelivery's next
+                // GetSnapshotAsync can re-claim immediately instead of waiting for TTL.
+                // Use CancellationToken.None so the release runs even though dispatch was cancelled.
+                try
+                {
+                    await persistor!.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx,
+                        "Aggregator {AggregatorName} lease release on cancel path failed; lease-expiry will reclaim.",
+                        descriptor.AggregatorName);
+                }
+                throw;
+            }
+            catch (Exception removeEx)
+            {
+                logger.LogWarning(removeEx,
+                    "Aggregator {AggregatorName} RemoveSnapshotAsync failed after successful handler dispatch; rows remain under lease and will be reclaimed when the lease expires. Handler side effects are NOT replayed by NACKing the broker.",
+                    descriptor.AggregatorName);
+            }
+
+            if (snapshot.UnresolvedCount > 0)
+            {
+                logger.LogWarning(
+                    "Aggregator {AggregatorName} dispatched {Count} record(s); {UnresolvedCount} unresolved record(s) retained for a later flush",
+                    descriptor.AggregatorName, snapshot.ResolvedMessages.Count, snapshot.UnresolvedCount);
+            }
+        }
+        finally
+        {
+            // Best-effort lease release on handler failure so the redelivery's
+            // GetSnapshotAsync can re-claim immediately. Uses CancellationToken.None
+            // to ensure cleanup runs even if the dispatch token was cancelled. The
+            // ReleaseSnapshotAsync DIM is a no-op for non-leasing persistors.
+            if (handlerThrew && persistor is not null)
+            {
+                try
+                {
+                    await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx,
+                        "Aggregator {AggregatorName} lease release after handler failure failed; lease-expiry will reclaim.",
+                        descriptor.AggregatorName);
+                }
+            }
+            localScope?.Dispose();
         }
     }
 
