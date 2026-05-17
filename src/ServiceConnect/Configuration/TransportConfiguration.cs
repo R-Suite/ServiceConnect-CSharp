@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Net.Security;
 using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
@@ -39,6 +40,12 @@ internal sealed class TransportConfiguration : ITransportConfiguration
     private LocalCertificateSelectionCallback? _certificateSelectionCallback;
     private RemoteCertificateValidationCallback? _certificateValidationCallback;
     private readonly Dictionary<string, object> _clientSettings = [];
+    private readonly ReadOnlyDictionary<string, object> _clientSettingsView;
+
+    public TransportConfiguration()
+    {
+        _clientSettingsView = new ReadOnlyDictionary<string, object>(_clientSettings);
+    }
 
     /// <summary>
     /// Latches this configuration so further setter calls throw <see cref="InvalidOperationException"/>.
@@ -148,7 +155,7 @@ internal sealed class TransportConfiguration : ITransportConfiguration
     public RemoteCertificateValidationCallback? CertificateValidationCallback { get => _certificateValidationCallback; set { ThrowIfFrozen(); _certificateValidationCallback = value; } }
 
     /// <inheritdoc />
-    public IReadOnlyDictionary<string, object> ClientSettings => _clientSettings;
+    public IReadOnlyDictionary<string, object> ClientSettings => _clientSettingsView;
 
     /// <inheritdoc />
     public void SetClientSetting(string key, object value)

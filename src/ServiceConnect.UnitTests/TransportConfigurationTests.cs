@@ -191,4 +191,23 @@ public class TransportConfigurationTests
         var config = new TransportConfiguration();
         Assert.Throws<ArgumentNullException>(() => config.SetClientSetting("key", null!));
     }
+
+    [Fact]
+    public void ClientSettings_AfterFreeze_DowncastMutationThrows()
+    {
+        var t = new TransportConfiguration();
+        t.SetClientSetting("Port", 5671);
+        t.Freeze();
+
+        // Hostile downcast — must not succeed in mutating the frozen state.
+        var view = t.ClientSettings;
+
+        // The view must NOT be the same instance as the underlying mutable dictionary.
+        var dictView = view as Dictionary<string, object>;
+        Assert.Null(dictView);
+
+        // Even if a caller obtains the underlying ReadOnlyDictionary view, .Add throws.
+        Assert.Throws<NotSupportedException>(() =>
+            ((IDictionary<string, object>)view).Add("Hostile", new object()));
+    }
 }
