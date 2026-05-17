@@ -911,8 +911,13 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
     }
 
     [Fact]
-    public void Consume_MalformedTraceparent_FallsBackToActivityCurrent()
+    public void Consume_MalformedTraceparent_ForcesFreshTraceRoot()
     {
+        // A poisoned producer that injects an unparseable traceparent must NOT cause the
+        // consume span to be grafted onto whatever Activity.Current happens to be — that
+        // ambient could be an unrelated hosted-environment activity (ASP.NET request,
+        // worker loop) and would produce a stitched-but-wrong trace graph pointing at
+        // the wrong producer. Start a brand-new trace root instead.
         using var ambient = new Activity("ambient").Start();
 
         var args = new ConsumeEventArgs
@@ -928,7 +933,8 @@ public sealed class ServiceConnectActivitySourceTests : IDisposable
         using var activity = ServiceConnectActivitySource.Consume(args, _options, _attrs);
 
         Assert.NotNull(activity);
-        Assert.Equal(ambient.TraceId, activity!.TraceId);
+        Assert.NotEqual(ambient.TraceId, activity!.TraceId);
+        Assert.Equal(true, activity.GetTagItem("enrichment.malformed_traceparent"));
     }
 
     [Fact]

@@ -129,10 +129,22 @@ public static class ServiceConnectActivitySource
         ArgumentNullException.ThrowIfNull(attributes);
 
         DistributedContextPropagator.Current.ExtractTraceIdAndState(eventArgs.Headers, ExtractTraceIdAndState, out string? traceId, out string? traceState);
+        bool malformedTraceparent = false;
         if (!ActivityContext.TryParse(traceId, traceState, out ActivityContext parentContext))
         {
-            // Malformed traceparent — fall through with default parentContext;
-            // ActivitySource.StartActivity then picks Activity.Current as the parent.
+            // Distinguish "no traceparent header at all" from "traceparent header present
+            // but unparseable". DistributedContextPropagator's W3C implementation validates
+            // the traceparent shape and returns null when the on-wire value is malformed,
+            // collapsing both cases into traceId == null at this layer. Probe the raw
+            // headers directly to recover the distinction:
+            //   - header absent : fall through to ambient Activity.Current or the AsyncLocal
+            //     fallback (normal cross-process linking).
+            //   - header present but malformed : force a fresh trace root so the span isn't
+            //     incorrectly parented onto whatever the hosting environment happens to have
+            //     as Activity.Current (e.g. an ASP.NET request or host-worker activity
+            //     wrapping the consume loop). Stamp a diagnostic tag so operators can spot
+            //     poisoned producers in search.
+            malformedTraceparent = traceId is not null || HasTraceparentHeader(eventArgs.Headers);
             parentContext = default;
         }
 
@@ -143,7 +155,8 @@ public static class ServiceConnectActivitySource
             options.EnableConsumeTelemetry,
             attributes,
             "process",
-            parentContext);
+            parentContext,
+            forceFreshRoot: malformedTraceparent);
 
         if (activity is null)
         {
@@ -411,6 +424,22 @@ public static class ServiceConnectActivitySource
         return ActivityContext.TryParse(traceParent, traceState, out context);
     }
 
+    /// <summary>
+    /// Probes the carrier headers for a "traceparent" key in the same dictionary shapes
+    /// <see cref="ExtractTraceIdAndState"/> understands. Used to distinguish "no traceparent
+    /// on the wire" from "traceparent present but rejected by the W3C propagator" — both
+    /// surface as a null traceId at the propagator boundary, but only the second deserves
+    /// a malformed-header diagnostic and a forced fresh trace root.
+    /// </summary>
+    private static bool HasTraceparentHeader(object? headers) => headers switch
+    {
+        IDictionary<string, object> objHeaders => objHeaders.ContainsKey(TraceParentHeaderName),
+        IReadOnlyDictionary<string, object> roObjHeaders => roObjHeaders.ContainsKey(TraceParentHeaderName),
+        IDictionary<string, string> strHeaders => strHeaders.ContainsKey(TraceParentHeaderName),
+        IReadOnlyDictionary<string, string> roStrHeaders => roStrHeaders.ContainsKey(TraceParentHeaderName),
+        _ => false,
+    };
+
     private static void ExtractTraceIdAndState(object? eventArgs, string name, out string? value, out IEnumerable<string>? values)
     {
         values = default;
@@ -578,7 +607,8 @@ public static class ServiceConnectActivitySource
         bool enabled,
         IMessagingSystemAttributes attributes,
         string operation,
-        ActivityContext parentContext)
+        ActivityContext parentContext,
+        bool forceFreshRoot = false)
     {
         if (!enabled || !activitySource.HasListeners())
         {
@@ -590,15 +620,50 @@ public static class ServiceConnectActivitySource
         // to the inbound-trace AsyncLocal so the new activity is parented on the
         // original publisher's traceId. Without this, the new activity becomes a fresh
         // trace root and downstream consumers cannot stitch the graph across this hop.
-        if (parentContext == default && Activity.Current is null)
+        // EXCEPTION: when the caller explicitly requested a fresh root (malformed
+        // traceparent on the wire), skip the fallback and every other parent source —
+        // start a brand-new trace so a poisoned producer cannot graft a bogus span onto
+        // an unrelated ambient activity.
+        if (!forceFreshRoot && parentContext == default && Activity.Current is null)
         {
             parentContext = TryResolveFallbackParentContext();
         }
 
-        Activity? activity = activitySource.StartActivity(activityName, kind, parentContext);
+        Activity? activity;
+        if (forceFreshRoot)
+        {
+            // Neither StartActivity overload accepts a "force a brand-new trace root"
+            // signal directly: passing parentId=null or default(ActivityContext) still
+            // falls through to Activity.Current as the implicit parent. Suppress
+            // Activity.Current for the duration of the StartActivity call so the new
+            // span is genuinely rooted, then restore the prior ambient so the rest of
+            // the caller's flow is unaffected. AsyncLocal restoration is exception-safe
+            // via try/finally.
+            var prior = Activity.Current;
+            Activity.Current = null;
+            try
+            {
+                activity = activitySource.StartActivity(activityName, kind, parentContext: default);
+            }
+            finally
+            {
+                Activity.Current = prior;
+            }
+        }
+        else
+        {
+            activity = activitySource.StartActivity(activityName, kind, parentContext);
+        }
+
         if (activity is null)
         {
             return null;
+        }
+
+        if (forceFreshRoot)
+        {
+            // Diagnostic tag — operators searching for poisoned producers can filter on this.
+            activity.SetTag("enrichment.malformed_traceparent", true);
         }
 
         if (activity.IsAllDataRequested)
