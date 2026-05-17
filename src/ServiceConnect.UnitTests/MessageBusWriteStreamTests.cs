@@ -446,6 +446,67 @@ public class MessageBusWriteStreamTests
     }
 
     [Fact]
+    public async Task DisposeAsync_CloseSendThrowsTransportException_Swallows()
+    {
+        // Best-effort contract: DisposeAsync must not surface transport exceptions that
+        // CloseAsync's SendBytesAsync call can throw (broker unreachable, channel closed,
+        // etc.). Surfacing them through `await using` would make callers responsible for
+        // handling broker state they cannot act on at dispose time.
+        var producer = new Mock<IProducer>();
+        producer
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(),
+                It.IsAny<Type>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("simulated broker-unreachable"));
+
+        var stream = new MessageBusWriteStream(
+            producer.Object,
+            "test-q",
+            typeof(FakeStreamMsg),
+            TimeProvider.System,
+            TimeSpan.FromSeconds(30));
+
+        // The first write faults the stream (SendBytesAsync throws). We need the stream
+        // to be un-faulted so CloseAsync actually attempts the close-packet send.
+        // Use a producer that succeeds on the data write but fails on the close-packet send.
+        var producer2 = new Mock<IProducer>();
+        var callCount = 0;
+        producer2
+            .Setup(p => p.SendBytesAsync(
+                It.IsAny<string>(),
+                It.IsAny<Type>(),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(() =>
+            {
+                callCount++;
+                // First call (data packet): succeed so the stream is not faulted.
+                // Second call (close packet): throw to exercise the DisposeAsync swallow.
+                if (callCount == 1)
+                {
+                    return Task.CompletedTask;
+                }
+                throw new InvalidOperationException("simulated broker-unreachable on close");
+            });
+
+        var stream2 = new MessageBusWriteStream(
+            producer2.Object,
+            "test-q",
+            typeof(FakeStreamMsg),
+            TimeProvider.System,
+            TimeSpan.FromSeconds(30));
+
+        await stream2.WriteAsync(new byte[] { 1, 2, 3 });
+
+        // Best-effort: must not throw despite the close-packet send failing.
+        await stream2.DisposeAsync();
+    }
+
+    [Fact]
     public async Task DisposeAsync_WhenDrainTimesOut_DoesNotLeakTimeoutException()
     {
         var producer = new Mock<IProducer>();

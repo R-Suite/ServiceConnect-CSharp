@@ -299,16 +299,16 @@ internal sealed class MessageBusWriteStream : IMessageBusWriteStream
         {
             await CloseAsync(cts.Token).ConfigureAwait(false);
         }
-        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        catch (Exception)
         {
-            // Best-effort close: the gate holder is wedged. Releasing the stream here
-            // matches the pattern other transports use when the close budget elapses.
-        }
-        catch (TimeoutException)
-        {
-            // CloseAsync's drain spin throws TimeoutException when in-flight writes
-            // don't drain inside _closeDrainTimeout. DisposeAsync is best-effort —
-            // surfacing this through `await using` would defeat that intent.
+            // DisposeAsync is best-effort: surfacing exceptions through `await using` would
+            // defeat the documented contract. Swallow every failure mode:
+            //   - OperationCanceledException (gate-holder wedged, our budget elapsed)
+            //   - TimeoutException (drain-spin timed out)
+            //   - transport exceptions on the close-packet send (broker unreachable,
+            //     channel already closed, etc. — the broker has no state we need to
+            //     release, and the receiver's eviction sweep reclaims the stream after
+            //     StreamTimeout)
         }
     }
 
