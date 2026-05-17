@@ -280,6 +280,8 @@ file class ArgFooAggregator : Aggregator<ArgFoo>
 
 file class ArgSecondFooAggregator : Aggregator<ArgFoo>
 {
+    public override int BatchSize() => 5;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(100);
     public override Task ExecuteAsync(IReadOnlyList<ArgFoo> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 

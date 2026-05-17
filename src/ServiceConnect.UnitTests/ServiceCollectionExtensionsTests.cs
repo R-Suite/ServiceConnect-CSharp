@@ -621,6 +621,8 @@ public sealed class H5Handler : IMessageHandler<H5Msg>
 
 public sealed class H5Aggregator : Aggregator<H5Msg>
 {
+    public override int BatchSize() => 5;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(100);
     public override Task ExecuteAsync(IReadOnlyList<H5Msg> messages, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }
 
@@ -851,12 +853,16 @@ public sealed class PreRegAggMsg : Message
 
 public sealed class PreRegUserAggregator : Aggregator<PreRegAggMsg>
 {
+    public override int BatchSize() => 5;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(100);
     public override Task ExecuteAsync(IReadOnlyList<PreRegAggMsg> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }
 
 public sealed class PreRegOtherAggregator : Aggregator<PreRegAggMsg>
 {
+    public override int BatchSize() => 5;
+    public override TimeSpan Timeout() => TimeSpan.FromMilliseconds(100);
     public override Task ExecuteAsync(IReadOnlyList<PreRegAggMsg> messages, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 }

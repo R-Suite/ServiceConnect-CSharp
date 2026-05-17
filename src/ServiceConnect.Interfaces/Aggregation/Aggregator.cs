@@ -4,33 +4,32 @@ namespace ServiceConnect.Interfaces;
 /// Defines an aggregator that batches related messages before handling them.
 /// </summary>
 /// <typeparam name="T">The message type accepted by the aggregator.</typeparam>
+/// <remarks>
+/// Every concrete subclass must declare its flush policy by overriding both
+/// <see cref="BatchSize"/> and <see cref="Timeout"/>. The framework requires
+/// both a size-based and a time-based flush path to guarantee buffered messages
+/// always have a route to dispatch; the registry rejects subclasses whose
+/// <see cref="BatchSize"/> is zero/negative or whose <see cref="Timeout"/> is
+/// zero/<see cref="System.Threading.Timeout.InfiniteTimeSpan"/> with a startup
+/// <see cref="InvalidOperationException"/>.
+/// </remarks>
 public abstract class Aggregator<T> where T : Message
 {
     /// <summary>
     /// Gets the maximum amount of time to wait before dispatching the current batch.
     /// </summary>
     /// <returns>
-    /// The maximum aggregation window. Returning <see cref="System.Threading.Timeout.InfiniteTimeSpan"/>
-    /// (the default) disables the timeout-based flush.
+    /// A positive <see cref="TimeSpan"/>. <see cref="TimeSpan.Zero"/> and
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> are rejected by the
+    /// registry at startup — every aggregator must have a finite time-based flush path.
     /// </returns>
-    public virtual TimeSpan Timeout()
-    {
-        // Timeout.InfiniteTimeSpan (-1ms) is the BCL convention for "no timeout". Returning
-        // TimeSpan.Zero would let the dispatcher mistake "fire immediately and once" for
-        // "disabled" — the InfiniteTimeSpan sentinel is unambiguous.
-        return System.Threading.Timeout.InfiniteTimeSpan;
-    }
+    public abstract TimeSpan Timeout();
 
     /// <summary>
     /// Gets the maximum number of messages to buffer before dispatching the batch.
     /// </summary>
-    /// <returns>
-    /// The batch size limit. Returning <c>0</c> means no size-based flush is enforced.
-    /// </returns>
-    public virtual int BatchSize()
-    {
-        return 0;
-    }
+    /// <returns>A positive integer. Zero and negative values are rejected by the registry at startup.</returns>
+    public abstract int BatchSize();
 
     /// <summary>
     /// Processes a completed batch of aggregated messages.
