@@ -635,29 +635,45 @@ public static class ServiceConnectActivitySource
             // Neither StartActivity overload accepts a "force a brand-new trace root"
             // signal directly: passing parentId=null or default(ActivityContext) still
             // falls through to Activity.Current as the implicit parent. Suppress
-            // Activity.Current for the duration of the StartActivity call so the new
-            // span is genuinely rooted, then restore the prior ambient so the rest of
-            // the caller's flow is unaffected. AsyncLocal restoration is exception-safe
-            // via try/finally.
+            // Activity.Current for the StartActivity call so the new span is genuinely
+            // rooted.
+            //
+            // On success, leave Activity.Current = freshRoot (the BCL has set it).
+            // This is load-bearing: a consume-side caller will run the user's handler
+            // under this ambient, and any Bus.Publish / Bus.Send issued from the handler
+            // must read Activity.Current as the fresh root so the outbound traceparent
+            // carries the new trace, not the host ambient that the malformed inbound
+            // traceparent was trying to graft onto. The eventual Dispose() of the
+            // returned activity calls Activity.Stop(), which sets
+            // Activity.Current = freshRoot.Parent (null) — the correct end state once
+            // consume processing is done. Restore the prior ambient only on the failure
+            // paths (StartActivity throw, sampler-drop returning null), where no fresh
+            // root exists to flow forward.
             var prior = Activity.Current;
             Activity.Current = null;
             try
             {
                 activity = activitySource.StartActivity(activityName, kind, parentContext: default);
             }
-            finally
+            catch
             {
                 Activity.Current = prior;
+                throw;
+            }
+
+            if (activity is null)
+            {
+                Activity.Current = prior;
+                return null;
             }
         }
         else
         {
             activity = activitySource.StartActivity(activityName, kind, parentContext);
-        }
-
-        if (activity is null)
-        {
-            return null;
+            if (activity is null)
+            {
+                return null;
+            }
         }
 
         if (forceFreshRoot)
