@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
@@ -130,5 +131,40 @@ public class BusHostedServiceTests
             .ThrowsAsync(new InvalidOperationException("Bus has been stopped and cannot be restarted."));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.StartAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task StopAsync_ConsumerHangs_LogsAndReturnsAfterGracefulShutdownTimeout()
+    {
+        // A non-cooperative IConsumer swallows the cancellation and never completes.
+        // StopAsync must respect GracefulShutdownTimeoutMilliseconds and return once
+        // the grace window elapses, logging a warning rather than blocking indefinitely.
+        var transport = new TransportConfiguration { GracefulShutdownTimeoutMilliseconds = 250 };
+        transport.Freeze();
+
+        var hangingBus = new Mock<IBus>();
+        hangingBus.Setup(b => b.StopConsumingAsync(It.IsAny<CancellationToken>()))
+            .Returns(async (CancellationToken ct) =>
+            {
+                try { await Task.Delay(Timeout.Infinite, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { /* swallow to mimic non-cooperative consumer */ }
+            });
+
+        var mockLogger = new Mock<ILogger<BusHostedService>>();
+        var svc = new BusHostedService(hangingBus.Object, _mockConfig.Object, transport, mockLogger.Object);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        await svc.StopAsync(CancellationToken.None);
+        sw.Stop();
+
+        Assert.InRange(sw.ElapsedMilliseconds, 200, 1500);
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("GracefulShutdownTimeout", StringComparison.OrdinalIgnoreCase)),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 }

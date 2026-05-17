@@ -79,8 +79,39 @@ internal sealed class BusHostedService(
     /// Stops bus consumption during host shutdown.
     /// </summary>
     /// <param name="cancellationToken">A token used to cancel host shutdown.</param>
+    /// <remarks>
+    /// Bounds the wait on <c>bus.StopConsumingAsync</c> with
+    /// <see cref="ITransportConfiguration.GracefulShutdownTimeoutMilliseconds"/>; if the
+    /// consumer hasn't drained inside that window, a warning is logged and the host
+    /// continues shutting down. A non-cooperative transport must not block host shutdown.
+    /// </remarks>
     public async Task StopAsync(CancellationToken cancellationToken)
     {
-        await bus.StopConsumingAsync(cancellationToken).ConfigureAwait(false);
+        var graceMs = transport.GracefulShutdownTimeoutMilliseconds;
+        if (graceMs <= 0)
+        {
+            await bus.StopConsumingAsync(cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        using var graceCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var stopTask = bus.StopConsumingAsync(graceCts.Token);
+        var graceTask = Task.Delay(graceMs, cancellationToken);
+        var winner = await Task.WhenAny(stopTask, graceTask).ConfigureAwait(false);
+
+        if (winner == graceTask && !stopTask.IsCompleted)
+        {
+            logger.LogWarning(
+                "Bus.StopConsumingAsync did not complete within GracefulShutdownTimeoutMilliseconds={GraceMs}; cancelling and continuing host shutdown.",
+                graceMs);
+            await graceCts.CancelAsync().ConfigureAwait(false);
+            // Observe the task to prevent UnobservedTaskException; don't await its completion.
+            _ = stopTask.ContinueWith(t => _ = t.Exception, TaskScheduler.Default);
+            return;
+        }
+
+        // Either stopTask completed inside the grace window, OR the host's outer CT fired.
+        // Awaiting stopTask propagates any consumer-side exception to the host.
+        await stopTask.ConfigureAwait(false);
     }
 }
