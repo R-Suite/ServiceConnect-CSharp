@@ -238,8 +238,13 @@ internal sealed class ProducerConnection
         {
             // Atomically consume the reset flag inside the semaphore. The whole reset-and-recreate
             // runs under the lock so concurrent peekers see either pre-reset or post-create state,
-            // never the in-between half-open window.
-            if (Interlocked.Exchange(ref _resetRequired, 0) == 1)
+            // never the in-between half-open window. Also tear down when no reset was marked but
+            // the channel is bare-closed (broker-side Channel.Close, queue deletion, mirror failover):
+            // without this fall-through the next CreateConnectionAsync would overwrite _connection
+            // without disposing the prior reference.
+            var resetMarked = Interlocked.Exchange(ref _resetRequired, 0) == 1;
+            var needsTeardown = resetMarked || (_connection is not null && !IsHealthy());
+            if (needsTeardown)
             {
                 await TearDownChannelAndConnectionAsync().ConfigureAwait(false);
                 // Bump generation before clearing so a concurrent EnsureExchangeDeclaredAsync
