@@ -60,6 +60,28 @@ public interface IProducer : IAsyncDisposable
     Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Sends a serialized message to a specific endpoint, carrying the framework's routing-slip
+    /// hop counter so it can be stamped authoritatively after middleware runs.
+    /// </summary>
+    /// <param name="endPoint">The destination queue name.</param>
+    /// <param name="type">The logical message type used when stamping headers.</param>
+    /// <param name="body">The serialized message body.</param>
+    /// <param name="routingSlipHopsCompleted">
+    /// The hop count set by <c>Bus.RouteAsync</c>; stamped onto the outgoing headers by the
+    /// producer after the send middleware chain, so middleware cannot override the framework value.
+    /// </param>
+    /// <param name="headers">Optional read-only headers to include with the message.</param>
+    /// <param name="cancellationToken">A token used to cancel the send operation.</param>
+    /// <remarks>
+    /// Default-interface-method shim: third-party <see cref="IProducer"/> implementations that
+    /// predate this overload fall back to the base <c>SendAsync</c> path (the hop counter is
+    /// not stamped — but is already present in <paramref name="headers"/> if the caller put it
+    /// there). First-party transports override to honour the separate parameter.
+    /// </remarks>
+    Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, int? routingSlipHopsCompleted, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+        => SendAsync(endPoint, type, body, headers, cancellationToken);
+
+    /// <summary>
     /// Sends raw bytes to a specific endpoint without type-based routing. The <paramref name="type"/>
     /// is the logical message type the packet represents (for example, the element type of a stream);
     /// it is used to stamp transport-reserved type headers authoritatively.

@@ -523,8 +523,6 @@ internal sealed class Bus : IBus
                 $"Total routing-slip hops ({outboundHops}) exceeds the configured MaxRoutingSlipHops cap ({_busConfig.MaxRoutingSlipHops}); " +
                 "rejecting forward to prevent cross-service amplification.");
         }
-        headers[HeaderKeys.RoutingSlipHopsCompleted] = outboundHops.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
         var context = new SendContext
         {
             Message = message,
@@ -534,6 +532,7 @@ internal sealed class Bus : IBus
             EndPoint = firstDestination,
             RoutingKey = null,
             Operation = SendOperation.Send,
+            RoutingSlipHopsCompleted = outboundHops,
         };
         await _sendPipeline.ExecuteSendMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
     }

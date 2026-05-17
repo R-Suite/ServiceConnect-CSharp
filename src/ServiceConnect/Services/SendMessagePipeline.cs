@@ -77,7 +77,7 @@ internal sealed class SendMessagePipeline : ISendMessagePipeline
         var producer = _producer;
         Task terminal(SendContext ctx, CancellationToken ct) =>
             !string.IsNullOrEmpty(ctx.EndPoint)
-                ? producer.SendAsync(ctx.EndPoint, ctx.MessageType, ctx.MessageBytes, ToReadOnly(ctx.Headers), ct)
+                ? producer.SendAsync(ctx.EndPoint, ctx.MessageType, ctx.MessageBytes, ctx.RoutingSlipHopsCompleted, ToReadOnly(ctx.Headers), ct)
                 : producer.SendAsync(ctx.MessageType, ctx.MessageBytes, ToReadOnly(ctx.Headers), ct);
         return WrapMiddleware(terminal);
     }

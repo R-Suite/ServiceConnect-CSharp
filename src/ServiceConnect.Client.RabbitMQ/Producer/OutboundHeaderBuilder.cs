@@ -35,6 +35,7 @@ internal sealed class OutboundHeaderBuilder(
         HeaderKeys.FullTypeName,
         HeaderKeys.ConsumerType,
         HeaderKeys.Language,
+        HeaderKeys.RoutingSlipHopsCompleted,
     };
 
     // Cache (FullName, AssemblyQualifiedName) per Type — these are constant for a given Type.
@@ -46,7 +47,7 @@ internal sealed class OutboundHeaderBuilder(
     private readonly TimeProvider _timeProvider = timeProvider;
     private readonly ILogger _logger = logger;
 
-    public Dictionary<string, object?> BuildHeaders(Type type, IReadOnlyDictionary<string, string>? headers, string queueName, string messageType)
+    public Dictionary<string, object?> BuildHeaders(Type type, IReadOnlyDictionary<string, string>? headers, string queueName, string messageType, int? routingSlipHopsCompleted = null)
     {
         // Build the final object-valued dictionary directly rather than populating a
         // string-valued copy and then rewriting it. Pre-sized to the maximum
@@ -92,6 +93,14 @@ internal sealed class OutboundHeaderBuilder(
 
         result[HeaderKeys.ConsumerType] = "RabbitMQ";
         result[HeaderKeys.Language] = "C#";
+
+        // Stamped post-middleware: any caller-supplied or middleware-mutated entry for this key
+        // was already dropped by OverwrittenHeaderKeys above, so only the framework value lands.
+        if (routingSlipHopsCompleted is { } hops)
+        {
+            result[HeaderKeys.RoutingSlipHopsCompleted] =
+                hops.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         return result;
     }

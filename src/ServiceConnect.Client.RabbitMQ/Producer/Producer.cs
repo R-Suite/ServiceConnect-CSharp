@@ -472,7 +472,11 @@ internal sealed class Producer : IProducer
     /// <param name="body">The serialized message body.</param>
     /// <param name="headers">Optional custom headers to include with the message.</param>
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
-    public async Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+    public Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
+        => SendAsync(endPoint, type, body, routingSlipHopsCompleted: null, headers, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, int? routingSlipHopsCompleted, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(type);
         cancellationToken.ThrowIfCancellationRequested();
@@ -494,7 +498,7 @@ internal sealed class Producer : IProducer
         {
             await ExecuteRetryingPublishAsync(async ct =>
             {
-                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send");
+                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send", routingSlipHopsCompleted);
                 var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
                 await PublishWithTimeoutAsync(
                     _producerConnection.Channel,

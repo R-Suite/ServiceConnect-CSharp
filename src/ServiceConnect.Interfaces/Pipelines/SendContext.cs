@@ -41,4 +41,13 @@ public sealed class SendContext
 
     /// <summary>The call site that produced this context.</summary>
     public required SendOperation Operation { get; init; }
+
+    /// <summary>
+    /// Framework-controlled outbound routing-slip hop counter. Set by <c>Bus.RouteAsync</c>
+    /// before the send middleware runs; stamped onto the outgoing transport headers by the
+    /// producer after middleware. <c>ISendMessageMiddleware</c> instances see this value but
+    /// cannot affect the wire-header — the producer treats <c>RoutingSlipHopsCompleted</c>
+    /// as a reserved key and overwrites any middleware-mutated entry.
+    /// </summary>
+    public int? RoutingSlipHopsCompleted { get; init; }
 }
