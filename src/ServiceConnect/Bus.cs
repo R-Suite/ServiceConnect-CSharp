@@ -296,28 +296,12 @@ internal sealed class Bus : IBus
         ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
-        Dictionary<string, string> headers;
-
-        if (_hasOutgoingFilters)
+        var prep = await PrepareOutboundForRequestAsync(message, requestOptions.Headers, cancellationToken).ConfigureAwait(false);
+        if (prep.Stopped)
         {
-            // Serialize once here so outgoing filters can inspect the wire body via the envelope.
-            // RequestReplyManager will serialize again on its own path; the cost is one extra
-            // serialize per filter-enabled request, kept localized to this branch.
-            var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
-            _serializer.Serialize(message, bufferWriter);
-            var messageBytes = bufferWriter.WrittenMemory;
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(TRequest), requestOptions.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
-            {
-                throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
-            }
-
-            headers = ExtractHeaders(envelope);
+            throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
         }
-        else
-        {
-            headers = BuildHeadersDirect(message.CorrelationId, requestOptions.Headers);
-        }
+        var headers = prep.Headers;
 
         return await _requestReplyManager.SendRequestAsync<TRequest, TReply>(
             message,
@@ -334,26 +318,12 @@ internal sealed class Bus : IBus
         ArgumentNullException.ThrowIfNull(message);
         cancellationToken.ThrowIfCancellationRequested();
         var requestOptions = options ?? RequestOptions.Default;
-        Dictionary<string, string> headers;
-
-        if (_hasOutgoingFilters)
+        var prep = await PrepareOutboundForRequestAsync(message, requestOptions.Headers, cancellationToken).ConfigureAwait(false);
+        if (prep.Stopped)
         {
-            // See SendRequestAsync for why we serialize locally only on the filter branch.
-            var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
-            _serializer.Serialize(message, bufferWriter);
-            var messageBytes = bufferWriter.WrittenMemory;
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(TRequest), requestOptions.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
-            {
-                throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
-            }
-
-            headers = ExtractHeaders(envelope);
+            throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
         }
-        else
-        {
-            headers = BuildHeadersDirect(message.CorrelationId, requestOptions.Headers);
-        }
+        var headers = prep.Headers;
 
         return await _requestReplyManager.SendRequestMultiAsync<TRequest, TReply>(
             message,
@@ -377,26 +347,12 @@ internal sealed class Bus : IBus
             throw new ArgumentException("PublishRequestAsync does not support EndPoint. Use SendRequestAsync for single-destination requests.", nameof(options));
         }
 
-        Dictionary<string, string> headers;
-
-        if (_hasOutgoingFilters)
+        var prep = await PrepareOutboundForRequestAsync(message, requestOptions.Headers, cancellationToken).ConfigureAwait(false);
+        if (prep.Stopped)
         {
-            // See SendRequestAsync for why we serialize locally only on the filter branch.
-            var bufferWriter = new System.Buffers.ArrayBufferWriter<byte>();
-            _serializer.Serialize(message, bufferWriter);
-            var messageBytes = bufferWriter.WrittenMemory;
-            var envelope = CreateEnvelope(messageBytes, message.CorrelationId, typeof(TRequest), requestOptions.Headers);
-            if (await RunOutgoingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false) == FilterAction.Stop)
-            {
-                throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
-            }
-
-            headers = ExtractHeaders(envelope);
+            throw new OutgoingFiltersBlockedException("Outgoing filters blocked the request message.");
         }
-        else
-        {
-            headers = BuildHeadersDirect(message.CorrelationId, requestOptions.Headers);
-        }
+        var headers = prep.Headers;
 
         await _requestReplyManager.PublishRequestAsync<TRequest, TReply>(
             message,
