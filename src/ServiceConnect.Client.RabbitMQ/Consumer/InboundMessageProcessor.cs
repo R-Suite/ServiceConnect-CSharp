@@ -216,6 +216,15 @@ internal sealed class InboundMessageProcessor(
     // the broker redelivers after reconnect. Non-transport publish failures (PublishException
     // on a missing error exchange, topology drift) are last-resort dropped with a log to
     // prevent unbounded redelivery on a permanently-broken topology.
+    //
+    // Note the asymmetry with RabbitMqHeaderValidator.SafePublishTerminalAsync, which swallows
+    // ALL broker faults (AlreadyClosedException, OperationInterruptedException,
+    // BrokerUnreachableException, and PublishException). That path handles header-invalid
+    // messages that can never become valid; they must be acked-and-dropped even when the
+    // broker is unhealthy to prevent unbounded redelivery of permanently-invalid payloads.
+    // This path handles handler failures, where the message content is potentially valid and
+    // redelivery is the correct outcome once the channel recovers — so broker faults propagate
+    // to trigger the caller's nack-with-requeue path.
     private async Task HandleTerminalFailureDirectAsync(
         IChannel publishChannel,
         BasicDeliverEventArgs args,

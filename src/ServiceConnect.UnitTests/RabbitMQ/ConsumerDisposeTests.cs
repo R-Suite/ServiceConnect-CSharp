@@ -32,6 +32,7 @@ public class ConsumerDisposeTests
 
         var bus = new Mock<IBusConfiguration>();
         bus.SetupGet(b => b.ConsumerCount).Returns(1);
+        bus.SetupGet(b => b.DisposeTimeout).Returns(TimeSpan.FromSeconds(30));
 
         return new Consumer(transport.Object, queue.Object, bus.Object, NullLogger<Consumer>.Instance, connection);
     }
