@@ -22,9 +22,8 @@ internal sealed class ProcessManagerProcessor(
     private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
 
-    // Cache the per-(DataType, MessageType) verdict so the reflection cost is paid once
-    // per (handler, message) pair instead of every dispatch.
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(Type DataType, Type MessageType), bool> _keyTypeValidationCache = new();
+    // Verdict is a function of the value's runtime type only; cache per-Type.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> _keyTypeValidationCache = new();
 
     // Per-saga-key serialization. Two messages targeting the same saga that arrive
     // concurrently must serialize through find→handle→persist or both observe
@@ -180,9 +179,7 @@ internal sealed class ProcessManagerProcessor(
                 if (value is not null)
                 {
                     var valueType = value.GetType();
-                    var ok = _keyTypeValidationCache.GetOrAdd(
-                        (descriptor.DataType, messageType),
-                        _ => IsValueEqualType(valueType));
+                    var ok = _keyTypeValidationCache.GetOrAdd(valueType, IsValueEqualType);
                     if (!ok)
                     {
                         throw new InvalidOperationException(
@@ -194,13 +191,7 @@ internal sealed class ProcessManagerProcessor(
                     return new SagaLockKey(descriptor.DataType, value);
                 }
             }
-            catch (InvalidOperationException)
-            {
-                // Rethrow the type-validation failure directly; do not swallow it as a
-                // mapping misconfiguration. The broker retry budget will surface the error.
-                throw;
-            }
-            catch
+            catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 // Fall through to fallback key; FindData will rethrow with a typed wrapper.
             }
