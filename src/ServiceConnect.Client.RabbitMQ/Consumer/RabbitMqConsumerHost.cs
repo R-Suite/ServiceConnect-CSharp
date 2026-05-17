@@ -832,10 +832,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            // Fire-and-forget helper: any other failure (e.g. _timeProvider fault, late CTS
-            // disposal in production code paths the inner catches don't cover) must not become
-            // an unobserved Task. Log at Debug because dispose is already on a best-effort path.
-            _logger.LogDebug(ex, "CancelHelperPublishesAtDeadlineAsync best-effort recovery faulted");
+            // Fire-and-forget helper: any failure outside the expected OCE / ObjectDisposed
+            // paths above must not become an unobserved Task. Warning rather than Debug —
+            // a stalled deadline helper means dispose may hang publishes past the grace
+            // window without a loud signal in production logs.
+            _logger.LogWarning(ex, "CancelHelperPublishesAtDeadlineAsync best-effort recovery faulted");
         }
     }
 
