@@ -74,12 +74,28 @@ public interface IProducer : IAsyncDisposable
     /// <param name="cancellationToken">A token used to cancel the send operation.</param>
     /// <remarks>
     /// Default-interface-method shim: third-party <see cref="IProducer"/> implementations that
-    /// predate this overload fall back to the base <c>SendAsync</c> path (the hop counter is
-    /// not stamped — but is already present in <paramref name="headers"/> if the caller put it
-    /// there). First-party transports override to honour the separate parameter.
+    /// predate this overload fall back to the base <c>SendAsync</c> path. When a hop counter
+    /// is supplied, it is injected into a copy of the caller headers so the wire stamp is
+    /// preserved even for transports that have not recompiled against this overload.
+    /// First-party transports override to honour the separate parameter directly.
     /// </remarks>
     Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body, int? routingSlipHopsCompleted, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default)
-        => SendAsync(endPoint, type, body, headers, cancellationToken);
+    {
+        if (routingSlipHopsCompleted is { } hops)
+        {
+            // Belt-and-braces for third-party IProducer implementations that do not
+            // override this overload. The framework treats RoutingSlipHopsCompleted
+            // as a wire-stamped reserved key; without this injection, a third-party
+            // transport would silently drop the cross-service amplification cap.
+            var injected = headers is not null
+                ? new Dictionary<string, string>(headers, StringComparer.Ordinal)
+                : new Dictionary<string, string>(StringComparer.Ordinal);
+            injected[HeaderKeys.RoutingSlipHopsCompleted] = hops.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return SendAsync(endPoint, type, body, (IReadOnlyDictionary<string, string>)injected, cancellationToken);
+        }
+
+        return SendAsync(endPoint, type, body, headers, cancellationToken);
+    }
 
     /// <summary>
     /// Sends raw bytes to a specific endpoint without type-based routing. The <paramref name="type"/>

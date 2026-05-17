@@ -267,6 +267,46 @@ namespace ServiceConnect.UnitTests
                 p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()),
                 Times.Never);
         }
+
+        // Pins the invariant that SendContext.RoutingSlipHopsCompleted is the framework-controlled
+        // value delivered to the producer — middleware that writes to Headers cannot override it.
+        [Fact]
+        public async Task ExecuteSendMessagePipelineAsync_MiddlewareMutatesHopHeader_TerminalReceivesContextValue()
+        {
+            var services = new ServiceCollection();
+            services.AddSingleton<HopMutatingMiddleware>();
+            var sp = services.BuildServiceProvider();
+
+            var mockConfig = new Mock<IPipelineConfiguration>();
+            mockConfig.Setup(c => c.SendMessageMiddleware)
+                .Returns([typeof(HopMutatingMiddleware)]);
+
+            var pipeline = new SendMessagePipeline(_mockProducer.Object, mockConfig.Object, sp);
+
+            var ctx = new SendContext
+            {
+                Message = new TestSendPipelineMessage(),
+                MessageType = typeof(TestSendPipelineMessage),
+                MessageBytes = ReadOnlyMemory<byte>.Empty,
+                Headers = new Dictionary<string, string>(StringComparer.Ordinal),
+                EndPoint = "dest-q",
+                RoutingKey = null,
+                Operation = SendOperation.Send,
+                RoutingSlipHopsCompleted = 4,
+            };
+
+            await pipeline.ExecuteSendMessagePipelineAsync(ctx);
+
+            // The SendContext value (4) must reach the producer regardless of what the
+            // middleware wrote into Headers[RoutingSlipHopsCompleted].
+            _mockProducer.Verify(p => p.SendAsync(
+                "dest-q",
+                typeof(TestSendPipelineMessage),
+                It.IsAny<ReadOnlyMemory<byte>>(),
+                4,
+                It.IsAny<IReadOnlyDictionary<string, string>?>(),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
     }
 }
 
@@ -287,6 +327,17 @@ file sealed class CapturingSendMiddleware(Action<SendContext> capture) : ISendMe
     public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
     {
         capture(context);
+        return next(context, cancellationToken);
+    }
+}
+
+// Simulates a middleware that attempts to override the hop counter via Headers.
+// The pipeline terminal must still forward SendContext.RoutingSlipHopsCompleted, not this value.
+file sealed class HopMutatingMiddleware : ISendMessageMiddleware
+{
+    public Task ProcessAsync(SendContext context, SendMessageDelegate next, CancellationToken cancellationToken)
+    {
+        context.Headers[HeaderKeys.RoutingSlipHopsCompleted] = "0";
         return next(context, cancellationToken);
     }
 }

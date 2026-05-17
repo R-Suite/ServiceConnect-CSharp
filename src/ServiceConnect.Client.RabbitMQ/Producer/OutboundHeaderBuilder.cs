@@ -19,7 +19,7 @@ internal sealed class OutboundHeaderBuilder(
     TimeProvider timeProvider,
     ILogger logger)
 {
-    private const int StampedHeaderCount = 11;
+    private const int StampedHeaderCount = 12;
 
     // Producer-stamped keys: callers cannot override these (the framework owns them).
     // MessageId is deliberately NOT in this set — caller-supplied MessageId (e.g. Bus's
