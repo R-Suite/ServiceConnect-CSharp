@@ -394,13 +394,30 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         {
             await descriptor.InvokeExecuteAsync(handler, originalMessage, stream, cancellationToken).ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Cancellation isn't a handler defect — clear the dispatch flag so a fresh
-            // dispatch can retry. The broker redelivers the final packet; we do not lose
-            // the assembled prior packets.
+            // Caller cancellation: clear the dispatch flag so a fresh dispatch can
+            // retry the stream against the already-assembled prior packets, then
+            // rethrow with the caller's token. The broker will redeliver the final
+            // packet; we do not lose the assembled state.
             ClearDispatchFlag(sequenceId);
-            throw;
+            cancellationToken.ThrowIfCancellationRequested();
+            throw; // unreachable but keeps the compiler happy
+        }
+        catch (OperationCanceledException ex)
+        {
+            // OCE that the caller's CT did NOT request — almost always a handler's
+            // own linked CTS firing. Treat as a handler failure: log, clear the
+            // dispatch flag, and rethrow with the caller's token so the dispatch
+            // pipeline's `when (cancellationToken.IsCancellationRequested)` gate
+            // evaluates correctly. Rethrowing the original would carry the handler's
+            // unrelated token; the downstream metrics pipeline gates cancelled-
+            // classification on the caller's CT, so token identity matters.
+            _logger.LogError(ex,
+                "Stream handler {HandlerType} threw OperationCanceledException with an unrelated CT for stream {SequenceId}",
+                handler.GetType().FullName, sequenceId);
+            ClearDispatchFlag(sequenceId);
+            throw new OperationCanceledException(ex.Message, ex, cancellationToken);
         }
         catch (Exception ex)
         {

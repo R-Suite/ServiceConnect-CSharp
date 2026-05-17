@@ -336,6 +336,72 @@ public class StreamProcessorTests
             e.Level == LogLevel.Error && e.Message.Contains(sequenceId));
     }
 
+    // An OCE thrown by the handler with an unrelated CT (e.g. the handler timed out
+    // an internal HTTP call via its own CancellationTokenSource) must NOT escape with
+    // that unrelated token attached. The downstream metrics pipeline gates
+    // error.type=cancelled on cancellationToken.IsCancellationRequested; an unrelated
+    // OCE carrying a handler-owned token would produce a false graceful-shutdown signal.
+    [Fact]
+    public async Task InvokeHandlerAsync_HandlerThrowsUnrelatedOce_DoesNotPretendCallerCancelled()
+    {
+        using var unrelatedCts = new CancellationTokenSource();
+        unrelatedCts.Cancel();
+
+        var sequenceId = Guid.NewGuid().ToString();
+        var msgType = typeof(SptMsg);
+
+        var typeRegistry = new MessageTypeRegistry();
+        typeRegistry.Register(msgType);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new() { MessageType = msgType, HandlerType = typeof(SptUnrelatedOceHandler) }
+        };
+        var streamHandlerRegistry = new StreamHandlerRegistry(handlerRefs, NullLogger<StreamHandlerRegistry>.Instance);
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IStreamHandler<SptMsg>>(new SptUnrelatedOceHandler(unrelatedCts.Token));
+        var provider = services.BuildServiceProvider();
+
+        var msg = new SptMsg(Guid.NewGuid());
+        var serializerMock = new Mock<IMessageSerializer>();
+        serializerMock
+            .Setup(s => s.Deserialize(It.IsAny<ReadOnlyMemory<byte>>(), msgType))
+            .Returns(msg);
+
+        var (accessor, scopeOce, _) = BuildScopeContext(provider);
+        using var _scopeOce = scopeOce;
+        var processor = new StreamProcessor(
+            accessor,
+            NullLogger<StreamProcessor>.Instance,
+            typeRegistry,
+            streamHandlerRegistry,
+            serializerMock.Object,
+            TimeProvider.System);
+
+        var payload = new byte[] { 0x01 };
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.MessageType] = HeaderKeys.ByteStream,
+            [HeaderKeys.SequenceId] = sequenceId,
+            [HeaderKeys.PacketNumber] = "0",
+            [HeaderKeys.LastPacketNumber] = "0",
+            [HeaderKeys.FullTypeName] = msgType.FullName!
+        };
+        var envelope = new Envelope { Headers = headers, Body = payload };
+
+        using var callerCts = new CancellationTokenSource();
+        // Caller CT is NOT cancelled.
+
+        var ex = await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(payload, msgType, null, headers, envelope, callerCts.Token));
+
+        // The escaping OCE must NOT carry the unrelated token. The downstream metrics
+        // pipeline gates cancelled-classification on cancellationToken.IsCancellationRequested;
+        // an OCE carrying a handler-owned token would produce a false graceful-shutdown signal.
+        Assert.NotEqual(unrelatedCts.Token, ex.CancellationToken);
+    }
+
     // When MessageBusReadStream.Write throws (e.g. packet number exceeds the
     // already-set LastPacketNumber), the StreamProcessor must evict the entry
     // from _activeStreams so the sequence is not wedged until the 5-minute sweep.
@@ -720,4 +786,12 @@ file sealed class SptCountingHandler(SptCounter counter) : IStreamHandler<SptMsg
         _counter.Increment();
         return Task.CompletedTask;
     }
+}
+
+// Simulates a handler that times out an internal sub-call via its own CancellationTokenSource.
+// The OCE it throws carries that handler-owned token, not the caller's CT.
+file sealed class SptUnrelatedOceHandler(CancellationToken unrelatedToken) : IStreamHandler<SptMsg>
+{
+    public Task ExecuteAsync(SptMsg message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
+        => throw new OperationCanceledException("handler's own linked CTS", unrelatedToken);
 }
