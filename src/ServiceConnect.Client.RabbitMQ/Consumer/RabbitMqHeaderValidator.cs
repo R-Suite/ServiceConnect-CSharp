@@ -168,8 +168,9 @@ internal sealed class RabbitMqHeaderValidator(
     /// <see cref="HeaderValidationResult.Reject"/> regardless of whether the publish
     /// succeeded. Broker exceptions (<see cref="global::RabbitMQ.Client.Exceptions.AlreadyClosedException"/>,
     /// <see cref="global::RabbitMQ.Client.Exceptions.OperationInterruptedException"/>,
-    /// <see cref="global::RabbitMQ.Client.Exceptions.BrokerUnreachableException"/>) are
-    /// swallowed with a warning log so that a closed publish channel does not prevent the
+    /// <see cref="global::RabbitMQ.Client.Exceptions.BrokerUnreachableException"/>,
+    /// <see cref="global::RabbitMQ.Client.Exceptions.PublishException"/>) are swallowed
+    /// with an error log so that a closed or unroutable publish channel does not prevent the
     /// caller from acking the inbound delivery. The message is permanently invalid regardless
     /// of whether the error-exchange publish succeeds; requeuing it would loop the same rule.
     /// <see cref="OperationCanceledException"/> is re-thrown so cooperative shutdown is
@@ -192,18 +193,24 @@ internal sealed class RabbitMqHeaderValidator(
             throw;
         }
         catch (Exception ex) when (
+            // AlreadyClosedException derives from OperationInterruptedException, so the
+            // OperationInterruptedException arm already covers it. Both are listed explicitly
+            // as a documentation aid: readers scanning for "what happens when the channel
+            // is closed?" find the answer without consulting the RabbitMQ.Client type hierarchy.
             ex is global::RabbitMQ.Client.Exceptions.AlreadyClosedException
                 or global::RabbitMQ.Client.Exceptions.OperationInterruptedException
-                or global::RabbitMQ.Client.Exceptions.BrokerUnreachableException)
+                or global::RabbitMQ.Client.Exceptions.BrokerUnreachableException
+                or global::RabbitMQ.Client.Exceptions.PublishException)
         {
-            // Publish channel is unhealthy. Swallow so the caller still receives a Reject
-            // and acks the original delivery: the message is permanently invalid (it failed
-            // header validation), so requeuing for redelivery while the broker is degraded
-            // would loop the same message indefinitely. The error queue publish is the
-            // best-effort observability path; a closed publish channel means the
-            // message is dropped but the ack still removes it from the inbound queue,
-            // matching the IQueueConfiguration.DisableErrors contract shape.
-            _logger.LogWarning(ex,
+            // Publish channel is unhealthy or the error exchange is unroutable (topology drift).
+            // Swallow so the caller still receives a Reject and acks the original delivery:
+            // the message is permanently invalid (it failed header validation), so requeuing
+            // for redelivery while the broker is degraded would loop the same message
+            // indefinitely. The error queue publish is the best-effort observability path;
+            // a closed or unroutable publish channel means the message is dropped but the
+            // ack still removes it from the inbound queue, matching the
+            // IQueueConfiguration.DisableErrors contract shape.
+            _logger.LogError(ex,
                 "RabbitMqHeaderValidator could not publish terminal failure to error exchange ({Reason}); dropping the inbound message after ack.",
                 rejectReason);
         }

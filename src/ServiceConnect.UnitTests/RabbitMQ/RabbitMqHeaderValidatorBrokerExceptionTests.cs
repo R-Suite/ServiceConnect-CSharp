@@ -58,6 +58,42 @@ public sealed class RabbitMqHeaderValidatorBrokerExceptionTests
     }
 
     /// <summary>
+    /// When BasicPublishAsync(mandatory:true) targets an unroutable exchange — typical of
+    /// error-exchange topology drift — RabbitMQ.Client throws PublishException. The
+    /// broker-exception guard must swallow it and return Reject so the inbound delivery is
+    /// acked rather than nacked-with-requeue (which would loop the same permanently-invalid
+    /// message indefinitely).
+    /// </summary>
+    [Fact]
+    public async Task ValidateAsync_when_publish_throws_PublishException_returns_Reject()
+    {
+        var retryHandler = new Mock<IMessageRetryHandler>(MockBehavior.Strict);
+        retryHandler
+            .Setup(r => r.HandleTerminalFailureAsync(
+                It.IsAny<IChannel>(),
+                It.IsAny<BasicDeliverEventArgs>(),
+                It.IsAny<Dictionary<string, object>>(),
+                It.IsAny<Exception>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new global::RabbitMQ.Client.Exceptions.PublishException(1, false));
+
+        var validator = BuildValidator(retryHandler.Object);
+        var publishChannel = new Mock<IChannel>(MockBehavior.Loose).Object;
+
+        // Rule 2 (missing type-name header): headers dict present but neither TypeName
+        // nor FullTypeName set, so the validator routes to HandleTerminalFailureAsync.
+        var args = MakeArgs(new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["X-Other"] = "unrelated",
+        });
+
+        var result = await validator.ValidateAsync(args, publishChannel, CopyHeaders(args), CancellationToken.None);
+
+        Assert.False(result.Accepted);
+        Assert.Equal("missing type-name header", result.RejectReason);
+    }
+
+    /// <summary>
     /// OperationCanceledException must propagate from ValidateAsync so cooperative
     /// shutdown is distinguishable from a broker swallow. This counter-pins that the
     /// new broker-exception guard does not accidentally swallow cancellation.
