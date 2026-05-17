@@ -38,5 +38,27 @@ public abstract class Aggregator<T> where T : Message
     /// mutate the snapshot they were handed; the persistor owns the underlying buffer's lifetime.</param>
     /// <param name="cancellationToken">Token to observe for cancellation.</param>
     /// <returns>A task that completes when the batch has been processed.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>Idempotency invariant.</b> <see cref="ExecuteAsync"/> MUST be safe to invoke more than
+    /// once with the same logical batch. ServiceConnect delivers at-least-once: after the handler
+    /// returns, the framework calls <c>RemoveSnapshotAsync</c> on the aggregator persistor to
+    /// drop the dispatched records. A transient persistor failure between the handler's return and
+    /// a successful remove leaves the records under their lease; when the lease expires the same
+    /// batch is re-claimed and re-dispatched. Lease expiry under a slow handler produces the same
+    /// replay. Side effects with external observability — outbound bus sends, HTTP calls, DB writes
+    /// outside the aggregator's snapshot, file I/O — must therefore be guarded by an idempotency
+    /// check (e.g., a deterministic key on the outbound message, an upsert with a deterministic
+    /// key, a state flag persisted alongside the aggregator's own records). A handler that
+    /// unconditionally <c>SendAsync</c>s an outbound command on every batch will double-send on
+    /// replay; that is the framework's contract, not a bug.
+    /// </para>
+    /// <para>
+    /// Cancellation behaviour: when <paramref name="cancellationToken"/> fires (host shutdown,
+    /// dispatch-budget exhausted), an <see cref="OperationCanceledException"/> propagated out of
+    /// the handler short-circuits the persistor remove and triggers a lease release. The same
+    /// batch is then redelivered on the next eligible flush; idempotency rules above apply.
+    /// </para>
+    /// </remarks>
     public abstract Task ExecuteAsync(IReadOnlyList<T> messages, CancellationToken cancellationToken = default);
 }
