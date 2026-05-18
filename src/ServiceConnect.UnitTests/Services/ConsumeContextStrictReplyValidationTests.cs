@@ -10,7 +10,7 @@ using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 // The legacy fallback inside IsTrustedRequestReplyEnvelope trusts header fields that
 // any external producer aware of our queue name can fabricate. Strict mode disables

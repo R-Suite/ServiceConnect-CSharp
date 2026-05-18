@@ -11,7 +11,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 /// <summary>
 /// Concurrency exercises for the pooled <see cref="ConsumeContextPool"/>. The pool

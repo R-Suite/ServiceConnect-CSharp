@@ -8,7 +8,7 @@ using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 /// <summary>
 /// Verifies that messages arriving with an unregistered type are routed as not-handled

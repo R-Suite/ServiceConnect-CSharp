@@ -9,7 +9,7 @@ using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 public class ConsumeContextTestReply(Guid correlationId) : Message(correlationId)
 {

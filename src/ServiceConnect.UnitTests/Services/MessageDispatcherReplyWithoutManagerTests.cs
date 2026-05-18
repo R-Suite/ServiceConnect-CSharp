@@ -10,7 +10,7 @@ using ServiceConnect.Services.Processors;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 /// <summary>
 /// Pins the contract that when a reply-shaped message (ResponseMessageId header

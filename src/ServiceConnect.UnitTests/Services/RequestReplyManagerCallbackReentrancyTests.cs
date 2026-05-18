@@ -12,7 +12,7 @@ using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 /// <summary>
 /// Pre-refactor, the OnReply user callback ran outside the per-request state lock —

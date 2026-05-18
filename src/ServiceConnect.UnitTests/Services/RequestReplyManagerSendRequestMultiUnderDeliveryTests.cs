@@ -12,7 +12,7 @@ using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 /// <summary>
 /// Regression-guards for the v8 under-delivery contract on

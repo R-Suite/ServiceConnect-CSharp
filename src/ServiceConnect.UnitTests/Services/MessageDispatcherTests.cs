@@ -14,7 +14,7 @@ using ServiceConnect.Services.Processors;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 file class TestDispatchHandler(
     Action<FakeMessage1>? onHandle = null,

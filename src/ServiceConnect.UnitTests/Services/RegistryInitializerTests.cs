@@ -6,7 +6,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 public class RegistryInitializerTests
 {
