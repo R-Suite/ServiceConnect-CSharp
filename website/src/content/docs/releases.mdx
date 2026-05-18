@@ -19,9 +19,26 @@ ServiceConnect is versioned per-package. Each package ships independently on NuG
 
 ## Picking a version
 
-Match the major versions of the packages you reference. `ServiceConnect` 7.x expects `ServiceConnect.Interfaces` 7.x; the transport and persistence packages follow the same major line. Mixing majors is unsupported and will surface as binding redirects or missing-method exceptions.
+Match the major versions of the packages you reference. `ServiceConnect` 8.x expects `ServiceConnect.Interfaces` 8.x; the transport and persistence packages follow the same major line. Mixing majors is unsupported and will surface as binding redirects or missing-method exceptions.
 
 For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
+
+## v8.0.0 — 2026-05-18
+
+### Breaking changes
+
+- **`IBus.PublishAsync` / `SendAsync` / `SendToManyAsync` / `RouteAsync` now throw `OutgoingFiltersBlockedException` when an outgoing filter returns `FilterAction.Stop`.** Previously these methods silently returned. The new behaviour matches the request methods (`SendRequestAsync`, `SendRequestMultiAsync`, `PublishRequestAsync`) which already threw. Each method's exception message includes its call-type ("published" / "sent" / "multi-endpoint send" / "routed") so operators can attribute blocks. Callers that intentionally relied on silent-stop must either remove the `FilterAction.Stop`-returning filter or wrap dispatch calls in a try/catch for `OutgoingFiltersBlockedException`.
+
+### New features
+
+- **`IProducer.SupportsRoutingKey` capability flag.** Producers report whether they honour the `routingKey` overload of `PublishAsync`. The Bus emits a once-per-bus `LogWarning` when a caller supplies `PublishOptions.RoutingKey` to a producer that drops the key on the wire. The first-party RabbitMQ producer reports `true`; third-party transports that have not overridden the routing-key overload get `false` (the default-interface-method default).
+- **Typed `RabbitMqOptions` configuration.** A new `UseRabbitMq(connectionString, opts => …)` overload accepts an `Action<RabbitMqOptions>` lambda; setting properties on the strongly-typed options writes them back into `ITransportConfiguration.ClientSettings` using the matching key from `RabbitMQSettingKeys`. The existing string-keyed `SetClientSetting` API remains for back-compat.
+
+### Internal improvements
+
+- **`MessageRetryHandler` uses an explicit `PublishErrorReason` enum** instead of a bool flag, distinguishing max-retries-exceeded from malformed-header-rejection from permanently-invalid-payload routing. Log messages are now reason-specific.
+- **Consumer lifecycle and dispose semaphores are independent.** A wedged `StartConsumingAsync` no longer blocks `DisposeAsync` — they race instead of serialise. SIGTERM is no longer blocked by an in-flight topology-provision retry.
+- **Bus depends on `IConsumeContextAccessor` / `IConsumeScopeAccessor` interfaces** instead of the concrete accessor types. No external behaviour change; future test substitution no longer requires subclassing.
 
 ## v8 highlights
 
