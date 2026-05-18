@@ -81,6 +81,15 @@ public sealed record class RabbitMqOptions
     public int? MaxHeaderCount { get; set; }
 
     /// <summary>
+    /// Maximum bytes allowed per individual header value on an inbound message.
+    /// Defaults to 8192 (8 KB). Inbound messages with any header exceeding this size
+    /// are rejected (NACK'd to retry / dead-letter). Increase for deployments that
+    /// stamp large correlation / tracing values; decrease to tighten resource-
+    /// exhaustion defence on hostile inputs.
+    /// </summary>
+    public int? MaxHeaderValueBytes { get; set; }
+
+    /// <summary>
     /// Validates the option values that have explicit range constraints. Properties
     /// typed as <see cref="ushort"/>? are non-negative by type and need no runtime check;
     /// this method covers the <see cref="int"/>?, <see cref="long"/>?, and
@@ -129,6 +138,11 @@ public sealed record class RabbitMqOptions
         if (MaxHeaderCount is { } maxHeaderCount && maxHeaderCount < 1)
         {
             errors.Add($"MaxHeaderCount must be positive (was {maxHeaderCount}).");
+        }
+
+        if (MaxHeaderValueBytes is { } maxHeaderValueBytes && maxHeaderValueBytes < 1)
+        {
+            errors.Add($"MaxHeaderValueBytes must be positive (was {maxHeaderValueBytes}).");
         }
 
         return errors;

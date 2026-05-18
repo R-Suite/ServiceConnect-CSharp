@@ -88,4 +88,13 @@ public static class RabbitMQSettingKeys
     /// defence on hostile inputs.
     /// </summary>
     public const string MaxHeaderCount = nameof(MaxHeaderCount);
+
+    /// <summary>
+    /// Maximum bytes allowed per individual header value on an inbound message before the
+    /// consumer rejects the delivery (NACK'd to retry / dead-letter). Accepts a positive
+    /// <see cref="int"/>; defaults to 8192 (8 KB) when unset. Raise for deployments that
+    /// stamp large correlation / tracing values; lower to tighten resource-exhaustion
+    /// defence on hostile inputs.
+    /// </summary>
+    public const string MaxHeaderValueBytes = nameof(MaxHeaderValueBytes);
 }

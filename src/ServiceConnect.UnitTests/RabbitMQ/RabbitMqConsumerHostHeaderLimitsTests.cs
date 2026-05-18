@@ -9,10 +9,12 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Wiring tests that confirm <see cref="RabbitMQSettingKeys.MaxHeaderCount"/> reaches the
-/// admission-time header-count guard inside <see cref="RabbitMqConsumerHost"/>. Behaviour of
-/// the validator itself is covered by <c>RabbitMqHeaderValidatorTests</c>; here we only verify
-/// that the configured cap supplants the host's <c>DefaultMaxHeaderCount</c> (64) constant.
+/// Wiring tests that confirm <see cref="RabbitMQSettingKeys.MaxHeaderCount"/> and
+/// <see cref="RabbitMQSettingKeys.MaxHeaderValueBytes"/> reach the admission-time header
+/// guards inside <see cref="RabbitMqConsumerHost"/>. Behaviour of the validator itself is
+/// covered by <c>RabbitMqHeaderValidatorTests</c>; here we only verify that the configured
+/// caps supplant the host's <c>DefaultMaxHeaderCount</c> (64) and
+/// <c>DefaultMaxHeaderValueBytes</c> (8192) constants.
 /// </summary>
 public sealed class RabbitMqConsumerHostHeaderLimitsTests
 {
@@ -128,8 +130,112 @@ public sealed class RabbitMqConsumerHostHeaderLimitsTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ConfiguredMaxHeaderValueBytes_AboveCap_IsRejected()
+    {
+        // MaxHeaderValueBytes=16 → a 17-byte header value must NACK to the error exchange.
+        var (conn, channel, publishChannel) = MockConnection();
+        var tcfg = MakeTransportCfgWithMaxHeaderValueBytes(16);
+        var qcfg = MakeQueueCfg();
+        var bus = MakeBusCfg();
+        var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        bool handlerInvoked = false;
+        var host = new RabbitMqConsumerHost(
+            conn.Object, tcfg.Object, qcfg.Object, bus.Object,
+            retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
+        await host.StartConsumingAsync(
+            (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
+            "q");
+
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.TypeName] = "SomeType",
+            ["X-Big"] = new string('a', 17),
+        };
+
+        await DeliverAsync(host, headers);
+
+        Assert.False(handlerInvoked, "Handler must not be invoked when a header value exceeds the configured byte cap.");
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, true,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        channel.Verify(c => c.BasicAckAsync(It.IsAny<ulong>(), false, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ConfiguredMaxHeaderValueBytes_AtCap_IsAdmitted()
+    {
+        // MaxHeaderValueBytes=16 → a 16-byte header value must reach the handler.
+        var (conn, _, publishChannel) = MockConnection();
+        var tcfg = MakeTransportCfgWithMaxHeaderValueBytes(16);
+        var qcfg = MakeQueueCfg();
+        var bus = MakeBusCfg();
+        var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        bool handlerInvoked = false;
+        var host = new RabbitMqConsumerHost(
+            conn.Object, tcfg.Object, qcfg.Object, bus.Object,
+            retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
+        await host.StartConsumingAsync(
+            (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
+            "q");
+
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.TypeName] = "SomeType",
+            ["X-Big"] = new string('a', 16),
+        };
+
+        await DeliverAsync(host, headers);
+
+        Assert.True(handlerInvoked, "Handler must be invoked when a header value is at the configured byte cap.");
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, true,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UnsetMaxHeaderValueBytes_DefaultsToEightKb_AndAdmitsExactlyEightKb()
+    {
+        // No MaxHeaderValueBytes setting → default of 8192 still applies. An 8192-byte
+        // header value must pass admission.
+        var (conn, _, publishChannel) = MockConnection();
+        var tcfg = MakeTransportCfgWithMaxHeaderValueBytes(null);
+        var qcfg = MakeQueueCfg();
+        var bus = MakeBusCfg();
+        var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(qcfg.Object);
+
+        bool handlerInvoked = false;
+        var host = new RabbitMqConsumerHost(
+            conn.Object, tcfg.Object, qcfg.Object, bus.Object,
+            retry, new RabbitMqAdmissionGate("q"), audit, NullLogger.Instance);
+        await host.StartConsumingAsync(
+            (_, _, _, _) => { handlerInvoked = true; return Task.FromResult(new ConsumeEventResult { Success = true }); },
+            "q");
+
+        var headers = new Dictionary<string, object>
+        {
+            [HeaderKeys.TypeName] = "SomeType",
+            ["X-Big"] = new string('a', 8192),
+        };
+
+        await DeliverAsync(host, headers);
+
+        Assert.True(handlerInvoked, "Handler must be invoked at the default 8 KB value cap when no override is configured.");
+        publishChannel.Verify(c => c.BasicPublishAsync(
+            "err", string.Empty, true,
+            It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     // ── Harness — mirrors the helpers in RabbitMqConsumerHostTests but parameterises
-    //               MaxHeaderCount through ClientSettings.
+    //               MaxHeaderCount and MaxHeaderValueBytes through ClientSettings.
 
     private static (Mock<IServiceConnectConnection> Connection, Mock<IChannel> ConsumerChannel, Mock<IChannel> PublishChannel) MockConnection()
     {
@@ -166,6 +272,12 @@ public sealed class RabbitMqConsumerHostHeaderLimitsTests
     }
 
     private static Mock<ITransportConfiguration> MakeTransportCfgWithMaxHeaderCount(int? maxHeaderCount)
+        => MakeTransportCfg(maxHeaderCount, maxHeaderValueBytes: null);
+
+    private static Mock<ITransportConfiguration> MakeTransportCfgWithMaxHeaderValueBytes(int? maxHeaderValueBytes)
+        => MakeTransportCfg(maxHeaderCount: null, maxHeaderValueBytes);
+
+    private static Mock<ITransportConfiguration> MakeTransportCfg(int? maxHeaderCount, int? maxHeaderValueBytes)
     {
         var cfg = new Mock<ITransportConfiguration>();
         cfg.SetupGet(c => c.MaxRetries).Returns(3);
@@ -175,6 +287,11 @@ public sealed class RabbitMqConsumerHostHeaderLimitsTests
         if (maxHeaderCount.HasValue)
         {
             settings[RabbitMQSettingKeys.MaxHeaderCount] = maxHeaderCount.Value;
+        }
+
+        if (maxHeaderValueBytes.HasValue)
+        {
+            settings[RabbitMQSettingKeys.MaxHeaderValueBytes] = maxHeaderValueBytes.Value;
         }
 
         cfg.SetupGet(c => c.ClientSettings).Returns(settings);

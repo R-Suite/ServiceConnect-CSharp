@@ -94,6 +94,7 @@ builder.UseRabbitMQ("amqps://user:pass@rabbit.prod.example.com/vhost", opts =>
     opts.HeartbeatTime = 30;
     opts.PublishTimeout = TimeSpan.FromSeconds(10);
     opts.MaxHeaderCount = 128;
+    opts.MaxHeaderValueBytes = 16 * 1024;
 });
 ```
 
@@ -101,6 +102,7 @@ The typed overload is equivalent to `SetClientSetting` — internally the option
 
 - **`PublishTimeout`** (default **30 seconds**) — time to wait for a broker publisher-confirm before failing a publish. Prevents a half-open connection from blocking a producer indefinitely. `TimeoutException` on this path is *not* retried.
 - **`MaxHeaderCount`** (default **64**) — maximum number of headers allowed on an inbound message. Raise when producers stamp wide header sets (heavy distributed-tracing baggage); lower to harden against hostile inputs. Inbound messages above the cap are rejected to the error queue rather than retried.
+- **`MaxHeaderValueBytes`** (default **8192**) — maximum bytes per individual header value on an inbound message. Raise for large correlation / tracing payloads; lower to harden against hostile inputs.
 
 ### Producer concurrency invariants
 

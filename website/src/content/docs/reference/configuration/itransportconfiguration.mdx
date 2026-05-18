@@ -294,6 +294,18 @@ Caps the number of headers the consumer will accept on an inbound message. Accep
 
 ---
 
+### `MaxHeaderValueBytes` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.MaxHeaderValueBytes, 16 * 1024);
+```
+
+Caps the bytes any single header value may carry on an inbound message. Accepts a positive `int`; defaults to **8192** (8 KB) when unset. Equivalent to `RabbitMqOptions.MaxHeaderValueBytes` on the typed overload.
+
+**Remarks.** Inbound messages with any header value exceeding the cap are rejected at admission and routed to the error queue (acknowledged-then-published, not redelivered — a retry would just hit the same rule). The cap descends into AMQP nested tables and arrays, so an adversary cannot bypass it by wrapping the payload in a nested structure. Raise the cap for deployments that legitimately stamp large correlation / tracing values; lower it to tighten resource-exhaustion defence against hostile inputs. The cap pairs with the header-count budget (`MaxHeaderCount`) and the aggregate header-size budget (the message-size budget, shared with the body cap) — together they bound the worst-case header weight an attacker can pack onto a single delivery.
+
+---
+
 ### `SetClientSetting`
 
 ```csharp

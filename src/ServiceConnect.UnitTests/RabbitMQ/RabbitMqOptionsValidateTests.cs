@@ -94,6 +94,22 @@ public sealed class RabbitMqOptionsValidateTests
     }
 
     [Fact]
+    public void Validate_ZeroMaxHeaderValueBytes_ReturnsError()
+    {
+        var options = new RabbitMqOptions { MaxHeaderValueBytes = 0 };
+        var errors = options.Validate();
+        Assert.Contains(errors, e => e.Contains("MaxHeaderValueBytes", System.StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_NegativeMaxHeaderValueBytes_ReturnsError()
+    {
+        var options = new RabbitMqOptions { MaxHeaderValueBytes = -1 };
+        var errors = options.Validate();
+        Assert.Contains(errors, e => e.Contains("MaxHeaderValueBytes", System.StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Validate_AggregatesMultipleErrors()
     {
         var options = new RabbitMqOptions
