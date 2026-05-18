@@ -51,7 +51,11 @@ internal sealed class MessageDispatcher(
     private readonly ConsumeContextAccessor? _consumeContextAccessor = consumeContextAccessor;
 
     /// <inheritdoc />
-    public async Task<ConsumeEventResult> DispatchAsync(ReadOnlyMemory<byte> messageBytes, string messageType, IReadOnlyDictionary<string, object> headers, CancellationToken cancellationToken = default)
+    public async Task<ConsumeEventResult> DispatchAsync(
+        ReadOnlyMemory<byte> messageBytes,
+        string messageType,
+        IReadOnlyDictionary<string, object> headers,
+        CancellationToken cancellationToken = default)
     {
         // CreateAsyncScope so user-supplied IMessageHandler / IFilter / IMessageProcessingMiddleware
         // implementations that are IAsyncDisposable-only (no IDisposable) are honoured. A sync scope
@@ -61,131 +65,144 @@ internal sealed class MessageDispatcher(
         var scope = _scopeFactory.CreateAsyncScope();
         try
         {
-        using var _ = _scopeAccessor.Push(scope.ServiceProvider);
+            using var _ = _scopeAccessor.Push(scope.ServiceProvider);
 
-        Envelope? envelope = null;
-        IDisposable? contextScope = null;
-        var beforeFiltersRan = false;
-        try
-        {
-            // Downstream pipeline (IMessageProcessor, MessageProcessingDelegate, Envelope.Headers)
-            // requires a mutable IDictionary<string,object> for middleware mutation. Fast-path
-            // succeeds when the runtime type is Dictionary<,> (the expected hot path); the fallback
-            // copy handles non-Dictionary<,> runtime types (e.g. ReadOnlyDictionary<,>).
-            var mutableHeaders = headers as IDictionary<string, object>
-                ?? new Dictionary<string, object>(headers, StringComparer.Ordinal);
-
-            envelope = new Envelope { Headers = mutableHeaders, Body = messageBytes };
-
-            // Push the inbound-context accessor BEFORE filters/middleware run so any outbound
-            // call made from a middleware (e.g. an auto-forward IMessageProcessingMiddleware
-            // that invokes Bus.RouteAsync or Bus.SendAsync) reads the inbound hop counter via
-            // ConsumeContextAccessor.CurrentHeaders. Without this, middleware sees
-            // CurrentHeaders == null and the framework stamps RoutingSlipHopsCompleted=1
-            // regardless of the inbound hop count — defeating MaxRoutingSlipHops as the
-            // cross-service amplification defence.
-            //
-            // The Dictionary fast-path covers the production transport (Bus constructs as
-            // Dictionary<,>); third-party transports passing a non-Dictionary IDictionary
-            // get a defensive shallow copy snapshot so the IReadOnlyDictionary contract is
-            // honoured. The HandlerProcessor / ProcessManagerProcessor push later with the
-            // pooled context's typed headers, which nests cleanly.
-            if (_consumeContextAccessor is not null)
+            Envelope? envelope = null;
+            IDisposable? contextScope = null;
+            var beforeFiltersRan = false;
+            try
             {
-                var headersForContext = mutableHeaders as IReadOnlyDictionary<string, object>
-                    ?? new Dictionary<string, object>(mutableHeaders, StringComparer.Ordinal);
-                contextScope = _consumeContextAccessor.Push(headersForContext);
-            }
+                // Downstream pipeline (IMessageProcessor, MessageProcessingDelegate, Envelope.Headers)
+                // requires a mutable IDictionary<string,object> for middleware mutation. Fast-path
+                // succeeds when the runtime type is Dictionary<,> (the expected hot path); the fallback
+                // copy handles non-Dictionary<,> runtime types (e.g. ReadOnlyDictionary<,>).
+                var mutableHeaders = headers as IDictionary<string, object>
+                    ?? new Dictionary<string, object>(headers, StringComparer.Ordinal);
 
-            var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
+                envelope = new Envelope { Headers = mutableHeaders, Body = messageBytes };
 
-            // Before-consuming filters run first so they gate every dispatch path —
-            // including pre-deserialization processors like StreamProcessor. Running
-            // filters here guarantees stream packets and replies traverse the same
-            // pre- and post-consume filter stages as any other message
-            // (after-filters only fire once beforeFiltersRan is set).
-            FilterAction beforeAction = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
-            beforeFiltersRan = true;
-            if (beforeAction == FilterAction.Stop)
-            {
-                return new ConsumeEventResult { Success = true };
-            }
-
-            var (replyProcessor, preDeserHandled) = await RunPreDeserializationProcessorsAsync(messageBytes, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
-            if (preDeserHandled)
-            {
-                // Mirror the reply branch and the handler-success branch: a pre-deserialisation
-                // processor (StreamProcessor accepting a packet frame) that returns Handled is
-                // a successful consume. User filters built on the OnConsumedSuccessfully stage
-                // (dedup-key recording, audit, outbox commit) must observe stream packets here
-                // — without this call, dedup filters silently under-count and stream payloads
-                // bypass user-installed audit hooks.
-                await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
-                return new ConsumeEventResult { Success = true };
-            }
-
-            var typeResolution = TryResolveMessageType(messageType, headers, hasResponseMessageId);
-            if (typeResolution.ShouldReturnNotHandled)
-            {
-                return new ConsumeEventResult { Success = true, NotHandled = true };
-            }
-            var type = typeResolution.Type!;
-
-            if (hasResponseMessageId)
-            {
-                return await DispatchReplyAsync(replyProcessor, messageBytes, type, mutableHeaders, envelope, headers, cancellationToken).ConfigureAwait(false);
-            }
-
-            var message = _serializer.Deserialize(messageBytes, type!);
-
-            // Build the middleware chain per dispatch from the scoped provider so scoped/transient
-            // middleware lifetimes are honoured — a cached chain would pin the first instance for
-            // the lifetime of the bus.
-            var chain = BuildProcessingChain(scope.ServiceProvider);
-            var result = await chain(messageBytes, type!, message, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
-
-            if (result.Success && !result.NotHandled)
-            {
-                await RunOnConsumedSuccessfullyAsync(envelope, messageType, cancellationToken).ConfigureAwait(false);
-            }
-
-            return result;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            // Cooperative shutdown — propagate so the outer finally leaves the message unacked
-            // for broker redelivery on next start. Not an application error.
-            // See learn/operations/cancellation for the full contract.
-            throw;
-        }
-        catch (Exception ex)
-        {
-            return await HandleDispatchErrorAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (beforeFiltersRan && envelope != null)
-            {
-                try
+                // Push the inbound-context accessor BEFORE filters/middleware run so any outbound
+                // call made from a middleware (e.g. an auto-forward IMessageProcessingMiddleware
+                // that invokes Bus.RouteAsync or Bus.SendAsync) reads the inbound hop counter via
+                // ConsumeContextAccessor.CurrentHeaders.
+                //
+                // The Dictionary fast-path covers the production transport (Bus constructs as
+                // Dictionary<,>); third-party transports passing a non-Dictionary IDictionary
+                // get a defensive shallow copy snapshot so the IReadOnlyDictionary contract is
+                // honoured. The HandlerProcessor / ProcessManagerProcessor push later with the
+                // pooled context's typed headers, which nests cleanly.
+                if (_consumeContextAccessor is not null)
                 {
-                    await _filterPipeline.ExecuteAfterConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+                    var headersForContext = mutableHeaders as IReadOnlyDictionary<string, object>
+                        ?? new Dictionary<string, object>(mutableHeaders, StringComparer.Ordinal);
+                    contextScope = _consumeContextAccessor.Push(headersForContext);
                 }
-                catch (Exception afterEx)
+
+                // Before-consuming filters run first so they gate every dispatch path —
+                // including pre-deserialization processors like StreamProcessor. The
+                // beforeFiltersRan flag must reflect whether THIS call completed so the
+                // outer finally only invokes after-filters when before-filters were seen.
+                var beforeAction = await _filterPipeline.ExecuteBeforeConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+                beforeFiltersRan = true;
+                if (beforeAction == FilterAction.Stop)
                 {
-                    _logger.LogWarning(afterEx, "AfterConsumingFilters threw while finalising dispatch of {MessageType}", messageType);
+                    return new ConsumeEventResult { Success = true };
                 }
+
+                return await RunDispatchPipelineAsync(messageBytes, messageType, headers, mutableHeaders, envelope, scope.ServiceProvider, cancellationToken).ConfigureAwait(false);
             }
-            // Pop the inbound-context AsyncLocal AFTER AfterConsumingFilters so those filters
-            // still observe the headers context, but BEFORE the DI scope disposes so any
-            // service depending on the accessor doesn't observe a stale push from this
-            // dispatch in the next one.
-            contextScope?.Dispose();
-        }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Cooperative shutdown — propagate so the outer finally leaves the message unacked
+                // for broker redelivery on next start. Not an application error.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                return await HandleDispatchErrorAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                if (beforeFiltersRan && envelope != null)
+                {
+                    try
+                    {
+                        await _filterPipeline.ExecuteAfterConsumingFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception afterEx)
+                    {
+                        _logger.LogWarning(afterEx, "AfterConsumingFilters threw while finalising dispatch of {MessageType}", messageType);
+                    }
+                }
+                // Pop the inbound-context AsyncLocal AFTER AfterConsumingFilters so those filters
+                // still observe the headers context, but BEFORE the DI scope disposes so any
+                // service depending on the accessor doesn't observe a stale push from this
+                // dispatch in the next one.
+                contextScope?.Dispose();
+            }
         }
         finally
         {
             await scope.DisposeAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Executes the dispatch pipeline for one inbound delivery: pre-deserialization processors,
+    /// type resolution, reply-path dispatch (when applicable), main deserialise + middleware chain
+    /// + processors, and on-consumed-successfully filters. Returns the
+    /// <see cref="ConsumeEventResult"/> the caller surfaces. The before-consuming filters and
+    /// the after-consuming filters / AsyncLocal pop are in the caller's scope so the
+    /// beforeFiltersRan flag stays correctly latched and after-filters fire on the exception
+    /// paths the caller handles too.
+    /// </summary>
+    private async Task<ConsumeEventResult> RunDispatchPipelineAsync(
+        ReadOnlyMemory<byte> messageBytes,
+        string messageType,
+        IReadOnlyDictionary<string, object> headers,
+        IDictionary<string, object> mutableHeaders,
+        Envelope envelope,
+        IServiceProvider scopedProvider,
+        CancellationToken cancellationToken)
+    {
+        var (replyProcessor, preDeserHandled) = await RunPreDeserializationProcessorsAsync(messageBytes, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
+        if (preDeserHandled)
+        {
+            // Mirror the reply branch and the handler-success branch: a pre-deserialisation
+            // processor (StreamProcessor accepting a packet frame) that returns Handled is
+            // a successful consume. User filters built on the OnConsumedSuccessfully stage
+            // (dedup-key recording, audit, outbox commit) must observe stream packets here.
+            await _filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync(envelope, cancellationToken).ConfigureAwait(false);
+            return new ConsumeEventResult { Success = true };
+        }
+
+        var hasResponseMessageId = headers.ContainsKey(HeaderKeys.ResponseMessageId);
+        var typeResolution = TryResolveMessageType(messageType, headers, hasResponseMessageId);
+        if (typeResolution.ShouldReturnNotHandled)
+        {
+            return new ConsumeEventResult { Success = true, NotHandled = true };
+        }
+        var type = typeResolution.Type!;
+
+        if (hasResponseMessageId)
+        {
+            return await DispatchReplyAsync(replyProcessor, messageBytes, type, mutableHeaders, envelope, headers, cancellationToken).ConfigureAwait(false);
+        }
+
+        var message = _serializer.Deserialize(messageBytes, type);
+
+        // Build the middleware chain per dispatch from the scoped provider so scoped/transient
+        // middleware lifetimes are honoured — a cached chain would pin the first instance for
+        // the lifetime of the bus.
+        var chain = BuildProcessingChain(scopedProvider);
+        var result = await chain(messageBytes, type, message, mutableHeaders, envelope, cancellationToken).ConfigureAwait(false);
+
+        if (result.Success && !result.NotHandled)
+        {
+            await RunOnConsumedSuccessfullyAsync(envelope, messageType, cancellationToken).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
     // Handles a reply-shaped delivery (ResponseMessageId header present). Two sub-cases:
