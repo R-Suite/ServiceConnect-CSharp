@@ -110,6 +110,21 @@ public interface IProducer : IAsyncDisposable
     Task SendBytesAsync(string endPoint, Type type, ReadOnlyMemory<byte> packet, IReadOnlyDictionary<string, string>? headers = null, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets whether this producer honours the <c>routingKey</c> parameter on
+    /// <see cref="PublishAsync(Type, ReadOnlyMemory{byte}, string?, IReadOnlyDictionary{string, string}?, CancellationToken)"/>.
+    /// Returns <see langword="false"/> for the default-interface-method shim — third-party
+    /// producers that haven't overridden the routing-key overload silently drop the key on
+    /// the wire. First-party transports (RabbitMQ) override to <see langword="true"/>.
+    /// </summary>
+    /// <remarks>
+    /// Bus uses this capability flag to emit a once-per-bus LogWarning when a caller supplies
+    /// <c>PublishOptions.RoutingKey</c> to a producer that doesn't honour it — without the
+    /// warning the routing-key intent is silently dropped on the wire and topic-exchange
+    /// dispatch never matches.
+    /// </remarks>
+    bool SupportsRoutingKey => false;
+
+    /// <summary>
     /// Gets the maximum message size in bytes supported by the broker.
     /// </summary>
     long MaximumMessageSize { get; }

@@ -728,6 +728,9 @@ internal sealed class Producer : IProducer
     public bool HasAttemptedConnection => _producerConnection.HasAttemptedConnection;
 
     /// <inheritdoc />
+    public bool SupportsRoutingKey => true;
+
+    /// <inheritdoc />
     public ProducerHealthSnapshot GetHealthSnapshot()
         => _producerConnection.GetSnapshot();
 

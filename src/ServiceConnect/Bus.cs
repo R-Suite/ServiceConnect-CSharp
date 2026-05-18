@@ -43,6 +43,9 @@ internal sealed class Bus : IBus
     // 0 = alive, 1 = disposed. Accessed via Interlocked/Volatile only — never under _stateLock —
     // so DisposeAsync can publish disposal atomically without ordering it against the lifecycle semaphore.
     private int _disposed;
+    // 0 = warning not yet emitted, 1 = warning already logged. Latched via Interlocked.Exchange
+    // so the warning fires at most once per Bus instance even under concurrent PublishAsync calls.
+    private int _routingKeyShimWarned;
 
     internal Bus(
         IMessageSerializer serializer,
@@ -132,6 +135,16 @@ internal sealed class Bus : IBus
         }
         var messageBytes = prep.Bytes;
         var headers = prep.Headers;
+
+        if (options?.RoutingKey is { Length: > 0 } &&
+            _producer is not null &&
+            !_producer.SupportsRoutingKey &&
+            Interlocked.Exchange(ref _routingKeyShimWarned, 1) == 0)
+        {
+            _logger.LogWarning(
+                "PublishOptions.RoutingKey was supplied but the registered IProducer ({ProducerType}) reports SupportsRoutingKey=false; the key is being dropped on the wire. Update the transport implementation or remove the RoutingKey from PublishOptions to silence this warning.",
+                _producer.GetType().FullName);
+        }
 
         if (options?.RoutingKey is { } routingKey)
         {

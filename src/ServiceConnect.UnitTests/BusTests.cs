@@ -296,6 +296,91 @@ public class BusTests
     }
 
     [Fact]
+    public async Task PublishAsync_WithRoutingKey_WhenProducerDoesNotSupportIt_LogsWarningOnce()
+    {
+        // A producer whose SupportsRoutingKey returns false should trigger exactly one
+        // LogWarning per Bus instance so operators see the silent-drop scenario once,
+        // even when PublishAsync is called multiple times with a routing key.
+        var mockProducer = new Mock<IProducer>();
+        mockProducer.Setup(x => x.SupportsRoutingKey).Returns(false);
+        var mockLogger = new Mock<ILogger<Bus>>();
+        var busWithShimProducer = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            _mockPipelineConfig.Object,
+            _scopeFactory,
+            _scopeAccessor,
+            producer: mockProducer.Object);
+
+        _mockSendPipeline
+            .Setup(x => x.ExecutePublishMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new PublishOptions { RoutingKey = "some-key" };
+
+        // Call twice — the warning must fire exactly once (once-per-bus latch).
+        await busWithShimProducer.PublishAsync(message, options);
+        await busWithShimProducer.PublishAsync(message, options);
+
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("SupportsRoutingKey=false")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_WithRoutingKey_WhenProducerSupportsIt_DoesNotLogWarning()
+    {
+        // A producer with SupportsRoutingKey=true must never trigger the shim-drop warning,
+        // even when a routing key is supplied on every call.
+        var mockProducer = new Mock<IProducer>();
+        mockProducer.Setup(x => x.SupportsRoutingKey).Returns(true);
+        var mockLogger = new Mock<ILogger<Bus>>();
+        var busWithRealProducer = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            _mockPipelineConfig.Object,
+            _scopeFactory,
+            _scopeAccessor,
+            producer: mockProducer.Object);
+
+        _mockSendPipeline
+            .Setup(x => x.ExecutePublishMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        var options = new PublishOptions { RoutingKey = "some-key" };
+
+        await busWithRealProducer.PublishAsync(message, options);
+
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("SupportsRoutingKey=false")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
+
+    [Fact]
     public void PublishOptions_IsReadonlyRecordStruct()
     {
         // PublishOptions is a readonly record struct so each PublishAsync call
