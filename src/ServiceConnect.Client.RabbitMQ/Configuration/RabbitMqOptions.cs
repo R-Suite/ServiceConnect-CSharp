@@ -10,7 +10,7 @@ namespace ServiceConnect.Client.RabbitMQ.Configuration;
 /// <remarks>
 /// This is the typed user-facing surface; internally the consumer host and producer
 /// still read from the <c>ClientSettings</c> dictionary. A future release may switch
-/// internals to <c>IOptions{RabbitMqOptions}</c>; this class is the stepping stone.
+/// internals to <c>IOptions{RabbitMqOptions}</c>.
 /// </remarks>
 public sealed record class RabbitMqOptions
 {
