@@ -158,28 +158,9 @@ internal sealed class MessageDispatcher(
             // See learn/operations/cancellation for the full contract.
             throw;
         }
-        catch (Exception ex) when (ex is JsonException or NotSupportedException or Interfaces.Exceptions.SerializationException)
-        {
-            // Permanently malformed payload — JsonException covers wire-format faults
-            // (truncated bytes, schema mismatch, max-depth exceeded), NotSupportedException
-            // surfaces when an STJ converter rejects the value, and SerializationException
-            // is the serializer's wrapper around JsonException (so JsonException would
-            // otherwise be invisible behind the wrap — the wrap is what
-            // SystemTextJsonMessageSerializer.Deserialize raises on every failed parse).
-            // Retrying produces the identical failure; route as terminal so the message goes
-            // straight to the error exchange and the retry budget isn't burned on a poison
-            // delivery.
-            _logger.LogError(ex,
-                "Permanently invalid payload for message of type {MessageType}; routing as terminal failure (no retry).",
-                messageType);
-            await InvokeExceptionHandlerAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
-            return new ConsumeEventResult { Success = false, Exception = ex, TerminalFailure = true };
-        }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error dispatching message of type {MessageType}", messageType);
-            await InvokeExceptionHandlerAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
-            return new ConsumeEventResult { Success = false, Exception = ex };
+            return await HandleDispatchErrorAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -268,6 +249,37 @@ internal sealed class MessageDispatcher(
                 messageType);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Classifies a dispatch exception as terminal (permanently invalid payload) vs transient,
+    /// logs at the appropriate severity, invokes the user-supplied exception handler, and
+    /// produces the <see cref="ConsumeEventResult"/> the dispatcher returns. The OCE re-throw
+    /// case is handled at the call site — it's not an "error" in this sense.
+    /// </summary>
+    private async Task<ConsumeEventResult> HandleDispatchErrorAsync(
+        Exception ex,
+        string messageType,
+        CancellationToken cancellationToken)
+    {
+        if (ex is JsonException or NotSupportedException or Interfaces.Exceptions.SerializationException)
+        {
+            // Permanently malformed payload — JsonException covers wire-format faults
+            // (truncated bytes, schema mismatch, max-depth exceeded), NotSupportedException
+            // surfaces when an STJ converter rejects the value, and SerializationException
+            // is the serializer's wrapper around JsonException. Retrying produces the
+            // identical failure; route as terminal so the message goes straight to the error
+            // exchange and the retry budget isn't burned on a poison delivery.
+            _logger.LogError(ex,
+                "Permanently invalid payload for message of type {MessageType}; routing as terminal failure (no retry).",
+                messageType);
+            await InvokeExceptionHandlerAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
+            return new ConsumeEventResult { Success = false, Exception = ex, TerminalFailure = true };
+        }
+
+        _logger.LogError(ex, "Error dispatching message of type {MessageType}", messageType);
+        await InvokeExceptionHandlerAsync(ex, messageType, cancellationToken).ConfigureAwait(false);
+        return new ConsumeEventResult { Success = false, Exception = ex };
     }
 
     // Invokes the optional ExceptionHandler callback and swallows + logs any throw it produces
