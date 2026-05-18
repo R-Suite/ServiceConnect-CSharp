@@ -134,7 +134,17 @@ internal sealed class MongoDbAggregatorPersistor : IAggregatorPersistor
         _logger = logger;
         _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
         _timeProvider = timeProvider ?? TimeProvider.System;
-        _leaseDuration = leaseDuration ?? DefaultLeaseDuration;
+        // Explicit leaseDuration (test path) wins; otherwise fall back to options.AggregatorLeaseDuration
+        // which itself defaults to DefaultLeaseDuration. The DefaultLeaseDuration constant remains as
+        // the documented type-level default for callers reading the public API.
+        var resolvedLease = leaseDuration ?? options.AggregatorLeaseDuration;
+        if (resolvedLease <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                $"MongoDbPersistenceOptions.AggregatorLeaseDuration must be strictly positive (was {resolvedLease}).");
+        }
+        _leaseDuration = resolvedLease;
 
         // Aggregator state is correctness-sensitive: w:0 makes RemoveDataAsync's IsAcknowledged
         // gate silently succeed, breaking the documented ConcurrencyException contract on

@@ -34,4 +34,13 @@ public sealed class MongoDbPersistenceOptions
     /// be positive.
     /// </summary>
     public TimeSpan TimeoutLockLeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// Gets or sets the lease duration applied when an aggregator snapshot is claimed
+    /// for dispatch. A worker that crashes mid-flush holds the rows for at most this
+    /// long before another worker may reclaim them. Shorter leases recover faster from
+    /// crashed handlers; longer leases are safer for handlers with variable dispatch
+    /// latency. Must be positive.
+    /// </summary>
+    public TimeSpan AggregatorLeaseDuration { get; set; } = TimeSpan.FromMinutes(5);
 }
