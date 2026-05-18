@@ -29,11 +29,21 @@ public interface IConsumer : IAsyncDisposable
     /// <see cref="IAsyncDisposable.DisposeAsync"/>. Idempotent.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The default-interface-method is a no-op so existing third-party
     /// <see cref="IConsumer"/> implementations remain source-compatible. Custom
     /// transports that want graceful shutdown semantics should override this — without
     /// an override, <c>Bus.StopConsumingAsync</c> only flips the consuming flag and
     /// the broker keeps delivering until DI disposal.
+    /// </para>
+    /// <para>
+    /// <b>Handler cooperation.</b> Drain semantics depend on every in-flight handler
+    /// observing the <see cref="CancellationToken"/> threaded through dispatch. A
+    /// handler that performs synchronous I/O or ignores its <c>CancellationToken</c>
+    /// will block the drain for the full duration of that work. Implementations
+    /// should bound their own drain wait by the host's graceful-shutdown grace
+    /// window rather than waiting indefinitely.
+    /// </para>
     /// </remarks>
     Task StopConsumingAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
 

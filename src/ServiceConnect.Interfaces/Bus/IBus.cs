@@ -203,6 +203,16 @@ public interface IBus : IAsyncDisposable
     /// To resume consumption, dispose this bus and create a new instance.
     /// </para>
     /// </summary>
+    /// <remarks>
+    /// <b>Handler cooperation is required for prompt shutdown.</b> The framework signals
+    /// graceful stop by cancelling the per-message <see cref="CancellationToken"/> threaded
+    /// through handler dispatch and by closing the transport admission gate. A handler that
+    /// performs synchronous I/O or ignores its <c>CancellationToken</c> will block the
+    /// shutdown grace window for the full duration of that work, up to the configured
+    /// <see cref="Configuration.IBusConfiguration.DisposeTimeout"/>. Use cancellation-aware async APIs
+    /// (<c>HttpClient.GetAsync</c>, database drivers that accept a <c>CancellationToken</c>,
+    /// etc.) inside handlers to ensure prompt shutdown.
+    /// </remarks>
     Task StopConsumingAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
