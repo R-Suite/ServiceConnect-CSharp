@@ -179,10 +179,8 @@ public async Task HandleAsync(InventoryReserved message, FulfillmentState data, 
 {
     data.InventoryReserved = true;
 
-    await context.Bus.RequestTimeoutAsync(
-        message.CorrelationId,
-        TimeSpan.FromHours(24),
-        context.CancellationToken);
+    // Use data.CorrelationId — the saga's own id — not message.CorrelationId.
+    await context.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromHours(24), context.CancellationToken);
 }
 
 public Task HandleAsync(TimeoutMessage message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)

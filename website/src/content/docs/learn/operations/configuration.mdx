@@ -47,7 +47,7 @@ Retry knobs drive the error-handling pipeline — see [Error Handling](/ServiceC
 
 ### TLS
 
-**As of v8, TLS is enabled by default.** `SslEnabled` defaults to `true`, and ServiceConnect connects on the default AMQPS port (5671). For production deployments connecting to a broker with TLS configured, no transport setup is required beyond `Host` and credentials.
+TLS is enabled by default — `SslEnabled` defaults to `true`, and ServiceConnect connects on the default AMQPS port (5671). For production deployments connecting to a broker with TLS configured, no transport setup is required beyond `Host` and credentials.
 
 For brokers behind TLS with custom server names or client certificates:
 
@@ -88,7 +88,15 @@ The keys are passed through to the RabbitMQ client; see that client's documentat
 A typed `Action<RabbitMqOptions>` overload of `UseRabbitMQ` is available when you prefer named properties over string-keyed settings:
 
 ```csharp
-builder.UseRabbitMQ("amqps://user:pass@rabbit.prod.example.com/vhost", opts =>
+builder.UseRabbitMQ(transport =>
+{
+    transport.Host = "rabbit.prod.example.com";
+    transport.Username = "user";
+    transport.Password = "pass";
+    transport.VirtualHost = "/vhost";
+    transport.SslEnabled = true;
+});
+builder.UseRabbitMQ(opts =>
 {
     opts.PrefetchCount = 25;
     opts.HeartbeatTime = 30;

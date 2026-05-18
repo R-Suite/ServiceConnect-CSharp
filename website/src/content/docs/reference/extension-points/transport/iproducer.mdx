@@ -62,6 +62,33 @@ Publishes `body` to all subscribers registered for `type`. The broker routes the
 
 ---
 
+### `PublishAsync` (routing-key overload)
+
+```csharp
+Task PublishAsync(
+    Type type,
+    ReadOnlyMemory<byte> body,
+    string? routingKey,
+    IReadOnlyDictionary<string, string>? headers = null,
+    CancellationToken cancellationToken = default);
+```
+
+Publishes `body` to subscribers of `type`, forwarding `routingKey` to the transport for topic-exchange dispatch. This overload is a default-interface method: implementations that predate it fall back to the no-routing-key `PublishAsync` overload, silently dropping the key. First-party transports (RabbitMQ) override this to honour the key on the wire.
+
+**Parameters**
+
+- `type` — the CLR type of the message.
+- `body` — the serialised payload bytes.
+- `routingKey` — the transport routing key. Pass an empty string for fanout dispatch. Pass `null` to use the transport's default routing behaviour (identical to calling the no-routing-key overload).
+- `headers` — optional string-valued transport headers.
+- `cancellationToken` — cancels the in-progress send.
+
+**Default implementation.** Ignores `routingKey` and delegates to `PublishAsync(type, body, headers, cancellationToken)`. Third-party producers that have not overridden this method silently drop the key — this is the same behaviour as before the overload was added.
+
+**Relationship to `SupportsRoutingKey`.** `SupportsRoutingKey` returns `false` for any producer that has not overridden this overload. The bus emits a once-per-bus `LogWarning` when a caller supplies `PublishOptions.RoutingKey` and `SupportsRoutingKey` is `false`, so that topic-exchange dispatch failures are visible without a roundtrip to the broker. Custom producers that honour the routing key must override both this method and `SupportsRoutingKey`.
+
+---
+
 ### `SendAsync` (auto-routed)
 
 ```csharp
@@ -109,6 +136,35 @@ Sends `body` to `endPoint` directly. The producer does not consult queue mapping
 - `body` — the serialised payload bytes.
 - `headers` — optional string-valued transport headers.
 - `cancellationToken` — cancels the in-progress send.
+
+---
+
+### `SendAsync` (routing-slip hops overload)
+
+```csharp
+Task SendAsync(
+    string endPoint,
+    Type type,
+    ReadOnlyMemory<byte> body,
+    int? routingSlipHopsCompleted,
+    IReadOnlyDictionary<string, string>? headers = null,
+    CancellationToken cancellationToken = default);
+```
+
+Sends `body` to `endPoint`, carrying the framework's routing-slip hop counter so it can be stamped authoritatively after middleware runs.
+
+**Parameters**
+
+- `endPoint` — the destination queue name.
+- `type` — the CLR type of the message; carried in headers for the receiver to resolve.
+- `body` — the serialised payload bytes.
+- `routingSlipHopsCompleted` — the hop count set by `Bus.RouteAsync`. When non-null, the value is stamped onto the outgoing headers as `HeaderKeys.RoutingSlipHopsCompleted` after the send middleware chain, so middleware cannot override the framework value. When null, no hop-count header is written.
+- `headers` — optional string-valued transport headers.
+- `cancellationToken` — cancels the in-progress send.
+
+**Default implementation.** When `routingSlipHopsCompleted` is non-null, the DIM injects the hop count into a copy of `headers` as `HeaderKeys.RoutingSlipHopsCompleted` (using `InvariantCulture` formatting) and delegates to `SendAsync(endPoint, type, body, (IReadOnlyDictionary<string,string>)injected, cancellationToken)`. When null, it delegates directly. First-party transports override to honour the separate parameter without the header-copy step.
+
+**Remarks.** This overload exists so the hop counter is stamped authoritatively — after all middleware has run — regardless of whether the producer has been upgraded to handle the parameter natively. Third-party producers that have not overridden this method still receive the correct wire stamp via the DIM's header-copy fallback.
 
 ---
 
@@ -271,7 +327,6 @@ public sealed class BrokerProducer : IProducer
         return PublishToBrokerAsync(endPoint, packet, headers, cancellationToken);
     }
 
-    public long MaximumMessageSize => 1_048_576;
     public bool IsHealthy => /* read connection state */ false;
     public bool HasAttemptedConnection => /* set when first send begins */ false;
 
@@ -353,9 +408,7 @@ public sealed class KafkaProducer : IProducer
         await _inner.ProduceAsync(endPoint, kafkaMsg, cancellationToken);
     }
 
-    public long MaximumMessageSize => 1_048_576; // 1MB Kafka default; raise to match broker config
-
-    // IProducer 7.x: lifecycle is owned exclusively by DisposeAsync. Health probes (IsHealthy +
+    // IProducer lifecycle is owned exclusively by DisposeAsync. Health probes (IsHealthy +
     // HasAttemptedConnection) are exposed via dedicated properties + GetHealthSnapshot.
     public bool IsHealthy => _inner is not null;
     public bool HasAttemptedConnection { get; private set; }

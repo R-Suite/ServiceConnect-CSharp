@@ -25,7 +25,7 @@ Processes an outgoing message and optionally hands off to the next middleware by
 - `cancellationToken` — cancels the operation before the transport acknowledges.
 
 **`SendContext` properties**
-- `Message` — the strongly-typed outgoing `Message` instance, when available.
+- `Message` — the strongly-typed outgoing `Message` instance; always present (`required`).
 - `MessageType` — the CLR `Type` of the outgoing message, resolved before the call.
 - `MessageBytes` — the already-serialized payload that will be written to the transport.
 - `Headers` — the mutable string-valued header dictionary for the outgoing envelope.

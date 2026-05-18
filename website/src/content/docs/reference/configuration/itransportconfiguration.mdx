@@ -177,7 +177,7 @@ SslProtocols SslProtocol { get; set; }
 
 Gets or sets the TLS protocol selection.
 
-**Remarks.** Prefer `SslProtocols.Tls12` or `SslProtocols.Tls13` in production; avoid the default `SslProtocols.None` handoff when you know the broker's supported versions.
+**Remarks.** Defaults to `SslProtocols.None`, which lets the runtime negotiate the best available protocol (TLS 1.3 where supported). Override only when you need to constrain to a specific version, e.g. for compliance.
 
 ---
 

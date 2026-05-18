@@ -85,7 +85,7 @@ Configures the correlation between `TMessage` and `TData`. The default implement
 </Aside>
 
 <Aside type="caution" title="ConfigureMapper must be pure">
-  The framework invokes `ConfigureMapper` twice per delivery: once before `HandleAsync` (to resolve the correlation key for the load) and once during persist (to write back the state record). Implementations must be pure with respect to handler-instance state — `ConfigureMapper` must not read or write instance fields, allocate shared resources, or produce side effects. A mapper that mutates state on the first call will produce incorrect behaviour on the second call within the same dispatch.
+  The framework invokes `ConfigureMapper` once per delivery; the same mapper instance is reused for both the initial saga lookup (before `HandleAsync`) and the post-handler persistence find. Implementations must be pure with respect to handler-instance state — `ConfigureMapper` must not read or write instance fields, allocate shared resources, or produce side effects.
 </Aside>
 
 ## Usage

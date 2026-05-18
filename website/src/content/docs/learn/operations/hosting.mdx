@@ -50,6 +50,17 @@ await bus.StartConsumingAsync(ct);
 
 The hosted service sees the flag is off and does nothing during `StartAsync`. `StopAsync` still stops on shutdown — it doesn't check the flag, because a stop-before-start is a cheap no-op.
 
+### Signalling readiness after auto-start
+
+When `AutoStartConsuming` is `true`, the bus calls `StartConsumingAsync` from inside `BusHostedService.StartAsync`. By the time the host reaches the running state, consuming has already begun. Hook `IHostApplicationLifetime.ApplicationStarted` for a single post-startup signal — logging, readiness probes, smoke tests — that fires once the host (including the bus) has reached the running state:
+
+```csharp
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStarted.Register(() => Console.WriteLine("bus consuming"));
+```
+
+See `examples/CustomFilterAndMiddleware/src/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer/Program.cs` for the pattern in context.
+
 ## The manual path (console apps)
 
 Short-lived scripts, request-only producers, and samples don't need the generic host. Resolve the bus from the provider and drive it yourself:
@@ -90,6 +101,7 @@ The `await using var provider` at the top takes care of disposing the bus on exi
 
 A few invariants that surface as exceptions if you break them:
 
+- **`StartAsync` fails when no `IProducer` is registered.** `BusHostedService.StartAsync` throws `InvalidOperationException` if no transport adapter has registered an `IProducer` — typically because no `UseRabbitMQ(...)` (or other transport extension) call was made. Set `BusConfiguration.AllowMissingProducer = true` for consume-only or in-process test buses that genuinely never publish.
 - **`StartConsumingAsync` on a bus with no registered consumer throws.** You need `UseRabbitMQ` (or another transport's `Use*` method) before the bus will have an `IConsumer` to start.
 - **Two `StartConsumingAsync` calls throw `InvalidOperationException("Already consuming")`.** The bus runs one consumer loop per `IBus` instance; if you need more parallelism, raise `BusConfiguration.ConsumerCount` ([Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/)).
 - **Stop is terminal.** Once `StopConsumingAsync` has been called, the underlying consumer is disposed and the bus cannot resume. A subsequent `StartConsumingAsync` throws `"Bus has been stopped; dispose it and create a new Bus instance to resume consuming."` If you need to restart, build a new `IBus` — which means, in practice, a new host or a new scope.

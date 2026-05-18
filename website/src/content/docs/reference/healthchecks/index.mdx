@@ -55,7 +55,7 @@ public static IHealthChecksBuilder AddServiceConnectBus(
     TimeSpan? timeout = null);
 ```
 
-Registers `BusConsumingHealthCheck`. The default overload uses `ActivatorUtilities.CreateInstance<BusConsumingHealthCheck>` so `IBus` is resolved from the DI container at probe time. Use the factory or keyed-services overload when multiple named bus instances are registered in the same DI container.
+Registers `BusConsumingHealthCheck`. The default overload resolves `IBus` via `GetRequiredService<IBus>()` inside a `PerProviderCache<BusConsumingHealthCheck>` factory, so the same probe instance is reused for the lifetime of the `IServiceProvider`. Use the factory or keyed-services overload when multiple named bus instances are registered in the same DI container.
 
 **Parameters (default overload)**
 - `builder` — the `IHealthChecksBuilder` returned by `services.AddHealthChecks()`.
@@ -182,14 +182,31 @@ The grace state is keyed on the `IBus` instance via a `ConditionalWeakTable`, so
 ```csharp
 public sealed class ConsumerConnectionHealthCheck : IHealthCheck
 {
+    // Default 30s recovery grace; system TimeProvider.
     public ConsumerConnectionHealthCheck(IConsumer consumer);
+
+    // Configurable recovery-grace window and injectable TimeProvider for tests.
+    public ConsumerConnectionHealthCheck(
+        IConsumer consumer,
+        TimeSpan recoveryGraceWindow,
+        TimeProvider timeProvider);
+
     public Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default);
 }
 ```
 
-Returns `HealthCheckResult.Healthy("Consumer connection is open.")` when `IConsumer.IsConnected` is `true`, otherwise `new HealthCheckResult(failureStatus, "Consumer connection is closed.")`.
+The check evaluates four observed states in order; the first match wins:
+
+1. **Broker-cancelled** — when `IConsumer.IsCancelledByBroker` is `true`. Returns `new HealthCheckResult(failureStatus, "Consumer connection is closed (broker cancelled the consumer).")`. Bypasses the grace window — `basic.cancel` (queue deleted, policy expired, mirror promoted) is a permanent failure; `IConsumer.IsConnected` can remain `true` while deliveries have stopped, so this check runs first.
+2. **Connected** — when `IConsumer.IsConnected` is `true`. Returns `Healthy("Consumer connection is open.")` and stamps the last-Healthy timestamp used by the recovery-grace path.
+3. **Stopped or disposed** — when `IConsumer.IsStopped` is `true`. Returns `new HealthCheckResult(failureStatus, "Consumer connection is closed (stopped or disposed).")`. Also bypasses grace; an intentional shutdown has no reconnect to wait for.
+4. **Within the recovery-grace window** — when the consumer has been observed Healthy at some prior point AND the time since that observation is less than `recoveryGraceWindow`, returns `Healthy("Consumer connection is closed, but within recovery grace (…).")`. This is the readiness-friendly path: a momentary broker disconnect (auto-recovery, network blip) does not crash-loop pods wired on liveness probes.
+
+If none of the above matches, the check returns `new HealthCheckResult(failureStatus, "Consumer connection is closed.")` where `failureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy`.
+
+The recovery-grace window defaults to **30 seconds** when the single-argument constructor is used. Pass `TimeSpan.Zero` to the 3-arg constructor to disable grace. The `TimeProvider` parameter is injectable for tests. The grace state is keyed on the `IConsumer` instance via a `ConditionalWeakTable`, so per-probe re-allocations performed by `HealthCheckService` do not reset the last-Healthy timestamp. A never-Healthy probe always reports Unhealthy regardless of the grace window.
 
 `IConsumer.IsConnected` reflects the transport client's last-known view of the broker connection. When the broker drops, the client raises a shutdown event and the property flips to `false`; on reconnect, it flips back. There is a millisecond-scale gap between the underlying connection drop and the event being observed — a probe inside that window can still see `Healthy`. This is the same gap any in-process check has, regardless of implementation.
 
@@ -207,7 +224,7 @@ public sealed class ProducerConnectionHealthCheck : IHealthCheck
 
 Uses `IProducer.HasAttemptedConnection` to distinguish the lazy-not-yet-tried state from a genuine failure:
 
-- `HasAttemptedConnection` is `false` → returns `Healthy("Producer has not yet attempted a connection.")`. This is the state before any publish or send has been issued; treating it as unhealthy would crash-loop pods unnecessarily.
+- `HasAttemptedConnection` is `false` → returns `Healthy("Producer has not yet attempted connection (lazy).")`. This is the state before any publish or send has been issued; treating it as unhealthy would crash-loop pods unnecessarily.
 - `HasAttemptedConnection` is `true` and `IProducer.IsHealthy` is `true` → returns `Healthy("Producer connection is open.")`.
 - `HasAttemptedConnection` is `true` and `IProducer.IsHealthy` is `false` → returns the failure result with status `failureStatus` and `"Producer connection is closed."`.
 

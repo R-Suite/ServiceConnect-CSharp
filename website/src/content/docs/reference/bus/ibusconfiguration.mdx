@@ -79,7 +79,7 @@ Func<Exception, CancellationToken, ValueTask>? ExceptionHandler { get; set; }
 
 Sets an async callback invoked when handler processing throws. Use for push-based telemetry or alerting that sits outside the normal logging pipeline.
 
-**Remarks.** The callback must not throw — any exception raised from `ExceptionHandler` is swallowed by the caller. For structured observability, prefer the pipeline's middleware and filters. The `CancellationToken` parameter is the consumer-loop token; observe it if the callback performs async I/O.
+**Remarks.** If the callback itself throws, the exception is caught and logged at `Error` level by the dispatcher; a flaky notification hook cannot block message processing. For structured observability, prefer the pipeline's middleware and filters. The `CancellationToken` parameter is the consumer-loop token; observe it if the callback performs async I/O.
 
 #### Synchronous callback
 
@@ -133,7 +133,7 @@ bool EnableRoutingSlipProcessing { get; set; }
 
 When true, the handler processor forwards messages along the destinations listed in the `RoutingSlip` header after each hop's handler completes. When false, routing-slip headers are silently ignored.
 
-**Remarks.** Defaults to true. In v8, destinations are validated by format only (non-null, non-empty, no embedded commas) — the `IsKnownQueue` check against locally-configured queue names was removed. Cross-service destinations are therefore permitted without any local queue registration.
+**Remarks.** Defaults to true. Destinations are validated by format only (non-null, non-empty, no embedded commas); cross-service destinations are permitted without any local queue registration.
 
 ---
 
@@ -155,9 +155,9 @@ When true, messages that the dispatcher runs to completion on but which no proce
 bool StrictReplyValidation { get; set; }
 ```
 
-When true, the request-reply manager validates that the reply payload's CLR type exactly matches the request site's expected reply type before completing the awaiting task. A mismatched reply is faulted with `InvalidOperationException` rather than silently coerced.
+When `true`, only locally-tracked request-reply exchanges are trusted as reply destinations; the header-based fallback that allows cross-bus callers to be recognised is disabled. When `false` (the default), any inbound message whose headers match the cross-bus heuristic — a non-empty `RequestMessageId`, a `SourceAddress`, a `MessageId`, no `ResponseMessageId`, and `DestinationAddress` equal to this queue — is also trusted as a request envelope.
 
-**Remarks.** Defaults to false. Enable in environments where a malformed/misrouted reply must be diagnosed loudly rather than tolerated. Strict validation costs one extra type check per reply on the hot path.
+**Remarks.** Defaults to false, preserving backward compatibility with cross-bus request-reply where a request originated on a different bus instance and the local `RequestReplyManager` has no record of it. The header-based fallback can be spoofed by any external producer that knows the queue name. Set to `true` when the service does not participate in cross-bus request-reply, or when all upstream callers are verified to route through a tracked `RequestReplyManager`.
 
 ---
 
@@ -176,12 +176,12 @@ Caps the number of destinations the routing-slip processor will forward a messag
 ### `DisposeTimeout`
 
 ```csharp
-TimeSpan DisposeTimeout { get; }
+TimeSpan DisposeTimeout { get; set; }
 ```
 
 The maximum time `IBus.DisposeAsync` waits for in-flight work to drain (graceful consumer cancel, last batch ack, persistor flush) before tearing down the broker connection. Defaults to **30 seconds**.
 
-**Remarks.** Read-only on the interface — populated from the builder's `ConfigureBus` callback (`bus.DisposeTimeout = ...`) and frozen at startup. Pass `Timeout.InfiniteTimeSpan` to wait indefinitely; pass `TimeSpan.Zero` to skip the drain entirely (suits CLI tools and tests). Startup throws if a non-positive, non-infinite value is configured.
+**Remarks.** Set via the builder's `ConfigureBus` callback (`bus.DisposeTimeout = ...`); the value is frozen at startup. Must be a strictly positive `TimeSpan`, or `Timeout.InfiniteTimeSpan` to wait indefinitely; zero or negative values are rejected at startup.
 
 ---
 
@@ -218,6 +218,18 @@ int MaxActiveStreams { get; set; }
 Caps the number of concurrently-tracked partial inbound streams `StreamProcessor` will admit before rejecting new sequences (warning log + drop). Defaults to **1,000**.
 
 **Remarks.** Each admitted stream holds a `MessageBusReadStream` instance, a packet dictionary, and a per-sequence record in the processor's active-stream map until completion, eviction, or fault. Without a slot ceiling, a producer (hostile or buggy) that opens streams without ever completing them would drive unbounded growth on the receiver. Raise for high-concurrency file-transfer workloads where 1,000 simultaneous in-flight reassemblies is too tight; lower to harden memory-constrained hosts. Snapshotted into the processor at construction — the configuration is frozen by the time the processor resolves from DI, so changes after `AddServiceConnect` returns are rejected. Startup throws if a non-positive value is configured.
+
+---
+
+### `AllowMissingProducer`
+
+```csharp
+bool AllowMissingProducer { get; set; }
+```
+
+When `false` (the default), `BusHostedService.StartAsync` throws `InvalidOperationException` at host start if no `IProducer` has been registered, surfacing a missing transport at host build time rather than at the first publish, send, or `CreateStream` call.
+
+**Remarks.** Defaults to false. Set to `true` only in tests or specialised in-memory scenarios that legitimately operate without a producer — for example, consume-only buses that never publish or send.
 
 ## Usage
 

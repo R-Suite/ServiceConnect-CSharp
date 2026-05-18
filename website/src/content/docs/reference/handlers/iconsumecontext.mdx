@@ -131,7 +131,7 @@ A request handler typically reads a pinch of metadata from `Headers`, does the w
 
 The internal `ConsumeScopeAccessor` that tracks the current message scope is **per-`Bus`-instance** — it is not a process-wide static. Two `Bus` instances running in the same AppDomain do not share scope state; each consumer loop writes only to its own accessor. This means:
 
-- A handler running on bus A cannot accidentally read the current message context set by bus A's consumer.  
+- A handler running on bus A cannot accidentally read the current message context set by bus B's consumer.  
 - A handler running on bus B is unaffected by concurrent dispatches on bus A.
 
 This matters in test scenarios that construct multiple `Bus` instances side-by-side in the same test process, and in multi-tenant application hosts that configure more than one bus registration. If your handler reaches for ambient context via the injected `IConsumeContext` property, it always receives the context for the exact bus that dispatched it.

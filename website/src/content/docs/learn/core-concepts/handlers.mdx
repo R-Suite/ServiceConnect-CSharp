@@ -127,12 +127,10 @@ You can combine approaches — enable scanning and also add a `HandlerReference`
 
 ## Handler lifetime
 
-**Handlers are always transient.** Each message dispatch resolves a fresh handler instance from the container.
-
-The context is passed as a parameter, so handlers are technically safe as singletons from a concurrency standpoint. However, ServiceConnect still resolves handlers as transient by default to keep their dependency lifetimes predictable and to avoid holding constructor-injected scoped services alive longer than a single message. ServiceConnect enforces the rule at registration time:
+ServiceConnect registers handlers as transient and rejects pre-registered singletons at `AddServiceConnect` time.
 
 ```csharp
-// This will throw at host startup:
+// This will throw during AddServiceConnect:
 services.AddSingleton<WorkSubmittedHandler>();
 services.AddServiceConnect(builder => { /* … */ });
 ```

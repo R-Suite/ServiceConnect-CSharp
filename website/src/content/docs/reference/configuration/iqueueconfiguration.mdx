@@ -110,7 +110,7 @@ Adds a single queue mapping for the specified message type.
 ### `AddQueueMapping`
 
 ```csharp
-void AddQueueMapping(Type messageType, IList<string> queues)
+void AddQueueMapping(Type messageType, IReadOnlyList<string> queues)
 ```
 
 Adds multiple queue mappings for the specified message type. Used when the same message must be sent to several services (for example the `OrderPlaced` event routed to both `shipping-service` and `invoicing-service`).

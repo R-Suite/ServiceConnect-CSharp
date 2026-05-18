@@ -29,6 +29,7 @@ The correlation mechanism is entirely in-memory. Pending requests are keyed by `
 ## Reference
 
 ```csharp
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 
 namespace ServiceConnect.Interfaces;
@@ -157,22 +158,19 @@ services.AddServiceConnect(builder =>
 });
 ```
 
-### Adapter for `IReplyStatusRequestReplyManager`
+### Companion contract: `IReplyStatusRequestReplyManager`
 
-The default `RequestReplyManager` also implements the internal `IReplyStatusRequestReplyManager` interface (`IsTrackedRequest`, `TryProcessReply`), which the reply consumer uses to filter messages and avoid deserializing replies for requests it is not tracking. If you replace `IRequestReplyManager` with a custom implementation, you have two options:
+The in-box dispatcher also depends on an internal interface, `IReplyStatusRequestReplyManager` (`IsTrackedRequest` + `TryProcessReply`), which the reply consumer uses to filter messages and avoid deserializing replies for requests it is not tracking. The default `RequestReplyManager` implements both `IRequestReplyManager` and this companion interface.
 
-1. Also implement `IReplyStatusRequestReplyManager` on your type and register it for both interfaces:
+`IReplyStatusRequestReplyManager` is `internal` to the `ServiceConnect` assembly. Third-party code cannot implement or reference it directly. If you register a custom type as `IRequestReplyManager` without also satisfying the companion contract, `AddServiceConnect` throws `InvalidOperationException` at startup because the required `IReplyStatusRequestReplyManager` registration is absent.
 
-```csharp
-builder.AddRegistration(svc =>
-{
-    svc.AddSingleton<MyDurableRequestReplyManager>();
-    svc.AddSingleton<IRequestReplyManager>(sp => sp.GetRequiredService<MyDurableRequestReplyManager>());
-    svc.AddSingleton<IReplyStatusRequestReplyManager>(sp => sp.GetRequiredService<MyDurableRequestReplyManager>());
-});
-```
+**Supported approaches for custom replacements:**
 
-2. Keep the default `RequestReplyManager` for `IReplyStatusRequestReplyManager` and only replace `IRequestReplyManager` — the reply consumer will still filter correctly, but the two implementations will not share state, so replies will not be routed to your custom implementation. This option is not recommended for most use cases.
+1. **Wrap or decorate the default implementation.** Register the default `RequestReplyManager` normally and forward calls from your outer type. This avoids the internal-contract problem entirely because the inner `RequestReplyManager` continues to satisfy `IReplyStatusRequestReplyManager`.
+
+2. **Intercept via filters or middleware.** Many customisation goals (telemetry, rate limiting, custom timeout behaviour) can be achieved by adding send or receive middleware rather than replacing the manager itself. Prefer this path when you do not need to change the correlation lifecycle.
+
+3. **Open an issue.** If your use case genuinely requires a fully independent replacement, file an issue in the ServiceConnect repository. Making `IReplyStatusRequestReplyManager` public (or merging it into the main interface) is the right fix; working around an internal contract is fragile.
 
 ## See also
 

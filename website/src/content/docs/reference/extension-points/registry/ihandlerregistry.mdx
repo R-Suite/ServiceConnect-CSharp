@@ -92,6 +92,39 @@ When the bus starts, the framework resolves `StartupValidatingHandlerRegistry`, 
 Because the constructor is called during DI resolution, the `IServiceProvider` passed in is the root provider. Scoped services are not available here; only singletons and transients can be resolved for inspection.
 </Aside>
 
+## `HandlerInterfaceKind` enum
+
+`HandlerInterfaceKind` discriminates which handler interface a `HandlerReference` was produced for. A single class that implements multiple handler interfaces produces one `HandlerReference` per interface, each carrying the appropriate `Kind`.
+
+```csharp
+namespace ServiceConnect.Interfaces;
+
+public enum HandlerInterfaceKind
+{
+    /// <summary>
+    /// The handler implements <see cref="IMessageHandler{TMessage}"/>.
+    /// </summary>
+    MessageHandler,
+
+    /// <summary>
+    /// The handler implements <see cref="IProcessHandler{TData,TMessage}"/>.
+    /// </summary>
+    ProcessHandler,
+
+    /// <summary>
+    /// The handler implements <see cref="IStreamHandler{TMessage}"/>.
+    /// </summary>
+    StreamHandler,
+
+    /// <summary>
+    /// The handler extends <see cref="Aggregator{TMessage}"/>.
+    /// </summary>
+    Aggregator,
+}
+```
+
+Custom `IHandlerRegistry` implementations and callers that inspect the registry's `HandlerReference` list use this enum to discriminate which handler interface a reference was produced for — for example, to apply different dispatch logic for `ProcessHandler` references versus `MessageHandler` references, or to filter the list to only `Aggregator` references when querying aggregator state.
+
 ## See also
 
 - [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — the handler model and registration conventions

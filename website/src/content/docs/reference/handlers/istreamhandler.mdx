@@ -32,31 +32,10 @@ Invoked once the full stream has arrived and been reassembled. The reassembled s
 - `stream` — the read stream over the reassembled payload bytes. Guaranteed non-null when invoked by the dispatcher.
 - `cancellationToken` — token to observe for cancellation; flows through from the dispatcher.
 
-**Remarks.** `ExecuteAsync` is async-first on this interface — await downstream I/O directly and pass the supplied `CancellationToken` through so long-running work can be cancelled. Disposing the stream (or reading it to completion) is the handler's responsibility; the pipeline does not automatically release it for you. The handler still occupies a consumer slot while it runs, so offload heavy work appropriately if the consumer concurrency budget is tight.
+**Remarks.** `ExecuteAsync` is async-first on this interface — await downstream I/O directly and pass the supplied `CancellationToken` through so long-running work can be cancelled. The stream is not `IDisposable` — the framework owns its lifetime via `StreamProcessor`. Handlers must not attempt to dispose it. Reading the stream to completion is the only handler-side action available. The handler still occupies a consumer slot while it runs, so offload heavy work appropriately if the consumer concurrency budget is tight.
 
-<Aside type="note" title="v8 migration — Stream property removed">
-  In v7 the pipeline set an ambient `Stream { get; set; }` property on the handler before calling `ExecuteAsync`. v8 passes the stream as a parameter instead.
-
-  ```csharp
-  // before (v7)
-  public class FileUploadStreamHandler : IStreamHandler<FileUpload>
-  {
-      public IMessageBusReadStream Stream { get; set; } = null!;
-      public async Task ExecuteAsync(FileUpload message, CancellationToken ct = default)
-      {
-          // read from Stream
-      }
-  }
-
-  // after (v8)
-  public class FileUploadStreamHandler : IStreamHandler<FileUpload>
-  {
-      public async Task ExecuteAsync(FileUpload message, IMessageBusReadStream stream, CancellationToken ct = default)
-      {
-          // read from stream
-      }
-  }
-  ```
+<Aside type="note" title="No ambient Stream property">
+  Stream handlers receive the read stream as an explicit `IMessageBusReadStream stream` parameter on `HandleAsync`. There is no property setter the framework writes between dispatches.
 </Aside>
 
 ## Usage

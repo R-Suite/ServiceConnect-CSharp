@@ -120,7 +120,7 @@ Implementations add fields such as `int Version`, `string ETag`, or `Guid RowId`
 ```csharp
 public interface IVersioned
 {
-    int Version { get; }
+    long Version { get; }
 }
 ```
 
@@ -196,7 +196,7 @@ public sealed class PostgresProcessManagerFinder : IProcessManagerFinder
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        var row = await conn.QuerySingleOrDefaultAsync<(Guid Id, string State, int Version)?>(
+        var row = await conn.QuerySingleOrDefaultAsync<(Guid Id, string State, long Version)?>(
             "SELECT id, state::text, version FROM process_manager_state WHERE id = @id",
             new { id = message.CorrelationId });
 
@@ -248,9 +248,9 @@ public sealed class PostgresPersistenceData<T> : IPersistenceData<T>
     where T : class, IProcessManagerData
 {
     public T    Data    { get; set; }
-    public int  Version { get; }
+    public long Version { get; }
 
-    public PostgresPersistenceData(T data, int version)
+    public PostgresPersistenceData(T data, long version)
     {
         Data    = data;
         Version = version;
@@ -279,7 +279,7 @@ public sealed class PostgresProcessManagerFinder : IProcessManagerFinder
         await using var conn = new NpgsqlConnection(_connectionString);
         await conn.OpenAsync(cancellationToken);
 
-        var row = await conn.QuerySingleOrDefaultAsync<(Guid Id, string State, int Version)?>(
+        var row = await conn.QuerySingleOrDefaultAsync<(Guid Id, string State, long Version)?>(
             "SELECT id, state::text, version FROM process_manager_state WHERE id = @id",
             new { id = message.CorrelationId });
 

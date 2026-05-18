@@ -11,10 +11,10 @@ public interface IBus : IAsyncDisposable
     Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
     Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
     Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
-    Task<TReply> SendRequestAsync<T, TReply>(T message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-        where T : Message where TReply : Message;
+    Task<TReply> SendRequestAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
+        where TRequest : Message where TReply : Message;
     Task RouteAsync<T>(T message, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default) where T : Message;
-    IMessageBusWriteStream CreateStream<T>(string endPoint) where T : Message;
+    IMessageBusWriteStream CreateStream<T>(string endpoint) where T : Message;
 
     Task StartConsumingAsync(CancellationToken cancellationToken = default);
     Task StopConsumingAsync(CancellationToken cancellationToken = default);
@@ -51,7 +51,7 @@ var bus = provider.GetRequiredService<IBus>();
 
 The builder composes four concerns:
 
-- **Transport** — which broker the bus talks to. `UseRabbitMQ` is the supported transport in v1.
+- **Transport** — which broker the bus talks to. `UseRabbitMQ` is the supported transport in v7.
 - **Queues** — the name of this service's queue, plus error and audit queue names, plus any message-to-queue routing for `SendAsync`. See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/).
 - **Bus** — runtime behaviour flags: handler scanning, auto-start, consumer count, exception handler. See `IBusConfiguration`.
 - **Persistence** — optional. Required for process managers, aggregators, and persisted timeouts. Configured via `UseMongoDbPersistence` or `UseInMemoryPersistence`.
@@ -112,7 +112,7 @@ var quote = await bus.SendRequestAsync<QuoteRequested, QuoteReady>(
     new QuoteRequested(Guid.NewGuid()) { Sku = "widget" });
 ```
 
-The caller `await`s the reply. Under the hood, ServiceConnect correlates the reply using the correlation id and a `ResponseMessageId` header.
+The caller `await`s the reply. Under the hood, ServiceConnect correlates the reply using the `ResponseMessageId` header, which the reply handler sets to the value of the outbound `RequestMessageId`.
 
 ### Route
 

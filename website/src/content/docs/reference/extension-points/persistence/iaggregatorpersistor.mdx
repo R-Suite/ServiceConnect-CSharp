@@ -159,6 +159,27 @@ Removes the records captured in a previously loaded snapshot.
 
 ---
 
+### `ReleaseSnapshotAsync`
+
+```csharp
+Task ReleaseSnapshotAsync(string name, IAggregatorSnapshot snapshot, CancellationToken cancellationToken = default);
+```
+
+Releases the lease held by the supplied snapshot so the rows become immediately re-claimable by a subsequent `GetSnapshotAsync`.
+
+**Parameters**
+- `name` — the logical aggregator name.
+- `snapshot` — the snapshot whose lease should be released.
+- `cancellationToken` — cancels the operation.
+
+**Default implementation.** Returns `Task.CompletedTask` immediately — a no-op. This is correct for any persistor that does not stamp a lease during `GetSnapshotAsync` (the in-memory store and third-party implementations that predate this method fall into this category). The no-op semantics match a persistor where rows are always re-claimable by id alone.
+
+**Override requirement.** Persistors that stamp a `LockedBy`/`LockExpiresAt` pair on rows during snapshot acquisition — the MongoDB persistor does — **must** override this method to clear those columns for the snapshot's session id. Without an override, a handler failure leaves the rows leased until the persistor's lease TTL expires (5 minutes on the MongoDB persistor by default). During that window the next redelivery's `GetSnapshotAsync` returns an empty snapshot, and the handler is never re-invoked with the buffered records.
+
+**Remarks.** Called by the aggregator processor immediately on handler failure, before the delivery is nacked back to the broker. The retry-queue redelivery arrives after the explicit release rather than after the TTL expiry, keeping the aggregate's observed latency close to the broker's retry interval.
+
+---
+
 ### `CountAsync`
 
 ```csharp
@@ -241,6 +262,13 @@ public sealed class PostgresAggregatorPersistor : IAggregatorPersistor
 
     public Task<int> CountAsync(string name, CancellationToken cancellationToken = default)
         => throw new NotImplementedException();
+
+    // ReleaseSnapshotAsync has a default implementation on the interface that returns
+    // Task.CompletedTask (no-op). For a store that does not lease rows during
+    // GetSnapshotAsync — like this Postgres sketch — the DIM default is correct and no
+    // override is needed. Persistors that stamp a lock on snapshot acquisition (e.g.
+    // MongoDB) must override to clear the lock on failure so rows are immediately
+    // re-claimable.
 
     // CountResolvedAsync has a default implementation on the interface that delegates
     // to CountAsync — override here if you want a cheaper "type-resolvable rows only"

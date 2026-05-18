@@ -34,31 +34,8 @@ Invoked once per delivered message. The dispatch pipeline passes the per-message
 
 **Remarks.** The generic parameter is constrained to `Message`, matching the constraint on `IBus.PublishAsync` and `IBus.SendAsync`. Keep the handler's work inside the awaited task — the pipeline acknowledges the broker only once this task completes successfully.
 
-<Aside type="note" title="v8 migration — Context property removed">
-  In v7 the pipeline set an ambient `Context { get; set; }` property on the handler before calling `HandleAsync`. v8 passes the context as a parameter instead, removing the property.
-
-  ```csharp
-  // before (v7)
-  public class OrderHandler : IMessageHandler<OrderPlaced>
-  {
-      public IConsumeContext Context { get; set; } = null!;
-      public Task HandleAsync(OrderPlaced msg, CancellationToken ct = default)
-      {
-          var bus = Context.Bus;
-          // ...
-      }
-  }
-
-  // after (v8)
-  public class OrderHandler : IMessageHandler<OrderPlaced>
-  {
-      public Task HandleAsync(OrderPlaced msg, IConsumeContext context, CancellationToken ct = default)
-      {
-          var bus = context.Bus;
-          // ...
-      }
-  }
-  ```
+<Aside type="note" title="No ambient Context property">
+  Handlers receive the consume context as an explicit `IConsumeContext` parameter on `HandleAsync`. There is no property setter the framework writes between dispatches — the context flows in with the message.
 </Aside>
 
 ## Usage

@@ -39,7 +39,7 @@ A `Source` field on the reply is a convention worth borrowing — the requester 
 
 ## The requester
 
-Scatter-Gather uses `SendRequestMultiAsync<TRequest, TReply>`. The destination queues come from the queue mapping configured at startup — register the request type against the responder queues and ServiceConnect fans the request out to all of them on every call. You receive a `List<TReply>`:
+Scatter-Gather uses `SendRequestMultiAsync<TRequest, TReply>`. The destination queues come from the queue mapping configured at startup — register the request type against the responder queues and ServiceConnect fans the request out to all of them on every call. You receive an `IList<TReply>`:
 
 ```csharp
 // Requester/Program.cs
@@ -100,6 +100,36 @@ public sealed class SearchRequestHandler : IMessageHandler<SearchRequest>
 The responders don't know each other. They don't coordinate. Each one sees a `SearchRequest`, runs its own search, and replies. The requester is the only place that knows there are multiple responders.
 
 Run as many as you want — add catalog-c later and just include `"catalog-c"` in the queue mapping when you start the requester. The responder side doesn't change.
+
+## Broadcast variant — `PublishRequestAsync`
+
+`SendRequestMultiAsync` requires the requester to know its responders at startup: every destination must be listed in the queue mapping. When the set of responders is dynamic — services that come and go independently, a developer machine that joins a shared environment, anything you'd otherwise discover at runtime — `PublishRequestAsync` is the broadcast alternative. The request travels through the request type's pub/sub exchange, every subscriber receives it, and a callback fires for each reply that arrives:
+
+```csharp
+var replies = new List<SearchResponse>();
+await bus.PublishRequestAsync<SearchRequest, SearchResponse>(
+    new SearchRequest(Guid.NewGuid()) { Query = "widgets" },
+    reply => { lock (replies) { replies.Add(reply); } },
+    new RequestOptions
+    {
+        ExpectedReplyCount = 2,
+        Timeout = 30_000,
+    });
+
+foreach (var reply in replies)
+    Console.WriteLine($"{reply.Source}: {reply.Hits.Count} hits");
+```
+
+Compared to `SendRequestMultiAsync`:
+
+- **No queue mapping required** — anybody who subscribes to `SearchRequest` is automatically a responder. The requester doesn't list responder queues.
+- **`onReply` callback** — replies are surfaced one at a time via the callback rather than returned as a list. The returned `Task` completes when `ExpectedReplyCount` arrives or the timeout elapses; aggregate inside the callback if you need a list.
+- **`RequestOptions.EndPoint` must be null/empty** — `PublishRequestAsync` is fanout-only. A non-empty `EndPoint` throws `ArgumentException`; use `SendRequestAsync` for single-destination requests.
+- **Callback exceptions are fatal** — an exception thrown from `onReply` faults the awaited task, closes the request, and silently drops subsequent matching replies. Wrap the body in `try/catch` if you want log-and-continue per-reply semantics.
+
+Use `SendRequestMultiAsync` when the responder list is a fixed deployment concern (you want the queue mapping to fail-fast at startup if a responder queue is misspelled). Use `PublishRequestAsync` when responders are discovered dynamically and the requester should not hard-code the list. The reply-count semantics described below apply to both methods.
+
+See `examples/ScatterGather` for the `PublishRequestAsync` form in a runnable project.
 
 ## Reply-count semantics
 

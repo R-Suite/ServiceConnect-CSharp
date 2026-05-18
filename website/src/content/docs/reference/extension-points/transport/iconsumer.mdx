@@ -111,6 +111,7 @@ public sealed class ConsumeEventResult
     public bool Success { get; init; }
     public bool NotHandled { get; init; }
     public Exception? Exception { get; init; }
+    public bool TerminalFailure { get; init; }
 }
 ```
 
@@ -120,6 +121,7 @@ Returned by the `ConsumerEventHandler` to communicate the processing outcome bac
 - `Success = false` — processing failed; the transport should nack, requeue, or move the message to the dead-letter destination according to its policy.
 - `NotHandled = true` — the dispatcher ran to completion but no processor claimed the message. Distinct from a failure; the transport should honour [`IBusConfiguration.DeadLetterUnhandledMessages`](../../../bus/ibusconfiguration/#deadletterunhandledmessages) when deciding whether to ack or route the delivery to the error exchange.
 - `Exception` — if non-null, the exception that caused the failure. The transport may log or attach this to the nack decision.
+- `TerminalFailure = true` — the failure is permanent: the message is structurally malformed (for example, an unparseable wire payload) and retrying will produce the same outcome. Transport implementers **must** route `TerminalFailure = true` directly to the error exchange, bypassing the retry queue entirely. Burning the retry budget on a poison payload that no amount of redelivery will fix is wasteful and delays detection. The dispatcher sets this flag on payload-level deserialisation failures (`JsonException`, `NotSupportedException` from a converter mismatch); handler-thrown exceptions are non-terminal and follow the normal retry path.
 
 ---
 
@@ -179,7 +181,7 @@ public sealed class BrokerConsumer : IConsumer
 
     public async Task StartConsumingAsync(
         string queueName,
-        IList<string> messageTypes,
+        IReadOnlyList<string> messageTypes,
         ConsumerEventHandler eventHandler,
         CancellationToken cancellationToken = default)
     {
@@ -259,7 +261,7 @@ public sealed class KafkaConsumer : IConsumer
 
     public async Task StartConsumingAsync(
         string queueName,
-        IList<string> messageTypes,
+        IReadOnlyList<string> messageTypes,
         ConsumerEventHandler eventHandler,
         CancellationToken cancellationToken = default)
     {

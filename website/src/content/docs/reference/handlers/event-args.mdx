@@ -20,10 +20,20 @@ Carries the raw message data received by the telemetry consume pipeline.
 ### `Message`
 
 ```csharp
-public byte[] Message { get; init; } = Array.Empty<byte>();
+public byte[] Message { get; init; } = [];
 ```
 
 Gets the raw message body bytes as received from the transport, before any deserialisation.
+
+---
+
+### `BodySize`
+
+```csharp
+public int BodySize { get; init; }
+```
+
+Gets the on-wire body length in bytes. Always populated by the consume middleware, even when `Message` is the empty sentinel array because no enricher requested the materialised bytes. Used to stamp the OTel `messaging.message.body.size` attribute correctly on every consume span.
 
 ---
 
@@ -43,7 +53,7 @@ Gets the message type name taken from the transport headers. Useful when an obse
 public IReadOnlyDictionary<string, object> Headers { get; init; }
 ```
 
-Gets the transport headers associated with the consumed message. The getter lazily allocates an empty dictionary when none was supplied.
+Gets the transport headers associated with the consumed message. Defaults to an empty case-sensitive dictionary when no headers are supplied.
 
 **Remarks.** Header values are typed as `object` because transports expose strings, byte arrays, and numeric values through the same channel. Decode defensively when reading. The dictionary is read-only; middleware that needs to produce a modified header bag must construct a new `ConsumeEventArgs` with a fresh dictionary.
 
@@ -80,6 +90,18 @@ public Exception? Exception { get; init; }
 ```
 
 The exception raised by the consumer, if any. Null on success.
+
+---
+
+### `TerminalFailure`
+
+```csharp
+public bool TerminalFailure { get; init; }
+```
+
+Whether the failure is terminal — the message is permanently malformed (e.g. a JSON parse failure) and retrying will produce the identical failure. When `true`, transports bypass the retry queue and route the message directly to the error exchange rather than burning the retry budget on a poison payload.
+
+**Remarks.** Distinct from `Success`=false: a terminal failure reflects a structural fault in the payload itself (deserialisation failure), not a transient handler error. Handler-thrown exceptions are non-terminal and remain eligible for retry. Transports that do not honour this flag fall back to the normal retry path.
 
 ---
 

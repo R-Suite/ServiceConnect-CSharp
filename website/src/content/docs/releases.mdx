@@ -23,9 +23,9 @@ Match the major versions of the packages you reference. `ServiceConnect` 7.x exp
 
 For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
 
-## v8 highlights
+## v7 — public-API tightening
 
-Version 8 is a public-API tightening pass: shrinks the surface, removes legacy abstractions, and replaces Newtonsoft.Json with System.Text.Json across the shipped packages. Upgrading from v7 requires code changes; the breaking-change list below is exhaustive for Group A — the v7→v8 public-API tightening pass spanning Phases A.1, A.2, and A.3.
+This pass shrinks the public surface, removes legacy abstractions, and replaces Newtonsoft.Json with System.Text.Json across the shipped packages. The breaking-change list below covers every API change in the tightening pass; the second v7 section ([v7 — reliability, security, observability](#v7--reliability-security-observability)) covers the orthogonal work that landed in the same release.
 
 ### Breaking — `IHasCorrelationId` interface
 
@@ -89,9 +89,9 @@ Down from nine. The `byte[] Serialize<T>(T)` overload, the `byte[]`/`ReadOnlySpa
 
 The production `ServiceConnect` package no longer pulls `Newtonsoft.Json`. Consumers that relied on the transitive flow must add their own `<PackageReference Include="Newtonsoft.Json" />`.
 
-Wire format is JSON-equivalent to the v7 Newtonsoft default for typical messages. Cross-version round-trip is enforced on every PR by `ServiceConnect.SerializationCompatTests` (10 representative `Message` types × 4 round-trip channels + pathological-input tests). The corpus is the safety net for v7↔v8 mixed deployments.
+Wire format is JSON-equivalent to the v6 Newtonsoft default for typical messages. Cross-version round-trip is enforced on every PR by `ServiceConnect.SerializationCompatTests` (10 representative `Message` types × 4 round-trip channels + pathological-input tests). The corpus is the safety net for v6↔v7 mixed deployments.
 
-**Documented behaviour changes** versus v7 Newtonsoft (released-as-rejected v8 inputs):
+**Documented behaviour changes** versus the v6 Newtonsoft default (inputs the v7 serialiser rejects):
 
 - **`NaN` / `Infinity` doubles in JSON** — STJ rejects; Newtonsoft tolerated. Producers emitting these must serialise as `null` or use a custom converter.
 - **JSON nesting deeper than 32 levels** — STJ rejects via `MaxDepth = 32` (matches `HeaderDecoder` cap). Newtonsoft tolerated.
@@ -106,7 +106,7 @@ Wire format is JSON-equivalent to the v7 Newtonsoft default for typical messages
 - `DefaultIgnoreCondition = Never` (emit nulls like `NullValueHandling.Include`)
 - ISO 8601 round-trip dates with `DateTimeKind` preservation
 
-`Newtonsoft.Json` remains a dependency of `ServiceConnect.Persistence.InMemory` (DeepClone helper) and `ServiceConnect.Client.RabbitMQ` (one MessageRetryHandler exception-stamp call site) — both for unrelated, scoped reasons.
+`Newtonsoft.Json` has been removed from every production package; `ServiceConnect.Persistence.InMemory`'s `DeepClone` helper and `ServiceConnect.Client.RabbitMQ`'s `MessageRetryHandler` both use `System.Text.Json` directly. The reference remains only in the `ServiceConnect.SerializationCompatTests` test project, which keeps a Newtonsoft channel alive specifically to enforce v6↔v7 wire compatibility.
 
 ### Breaking — `IProducer` body parameters are `ReadOnlyMemory<byte>`; headers are `IReadOnlyDictionary<string,string>?`
 
@@ -181,7 +181,7 @@ The previous runtime guard preventing both `EndPoint` and `EndPoints` from being
 
 ### Breaking — Streaming body-type cascade
 
-`IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` align with the v8 `ROM<byte>`-typed surface:
+`IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` align with the `ROM<byte>`-typed surface:
 
 ```csharp
 // IMessageBusReadStream.Write:
@@ -201,7 +201,7 @@ The outbound write path is now genuinely zero-copy (no internal buffer copy betw
 
 ### Breaking — TLS is on by default
 
-`TransportConfiguration.SslEnabled` defaults to `true` in v8 (was `false` in v7). The framework now connects on AMQPS port 5671 by default; production deployments with TLS-configured brokers no longer need any transport setup beyond `Host` and credentials.
+`TransportConfiguration.SslEnabled` now defaults to `true` (was `false` in v6). The framework connects on AMQPS port 5671 by default; production deployments with TLS-configured brokers no longer need any transport setup beyond `Host` and credentials.
 
 **Migration.** If your broker runs without TLS — most localhost dev setups do — explicitly opt out:
 
@@ -215,33 +215,29 @@ builder.ConfigureTransport(t =>
 
 ServiceConnect emits a `Warning`-level log under the `ServiceConnect.Client.RabbitMQ` category when plaintext is configured against a non-loopback host. The warning is filterable via standard `Microsoft.Extensions.Logging` category configuration; it is NOT an error and the framework still connects.
 
-**Why.** ServiceConnect-CSharp v7 defaulted to plaintext for ergonomic localhost dev. v8 inverts the default to align with secure-by-default norms — production deployments connecting over plaintext to a non-loopback broker are almost always a misconfiguration, and the warning catches the rest.
-
-### Breaking — `IQueueConfiguration.AuditRoutingKey` removed
-
-v7 added `AuditRoutingKey` but the audit publish path always bound to the audit exchange with the empty routing key — the configured value was reserved and never honoured. The knob is removed in v8 to keep the public API honest. Callers that set this property must drop the assignment; the resulting audit topology is identical to what they were getting in v7. If the feature lands later it will be reintroduced without breaking change at that point.
+**Why.** v6 defaulted to plaintext for ergonomic localhost dev. v7 inverts the default to align with secure-by-default norms — production deployments connecting over plaintext to a non-loopback broker are almost always a misconfiguration, and the warning catches the rest.
 
 ### Breaking — Aggregator persistor `Name` partition value changed
 
 The `name` partition key passed to `IAggregatorPersistor` changed from the closed-generic base type's `FullName` to the concrete user-subclass `FullName`.
 
-**Before (v7):** the framework called `typeof(Aggregator<OrderShipped>).FullName`, which embeds the full assembly-qualified type argument:
+**Before (v6):** the framework called `typeof(Aggregator<OrderShipped>).FullName`, which embeds the full assembly-qualified type argument:
 
 ```
 ServiceConnect.Aggregator`1[[MyApp.Sagas.OrderShipped, MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]
 ```
 
-**After (v8):** the framework calls `typeof(OrderShippedAggregator).FullName`, which is just the concrete subclass name:
+**After (v7):** the framework calls `typeof(OrderShippedAggregator).FullName`, which is just the concrete subclass name:
 
 ```
 MyApp.Sagas.OrderShippedAggregator
 ```
 
-Any MongoDB rows (or other persistent store rows) written by v7 carry the old `Name` value. v8 code queries on the new value and never sees those rows — they accumulate indefinitely, consuming storage and causing aggregation conditions to stall.
+Any MongoDB rows (or other persistent store rows) written by v6 carry the old `Name` value. v7 code queries on the new value and never sees those rows — they accumulate indefinitely, consuming storage and causing aggregation conditions to stall.
 
 #### Migration — rename existing aggregator state
 
-**Run this BEFORE restarting your services on v8.** Rows under the old `Name` are invisible to v8 code and accumulate indefinitely.
+**Run this BEFORE restarting your services on v7.** Rows under the old `Name` are invisible to v7 code and accumulate indefinitely.
 
 For each aggregator in your codebase, find the old name (`typeof(Aggregator<YourMessage>).FullName`, with the embedded assembly-qualified type argument) and the new name (`typeof(YourConcreteAggregator).FullName`), then run the following against your MongoDB database. The collection name is `Aggregator` (the default; substitute if you passed a custom collection name to the persistor constructor).
 
@@ -269,7 +265,7 @@ db.Aggregator.countDocuments({ Name: { $regex: /^ServiceConnect\.Aggregator`1\[/
 
 ServiceConnect now emits operator-grade metrics via `System.Diagnostics.Metrics`. Four instruments under the OTel `messaging.*` namespace (publish/process duration histograms, published/consumed message counters with outcome dimensions) plus five ServiceConnect-specific extensions (`messaging.serviceconnect.retry.attempts / retry.drops / publish.confirm_timeouts / audit.drops / outgoing_filters.blocked`) and an in-flight UpDownCounter.
 
-OpenTelemetry users wire them with `MeterProvider.AddServiceConnectInstrumentation()` from the `ServiceConnect.Telemetry` package — which transitively brings `OpenTelemetry.Api` ≥ 1.15.3 (the patched line for [GHSA-g94r-2vxg-569j](https://github.com/advisories/GHSA-g94r-2vxg-569j)). Apps pinning an older `OpenTelemetry` line will see a NuGet downgrade warning during restore; bump the pin to a 1.11+ release alongside the v8 upgrade. Without OTel, attach a `MeterListener` to the `ServiceConnect.Bus` meter.
+OpenTelemetry users wire them with `MeterProvider.AddServiceConnectInstrumentation()` from the `ServiceConnect.Telemetry` package — which transitively brings `OpenTelemetry.Api` ≥ 1.15.3 (the patched line for [GHSA-g94r-2vxg-569j](https://github.com/advisories/GHSA-g94r-2vxg-569j)). Apps pinning an older `OpenTelemetry` line will see a NuGet downgrade warning during restore; bump the pin to a 1.11+ release alongside the v7 upgrade. Without OTel, attach a `MeterListener` to the `ServiceConnect.Bus` meter.
 
 Always-on: instruments are zero-cost when no listener subscribes — operator opt-in is wiring the listener, not changing config. See [Observability — Metrics](/ServiceConnect-CSharp/learn/operations/observability/#metrics) for the full catalogue and tag schema.
 
@@ -277,9 +273,9 @@ Bundled: connection-lifecycle Info logs (`ConnectionOpened` / `ProducerConnectio
 
 Additive — no API breaks.
 
-## v7 highlights
+## v7 — reliability, security, observability
 
-Version 7 is a reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. If you are upgrading from v6, read the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
+A reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. Bundled into the same v7 release as the [public-API tightening](#v7--public-api-tightening) section above. If you are upgrading from v6, read both sections plus the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
 
 ### Supported runtimes
 
@@ -503,7 +499,6 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **`SendOptions.Headers`** and **`PublishOptions.Headers`** are typed as `IReadOnlyDictionary<string, string>?`. Pass any `Dictionary<string, string>`; the framework will not iterate a dictionary another thread might be mutating.
 - **`IMessageHandler<T>.Context`** and **`IProcessHandler<T>.Context`** are declared non-nullable. Initialise with `= null!;` to satisfy the nullable-reference analyser — the framework guarantees `Context` is populated before `HandleAsync`.
 - **`OutgoingEventArgs.Headers`** is `init`-only — subscribers can mutate individual entries (e.g. stamp a `traceparent`) but cannot swap the whole dictionary out.
-- **`IQueueConfiguration`** gains **`AuditRoutingKey`** for routing audit publishes into a topic/direct exchange. (Removed again in v8 — see the v8 breaking-changes list.)
 - **`RequestOptions.Default`** returns a fresh instance per access; the previous singleton was mutable and leaked between callers.
 
 ### Mongo timeout-store + lease guards
@@ -511,7 +506,7 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 **Bug fixes**
 
 - **Lease-expiry semantics restored across both persistors.** `MongoDbTimeoutStore.RemoveDispatchedTimeoutAsync` and `ReleaseDispatchedTimeoutAsync` now reject calls whose lease has expired, throwing `ConcurrencyException`. `InMemoryTimeoutStore` matches the contract exactly (cross-persistor parity). The owned-row read-back inside `GetTimeoutsBatchAsync` also re-checks the lease before returning rows.
-- **Mongo timeout-store indexes match the actual due query.** Added composite index `(Time, Locked, LockExpiresAt)` covering both branches of the OR-shaped due filter. Legacy `(Locked, Time)` index is dropped on first startup of v8 (idempotent over `IndexNotFound`).
+- **Mongo timeout-store indexes match the actual due query.** Added composite index `(Time, Locked, LockExpiresAt)` covering both branches of the OR-shaped due filter. The legacy `(Locked, Time)` index is dropped on first startup after upgrading (idempotent over `IndexNotFound`).
 - **Mongo session-establishment fallback broadened.** Standalone-mongod / configuration / transient driver errors during `StartSessionAsync` no longer fail the whole poll — the persistor falls back to the unsessioned path with a Warning log.
 - **Cancellation between UpdateMany and FindAsync no longer orphans leases.** A best-effort lease release runs in a `catch (OperationCanceledException)` block before propagating the cancellation. Recovery is immediate; reaper / lease-expiry remains the ultimate fallback.
 - **Candidate sort tie-breaker.** Timeouts with identical `Time` are now ordered by `Id` ascending, eliminating starvation under heavy bursts.
@@ -519,9 +514,9 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 
 **Behaviour changes**
 
-- **Mongo index migration on first startup.** Existing v7 deployments upgrading to v8 will issue `DropOneAsync("Locked_1_Time_1")` once on first startup. Idempotent over `IndexNotFound`.
+- **Mongo index migration on first startup.** v6 deployments upgrading to v7 issue `DropOneAsync("Locked_1_Time_1")` once on first startup. Idempotent over `IndexNotFound`.
 - **`InMemoryPersistenceOptions` (breaking).** `InMemoryTimeoutStore`'s ctor changes to take `InMemoryPersistenceOptions` (and an internal `(options, state, timeProvider)` overload). Callers using `new InMemoryTimeoutStore("", "", clock)` must pass `new InMemoryPersistenceOptions()` instead. `UseInMemoryPersistence` accepts an optional `Action<InMemoryPersistenceOptions>? configure = null` delegate (mirrors `UseMongoDbPersistence`). The DI registration honours the existing default lease duration (`TimeSpan.FromMinutes(5)`) so most users see no change.
-- **Expired-lease tolerance removed.** Workers holding a stale lease that previously got away with `Remove`/`Release` now observe `ConcurrencyException`. This matches the documented contract; callers were silently incorrect under v7.
+- **Expired-lease tolerance removed.** Workers holding a stale lease that previously got away with `Remove`/`Release` now observe `ConcurrencyException`. This matches the documented contract; callers were silently incorrect under v6.
 
 ### Mongo aggregator + process-manager + serializer
 
@@ -537,14 +532,14 @@ A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observabi
 - **Aggregator `EnsureIndexesAsync` cached after first success.** Index creation runs once per persistor instance instead of on every operation. Round-trip per message on the hot path is eliminated.
 - **Constructors null-check the logger.** Both `MongoDbAggregatorPersistor` and `MongoDbProcessManagerFinder` now throw `ArgumentNullException` on null `logger`.
 - **Cert selection callback bounds-checked.** `MongoClientFactory.ClientCertificateSelectionCallback` now falls back to the server-supplied certificate parameter when the client-cert collection is null or empty. Pre-fix it dereferenced `[0]` and threw `NullReferenceException` / `IndexOutOfRangeException`.
-- **Generic saga collection names sanitized.** Mongo collection names produced from `typeof(T).FullName` for generic saga types contained `+`, backticks, `[`, `]`, `,` — illegal in mongosh autocomplete and various Mongo tooling. v8 sanitizes these to `_`. **Migration required**: deployments with generic saga types must rename existing collections to the sanitized form before upgrading.
+- **Generic saga collection names sanitized.** Mongo collection names produced from `typeof(T).FullName` for generic saga types contained `+`, backticks, `[`, `]`, `,` — illegal in mongosh autocomplete and various Mongo tooling. v7 sanitizes these to `_`. **Migration required**: deployments with generic saga types must rename existing collections to the sanitized form before upgrading from v6.
 - **Internal hygiene.** `MongoDbProcessManagerFinder._indexCreationSemaphore` no longer disposed (mirrors Connection / Producer / Bus pattern).
 
 **Behaviour changes**
 
 - **`WriteConcern.Unacknowledged` rejected at startup.** Existing deployments using w:0 with the saga store break loudly. Configure `mongoClient.Settings.WriteConcern` to `WriteConcern.W1` or higher.
 - **Conflicting Guid serializer registration rejected at startup.** Existing deployments with a custom Guid serializer registered before ServiceConnect break loudly. Either skip your existing registration or register `GuidRepresentation.Standard` to match.
-- **Generic saga collection names changed.** Deployments with generic saga data types had data in collection names containing `+`/backtick/`[`/`]`/`,`. v8 reads from sanitized names. **Manual migration required**: rename existing collections via `db.runCommand({ renameCollection: "old", to: "new" })`.
+- **Generic saga collection names changed.** Deployments with generic saga data types had data in collection names containing `+`/backtick/`[`/`]`/`,`. v7 reads from sanitized names. **Manual migration required**: rename existing collections via `db.runCommand({ renameCollection: "old", to: "new" })`.
 
 **New surface**
 
@@ -647,7 +642,7 @@ Internal concurrency hardening across the aggregator processor, stream lifecycle
 
 ### Phase 7 — Observability polish + final cleanup
 
-The final phase of the v8 bug-consolidation roadmap. Telemetry and health-check correctness fixes, request-reply defensive hardening, and removal of the last `Newtonsoft.Json` references from production-adjacent test projects.
+The final phase of the v7 bug-consolidation roadmap. Telemetry and health-check correctness fixes, request-reply defensive hardening, and removal of the last `Newtonsoft.Json` references from production-adjacent test projects.
 
 **Bug fixes**
 
@@ -660,12 +655,12 @@ The final phase of the v8 bug-consolidation roadmap. Telemetry and health-check 
 
 **Behaviour changes**
 
-- **OTel semantic-convention rename — clean replace (M1, M2).** ServiceConnect previously stamped `messaging.destination.name = MessageType.FullName` (CLR type, not broker exchange) and `messaging.operation = "publish"` (deprecated single-attribute form). Both stop emitting in v8. Spans and metrics now stamp the OTel-current pair `messaging.operation.type` (e.g. `publish`, `receive`, `process`) + `messaging.operation.name`; `messaging.destination.name` is sourced from the broker exchange or routing key (anonymous when neither is supplied — operators populate via `OutgoingEventArgs.Exchange`). **Migration:** dashboards filtering on `messaging.operation` or `messaging.destination.name = <CLR type name>` need updating. The rename applies to both span and metric tags for cross-signal consistency.
-- **`Newtonsoft.Json` removed from `ServiceConnect.UnitTests` and `ServiceConnect.EndToEndTests/Streaming`.** Phase 4 removed Newtonsoft from production packages; Phase 7 completes the removal at the test layer. `JToken`/`JObject` assertions migrated to `System.Text.Json`'s `JsonNode`/`JsonObject`. `ServiceConnect.SerializationCompatTests` retains its Newtonsoft dep as the intentional v7-reference holdout — the only remaining Newtonsoft reference in the repo.
+- **OTel semantic-convention rename — clean replace (M1, M2).** ServiceConnect previously stamped `messaging.destination.name = MessageType.FullName` (CLR type, not broker exchange) and `messaging.operation = "publish"` (deprecated single-attribute form). Both stop emitting in v7. Spans and metrics now stamp the OTel-current pair `messaging.operation.type` (e.g. `publish`, `receive`, `process`) + `messaging.operation.name`; `messaging.destination.name` is sourced from the broker exchange or routing key (anonymous when neither is supplied — operators populate via `OutgoingEventArgs.Exchange`). **Migration:** dashboards filtering on `messaging.operation` or `messaging.destination.name = <CLR type name>` need updating. The rename applies to both span and metric tags for cross-signal consistency.
+- **`Newtonsoft.Json` removed from `ServiceConnect.UnitTests` and `ServiceConnect.EndToEndTests/Streaming`.** Earlier in the v7 work, Newtonsoft was removed from production packages; this phase completes the removal at the test layer. `JToken`/`JObject` assertions migrated to `System.Text.Json`'s `JsonNode`/`JsonObject`. `ServiceConnect.SerializationCompatTests` retains its Newtonsoft dep as the intentional v6-wire holdout — the only remaining Newtonsoft reference in the repo.
 
 ### Roadmap closed
 
-Phase 7 closes the [v7→v8 source-bug consolidation roadmap](https://github.com/R-Suite/ServiceConnect-CSharp/blob/master/consolidated-issues/2026-05-06-src-bugs-roadmap.md). The seven phases addressed 58+ verified issues plus two production Newtonsoft.Json removals across telemetry, the bus, the dispatcher, request-reply, persistence (Mongo + InMemory), the RabbitMQ producer / consumer / connection layers, the aggregator / stream / process-manager processors, and the health-check surface. Source bug catalog: `consolidated-issues/2026-05-05-src-bugs-consolidated.md`.
+Phase 7 closes the [v7 source-bug consolidation roadmap](https://github.com/R-Suite/ServiceConnect-CSharp/blob/master/consolidated-issues/2026-05-06-src-bugs-roadmap.md). The seven phases addressed 58+ verified issues plus two production Newtonsoft.Json removals across telemetry, the bus, the dispatcher, request-reply, persistence (Mongo + InMemory), the RabbitMQ producer / consumer / connection layers, the aggregator / stream / process-manager processors, and the health-check surface. Source bug catalog: `consolidated-issues/2026-05-05-src-bugs-consolidated.md`.
 
 ### Processor cleanups (Aggregator, Stream, Handler, ProcessManagerTimeout)
 
@@ -686,9 +681,9 @@ Phase 7 closes the [v7→v8 source-bug consolidation roadmap](https://github.com
 - **`IBusConfiguration.ExceptionHandler` is async.** Signature changes from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?`. Migration shim:
 
 ```csharp
-// before (v7)
+// before (v6)
 cfg.ExceptionHandler = ex => Log.Error(ex);
-// after (v8)
+// after (v7)
 cfg.ExceptionHandler = (ex, _) => { Log.Error(ex); return ValueTask.CompletedTask; };
 ```
 
@@ -696,7 +691,7 @@ The dispatcher `await`s the handler and passes the shutdown cancellation token. 
 
 **Deployment-visible changes**
 
-- **`MessageTypeExchangeName` hash drops `AssemblyQualifiedName`.** The eight-hex-character suffix is now derived from `type.FullName + ", " + assembly.GetName().Name` — version-stable across assembly bumps. Pre-v8 the hash included version + culture + PublicKeyToken; producers and consumers built against different assembly versions of the same logical type derived different exchange names. **Migration:** existing exchanges named under the v7 hash will need to be re-declared (or re-bound) on first v8 deployment. Apps using a single exchange-naming source (one repo, one assembly version per environment) will see no observable change; apps with version skew will see new exchange names appear.
+- **`MessageTypeExchangeName` hash drops `AssemblyQualifiedName`.** The eight-hex-character suffix is now derived from `type.FullName + ", " + assembly.GetName().Name` — version-stable across assembly bumps. In v6 the hash included version + culture + PublicKeyToken; producers and consumers built against different assembly versions of the same logical type derived different exchange names. **Migration:** existing exchanges named under the v6 hash will need to be re-declared (or re-bound) on first v7 deployment. Apps using a single exchange-naming source (one repo, one assembly version per environment) will see no observable change; apps with version skew will see new exchange names appear.
 
 **Contract clarifications (non-breaking)**
 
@@ -705,12 +700,12 @@ The dispatcher `await`s the handler and passes the shutdown cancellation token. 
 
 ### Interfaces + health checks + remaining polish
 
-**v8 breaking changes**
+**Breaking changes**
 
-- **`IMessageHandler` / `IProcessHandler` / `IStreamHandler` signatures.** `HandleAsync` (and `IStreamHandler.ExecuteAsync`) now take the per-message context as a parameter; the `Context` (or `Stream`) property is removed. Pre-v8 the framework wrote `handler.Context = ...` before each call, which was unsafe for singleton-registered handlers (concurrent dispatches raced). Migration:
+- **`IMessageHandler` / `IProcessHandler` / `IStreamHandler` signatures.** `HandleAsync` (and `IStreamHandler.ExecuteAsync`) now take the per-message context as a parameter; the `Context` (or `Stream`) property is removed. In v6 the framework wrote `handler.Context = ...` before each call, which was unsafe for singleton-registered handlers (concurrent dispatches raced). Migration:
 
 ```csharp
-// before (v7)
+// before (v6)
 public class OrderHandler : IMessageHandler<OrderPlaced>
 {
     public IConsumeContext Context { get; set; } = null!;
@@ -721,7 +716,7 @@ public class OrderHandler : IMessageHandler<OrderPlaced>
     }
 }
 
-// after (v8)
+// after (v7)
 public class OrderHandler : IMessageHandler<OrderPlaced>
 {
     public Task HandleAsync(OrderPlaced msg, IConsumeContext context, CancellationToken ct = default)
@@ -738,15 +733,15 @@ public class OrderHandler : IMessageHandler<OrderPlaced>
 
 - **`TimeoutsBatch.DueTimeouts`** is now `IReadOnlyList<TimeoutData>` with an `init` accessor (was mutable `IList<TimeoutData>` with a public setter). Producers (timeout-store implementations) construct via init; consumers read only. Closes the asymmetry with the Phase 12 `Headers` tightenings — every list/dictionary-shaped DTO that flows from the framework to user code is now read-only.
 
-**v8 contract clarifications (non-breaking)**
+**Contract clarifications (non-breaking)**
 
-- **`Aggregator<T>.Timeout()`** default returns `Timeout.InfiniteTimeSpan` (was `default(TimeSpan)` = `TimeSpan.Zero`). The dispatcher gates scheduling on `> TimeSpan.Zero`, so `InfiniteTimeSpan` cleanly disables the timeout-based flush. Subclasses that overrode `Timeout()` to return positive durations are unaffected.
+- **`Aggregator<T>.Timeout()`** is now `abstract` and must be overridden (was `virtual` with a `default(TimeSpan)` = `TimeSpan.Zero` default that silently disabled timeout-based flushing). The registry rejects subclasses whose `Timeout()` returns zero or `Timeout.InfiniteTimeSpan`, and whose `BatchSize()` returns a non-positive value, with `InvalidOperationException` at startup — every aggregator now declares an explicit, finite flush policy.
 
 - **`ProducerConnectionHealthCheck`** returns `Healthy` for the lazy-not-yet-tried state. Once the producer attempts a publish/send and fails, it transitions to `Unhealthy`. Readiness probes no longer crash-loop pods that haven't published at startup. New API: `IProducer.HasAttemptedConnection`.
 
 - **`HeaderDecoder.Render`** throws `InvalidOperationException` for header values nested deeper than 32 levels. The existing `Decode` catch swallows the throw and falls back to `type.FullName`, so a pathological header degrades gracefully.
 
-- **`HeaderDecoder.Render`** now emits valid JSON for all input. Pre-v8 only `"` was escaped; `\`, `\n`, `\r`, `\t`, and U+0000-U+001F control characters were emitted raw, breaking downstream JSON parsing.
+- **`HeaderDecoder.Render`** now emits valid JSON for all input. In v6 only `"` was escaped; `\`, `\n`, `\r`, `\t`, and U+0000-U+001F control characters were emitted raw, breaking downstream JSON parsing.
 
 - **`IBus.RequestTimeoutAsync`** default-interface-method now defers the `NotSupportedException` via `Task.FromException` (was synchronous throw).
 

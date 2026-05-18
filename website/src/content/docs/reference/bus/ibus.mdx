@@ -78,7 +78,7 @@ Task SendToManyAsync<T>(
     where T : Message;
 ```
 
-Sends `message` to every endpoint in `endPoints` as an independent point-to-point delivery. Replaces the v7 `SendOptions.EndPoints` plural pattern — fan-out is now an explicit per-call list rather than a property on the options struct.
+Sends `message` to every endpoint in `endPoints` as an independent point-to-point delivery. Fan-out is an explicit per-call list rather than a property on `SendOptions`.
 
 **Parameters**
 - `message` — the command instance; must derive from `Message`.
@@ -97,14 +97,14 @@ Sends `message` to every endpoint in `endPoints` as an independent point-to-poin
 
 ---
 
-### `SendRequestAsync<T, TReply>`
+### `SendRequestAsync<TRequest, TReply>`
 
 ```csharp
-Task<TReply> SendRequestAsync<T, TReply>(
-    T message,
+Task<TReply> SendRequestAsync<TRequest, TReply>(
+    TRequest message,
     RequestOptions? options = null,
     CancellationToken cancellationToken = default)
-    where T : Message
+    where TRequest : Message
     where TReply : Message;
 ```
 
@@ -119,22 +119,26 @@ Sends a request to a single endpoint and awaits exactly one reply. Use when the 
 
 **Exceptions**
 
-- `RequestTimeoutException` — request-side timeout fired before a matching reply arrived.
+- `ArgumentNullException` — `message` is `null`.
+- `ArgumentOutOfRangeException` — `options.Timeout` is negative (excluding `Timeout.InfiniteTimeSpan`) or zero.
+- `ObjectDisposedException` — the bus has been disposed.
+- `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop`.
 - `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
+- `RequestTimeoutException` — no reply arrived within `options.Timeout`.
 - `OperationCanceledException` — the caller's cancellation token fired.
 
 **Remarks.** If the reply does not arrive before the configured timeout, the task faults. The reply type must derive from `Message`.
 
 ---
 
-### `SendRequestMultiAsync<T, TReply>`
+### `SendRequestMultiAsync<TRequest, TReply>`
 
 ```csharp
-Task<IList<TReply>> SendRequestMultiAsync<T, TReply>(
-    T message,
+Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(
+    TRequest message,
     RequestOptions? options = null,
     CancellationToken cancellationToken = default)
-    where T : Message
+    where TRequest : Message
     where TReply : Message;
 ```
 
@@ -149,8 +153,12 @@ Sends a request that may fan out to multiple respondents and collects every repl
 
 **Exceptions**
 
-- `RequestTimeoutException` — request-side timeout fired before a matching reply arrived.
+- `ArgumentNullException` — `message` is `null`.
+- `ArgumentOutOfRangeException` — `options.Timeout` is negative (excluding `Timeout.InfiniteTimeSpan`) or zero.
+- `ObjectDisposedException` — the bus has been disposed.
+- `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop`.
 - `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
+- `RequestTimeoutException` — no reply arrived within `options.Timeout`, or fewer than `options.ExpectedReplyCount` replies arrived (when positive). Partials are exposed on `RequestTimeoutException.PartialReplies`.
 - `OperationCanceledException` — the caller's cancellation token fired.
 
 **Remarks.** Returns whatever replies arrived — a partial result is a valid outcome. Inspect the list length against `RequestOptions.ExpectedReplyCount` to decide whether the scatter-gather succeeded.
@@ -179,8 +187,12 @@ Publishes a request to every subscriber of the request type and invokes `onReply
 
 **Exceptions**
 
-- `RequestTimeoutException` — request-side timeout fired before a matching reply arrived.
-- `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
+- `ArgumentNullException` — `message` or `onReply` is `null`.
+- `ArgumentException` — `options.EndPoint` is non-empty; use `SendRequestAsync` for single-destination requests.
+- `ArgumentOutOfRangeException` — `options.Timeout` is negative (excluding `Timeout.InfiniteTimeSpan`) or zero.
+- `ObjectDisposedException` — the bus has been disposed.
+- `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop`.
+- `RequestTimeoutException` — no replies arrived within `options.Timeout`, or fewer than `options.ExpectedReplyCount` replies arrived.
 - `OperationCanceledException` — the caller's cancellation token fired.
 
 **Remarks.** The callback is invoked one-at-a-time per request (serialized under an internal lock). Keep it short-lived and non-blocking — heavy work or further bus calls from inside the callback can stall reply processing for the same request. The task completes when the expected reply count is reached or the timeout elapses.
@@ -273,6 +285,30 @@ bool IsConsuming { get; }
 Indicates whether the bus is currently consuming messages. Useful in health checks and tests that must wait for the consumer to become ready.
 
 Returns `false` before `StartConsumingAsync` has been called and after `StopConsumingAsync` returns. It also returns `false` when the broker has cancelled the consumer (queue deleted, policy expired, mirror promoted) — the underlying transport surfaces AMQP's `basic.cancel` event and ServiceConnect propagates it through this property. Callers using `IsConsuming` for purposes other than health-checking should be aware of the broker-cancel case.
+
+---
+
+### `IsCancelledByBroker`
+
+```csharp
+bool IsCancelledByBroker { get; }
+```
+
+Indicates whether the broker has cancelled the consumer — typically because the queue was deleted, a policy expired, or a mirror was promoted. This is a permanent broker-side failure distinct from a transient connection flap.
+
+The property mirrors the underlying `IConsumer.IsCancelledByBroker` flag at the bus level so callers such as `BusConsumingHealthCheck` can distinguish a broker-initiated cancellation (`basic.cancel`) from a network reconnect that may self-heal. The default interface-method implementation returns `false`; framework-supplied buses override it.
+
+---
+
+### `IsStopped`
+
+```csharp
+bool IsStopped { get; }
+```
+
+Indicates whether the bus has been stopped or is in the process of being disposed.
+
+Distinct from `IsConsuming`: `IsConsuming` also flips to `false` during a transient broker disconnect that the health check's recovery-grace window may absorb, whereas `IsStopped` flips to `true` permanently once `StopConsumingAsync` or `DisposeAsync` has run. `BusConsumingHealthCheck` uses this flag to bypass its grace window and report `Unhealthy` immediately on intentional shutdown. The default interface-method implementation returns `false`; framework-supplied buses override it.
 
 ---
 

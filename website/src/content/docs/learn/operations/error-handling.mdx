@@ -129,9 +129,39 @@ Two things to notice:
 
 If the callback itself throws, the framework catches and logs at **Error** so a bug in an opt-in user-installed hook is unmissable, and the dispatcher continues — message processing is never blocked by a faulty `ExceptionHandler`. The original dispatch exception is unaffected: it's still attached to the returned `ConsumeEventResult` and drives the retry/error-queue path normally.
 
-<Aside type="note" title="v8 signature change">
-  `ExceptionHandler` changed from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?` in v8. See [`IBusConfiguration.ExceptionHandler`](/ServiceConnect-CSharp/reference/bus/ibusconfiguration/#exceptionhandler) for the migration shim.
-</Aside>
+## Exception hierarchy
+
+Framework exceptions live under `ServiceConnect.Interfaces.Exceptions`. They all derive from one abstract base, so a single catch can quarantine every framework-originated failure without swallowing user exceptions:
+
+```csharp
+try
+{
+    await bus.SendAsync(message);
+}
+catch (ServiceConnectException ex)
+{
+    // Any framework-level failure — transport, serialization, persistence, filter block,
+    // request-reply timeout, concurrency. The inner exception holds the underlying cause
+    // when the framework wrapped a third-party error.
+    _logger.LogError(ex, "ServiceConnect failed for {MessageType}", typeof(T).Name);
+    throw;
+}
+```
+
+The concrete types and when each is raised:
+
+| Type | Raised when |
+|---|---|
+| `ServiceConnectException` | Abstract base — never thrown directly; use as the catch-all for any framework error. |
+| `TransportException` | Broker-layer failure during send, publish, or consume. Carries the affected `Endpoint` when known, and wraps the underlying transport exception via `InnerException`. |
+| `PersistenceException` | Persistor-layer failure (process-manager store, aggregator store, timeout store). BSON/serialization failures from the MongoDB persistors surface as this rather than as raw driver exceptions. |
+| `ConcurrencyException` | Optimistic-concurrency conflict on a process-manager or aggregator write. The retry path replays the state load + handler, not the side-effects from the failed attempt. |
+| `SerializationException` | Payload could not be serialised on send or deserialised on consume. Inbound failures are marked as terminal — see [Terminal failures](#terminal-failures). |
+| `OutgoingFiltersBlockedException` | An outgoing filter returned `FilterAction.Stop`. The send never reached the producer; the call site decides whether to retry or drop. |
+| `RequestTimeoutException` | A request-reply call didn't receive enough replies inside `options.Timeout`. Partial replies are surfaced on `PartialReplies` so callers can recover them. |
+| `RequestSendCancelledException` | The outbound send pipeline of a request-reply call cancelled before the request reached the broker. Derives from `OperationCanceledException` so existing `catch (OperationCanceledException)` handlers still match. |
+
+`TransportException` is the one most operational alerting cares about — it's the signal that the broker is unreachable or the topology is wrong, distinct from cooperative cancellation or a serialization mistake. Wire it to your paging path; let `ServiceConnectException` cover the rest.
 
 ## Idempotency is part of error handling
 

@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`ITimeoutStore` persists scheduled timeout messages and delivers them in batches when they become due. The timeout manager polls `GetTimeoutsBatchAsync` on a schedule driven by the recommended poll time returned in each batch, inserts new timeouts via `InsertTimeoutAsync`, and commits or rolls back each dispatch with `RemoveDispatchedTimeoutAsync` or `ReleaseDispatchedTimeoutAsync`.
+`ITimeoutStore` persists scheduled timeout messages and delivers them in batches when they become due. The timeout manager polls `GetTimeoutsBatchAsync` on a cadence driven by `BusConfiguration.ProcessManagerTimeoutPollInterval`, inserts new timeouts via `InsertTimeoutAsync`, and commits or rolls back each dispatch with `RemoveDispatchedTimeoutAsync` or `ReleaseDispatchedTimeoutAsync`.
 
 `ITimeoutStore` covers both single-instance and multi-instance (active-active) deployments. Remove and release operations accept an optional `Guid? lockOwner` — when supplied, the operation is lease-checked and a worker that has lost its lease observes `ConcurrencyException` so the row is not double-dispatched. When `lockOwner` is null, the operation is unconditional and the lease check is skipped.
 
@@ -22,10 +22,11 @@ public interface ITimeoutStore
     Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default);
     Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default);
     Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default);
+    Task<long> ReapStaleLeasesAsync(CancellationToken cancellationToken = default);  // DIM — returns 0L
 }
 ```
 
-`TimeoutData` carries the timeout identifier, target destination, scheduled fire time, and an `IReadOnlyDictionary<string, object>` headers bag. Implementations that construct `TimeoutData` pass any headers via the init accessor; post-construction mutation is not supported. `TimeoutsBatch` wraps a list of due `TimeoutData` records together with a `NextQueryTime` that tells the manager when to poll again.
+`TimeoutData` carries the timeout identifier, target destination, scheduled fire time, and an `IReadOnlyDictionary<string, object>` headers bag. Implementations that construct `TimeoutData` pass any headers via the init accessor; post-construction mutation is not supported. `TimeoutsBatch` wraps a list of due `TimeoutData` records. Callers re-poll on their own cadence (typically `BusConfiguration.ProcessManagerTimeoutPollInterval`).
 
 ---
 
@@ -55,7 +56,7 @@ Loads the next batch of due timeouts.
 - `batchSize` — when supplied, caps the number of timeouts returned in a single poll. Must be greater than zero. When null, the persistor applies its default cap (MongoDB uses `MongoDbPersistenceOptions.TimeoutBatchSize`; the in-memory store returns all due timeouts).
 - `cancellationToken` — a token that cancels the operation.
 
-**Returns** the due timeouts and the next recommended poll time. The caller uses the recommended poll time to back off until the next batch may be ready, avoiding tight polling loops when no timeouts are due.
+**Returns** a `TimeoutsBatch` whose `DueTimeouts` list contains the timeouts ready to fire. Callers re-poll on their own cadence (typically `BusConfiguration.ProcessManagerTimeoutPollInterval`).
 
 **Throws** `ArgumentOutOfRangeException` when `batchSize` is non-null and not greater than zero.
 
@@ -99,6 +100,27 @@ Releases a dispatched timeout so it may be retried later.
 
 ---
 
+### `ReapStaleLeasesAsync`
+
+```csharp
+Task<long> ReapStaleLeasesAsync(CancellationToken cancellationToken = default);
+```
+
+Reclaims rows whose lease has expired but whose row is still flagged as locked — typically because a worker crashed mid-dispatch or a broker partition outlasted the lease window.
+
+**Parameters**
+- `cancellationToken` — cancels the operation.
+
+**Returns** the number of rows whose lease was reclaimed as a `long`.
+
+**Default implementation.** Returns `Task.FromResult(0L)` — a no-op. Persistors whose `GetTimeoutsBatchAsync` already reclaims expired leases as a side-effect (the in-memory store) can leave this default in place.
+
+**Override guidance.** Persistors with explicit lease rows (MongoDB) should override with a single batched update that clears the lock flag for all rows where `LockExpiresAt <= UtcNow`. Operators running such persistors should call `ReapStaleLeasesAsync` on a timer at roughly `LockLeaseDuration / 4` cadence to reclaim rows held by crashed workers promptly rather than waiting for the natural `GetTimeoutsBatchAsync` recovery path.
+
+**Remarks.** The natural-recovery path is the next `GetTimeoutsBatchAsync` poll, whose filter accepts both unlocked rows and locked-but-expired rows — operators don't need to call this method for routine recovery. It exists for on-demand cleanup from an admin endpoint or a one-off script when a deployment wants to unstick the queue without waiting for the next poll cycle.
+
+---
+
 ## Implementing
 
 ### Invariants
@@ -115,11 +137,11 @@ Remove and release operations accept an optional lock owner. When supplied, the 
 
 Both the Mongo and InMemory persistors honour identical semantics. The `LockLeaseDuration` setting — `MongoDbPersistenceOptions.TimeoutLockLeaseDuration` or `InMemoryPersistenceOptions.LockLeaseDuration` — governs how long a worker may hold a row before the reaper reclaims it. Both default to five minutes.
 
-Operators running the Mongo persistor should call `ReapStaleLeasesAsync` on a timer at roughly `LockLeaseDuration / 4` cadence to reclaim rows held by crashed handlers promptly.
+Operators running the Mongo persistor should call `ReapStaleLeasesAsync` on a timer at roughly `LockLeaseDuration / 4` cadence to reclaim rows held by crashed workers promptly, rather than waiting for the natural `GetTimeoutsBatchAsync` recovery path.
 
 ### Skeletal in-memory implementation
 
-The `InMemoryTimeoutStore` shipped with the library (in `ServiceConnect.Persistence.InMemory`) is the reference single-instance implementation. It stores timeouts in a sorted set, uses a write lock for all mutations, and reads its lease duration from `InMemoryPersistenceOptions` so that a crashed dispatcher does not hold records indefinitely. A minimal third-party implementation that does NOT need lease-aware semantics (single-instance only) can ignore the `lockOwner` parameter:
+The following example is adapted from the `InMemoryTimeoutStore` shipped with the library (in `ServiceConnect.Persistence.InMemory`), which is the reference single-instance implementation. It stores timeouts in a sorted set, uses a write lock for all mutations, and reads its lease duration from `InMemoryPersistenceOptions` so that a crashed dispatcher does not hold records indefinitely. A minimal third-party implementation that does NOT need lease-aware semantics (single-instance only) can ignore the `lockOwner` parameter and omit `ReapStaleLeasesAsync` (the DIM default returns `0L`):
 
 ```csharp
 public sealed class InMemoryTimeoutStore : ITimeoutStore

@@ -97,7 +97,7 @@ A pattern to avoid: a handler that subscribes to `OrderPlaced`, checks `TotalVal
 
 ```csharp
 // Bad: a silent no-op for messages the handler doesn't want.
-public Task HandleAsync(OrderPlaced message, CancellationToken cancellationToken = default)
+public Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
 {
     if (message.TotalValue <= 500m) return Task.CompletedTask;
     // …process premium…

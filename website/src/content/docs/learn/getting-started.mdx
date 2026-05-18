@@ -79,7 +79,7 @@ public sealed class WorkSubmitted(Guid correlationId) : Message(correlationId)
 `Contracts` needs the ServiceConnect interfaces to reference `Message`:
 
 ```bash
-dotnet add GettingStarted.Contracts package ServiceConnect
+dotnet add GettingStarted.Contracts package ServiceConnect.Interfaces
 ```
 
 Keep message types **simple DTOs** — public properties, no behaviour. See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the full contract design guidance.

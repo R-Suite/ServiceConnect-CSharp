@@ -38,27 +38,21 @@ The sender decides what goes on the message vs. the stream. The rule of thumb: a
 
 ```csharp
 // Uploader/Program.cs
-var document = new DocumentUploaded(Guid.NewGuid())
-{
-    FileName = "report.pdf",
-    TotalBytes = payload.Length,
-};
-
 await using var stream = bus.CreateStream<DocumentUploaded>("document-receiver");
 for (int offset = 0; offset < payload.Length; offset += chunkSize)
 {
     var count = Math.Min(chunkSize, payload.Length - offset);
-    await stream.WriteAsync(payload, offset, count);
+    await stream.WriteAsync(payload.AsMemory(offset, count));
 }
 await stream.CloseAsync();
 ```
 
 Four things to notice:
 
-- **Chunking is your job.** The API takes `buffer, offset, count` like any other byte-oriented stream. You decide how big each packet is. A few kilobytes to a few hundred kilobytes is typical — small enough to fit well inside broker limits, large enough that per-packet overhead doesn't dominate.
+- **Chunking is your job.** The API takes a `ReadOnlyMemory<byte>`; slice a byte array with `.AsMemory(offset, count)` to write a sub-range. You decide how big each packet is. A few kilobytes to a few hundred kilobytes is typical — small enough to fit well inside broker limits, large enough that per-packet overhead doesn't dominate.
 - **Close is not optional.** Until `CloseAsync` is called, the receiver does not know the stream is complete and the handler will not fire. The `await using` ensures disposal, but the explicit `CloseAsync` is what marks the final packet.
 - **Each `WriteAsync` is one bus message.** The packet becomes an envelope on the wire. Ordering, at-least-once delivery, and backpressure all apply at the packet level; the bus reassembles them in order on the receiver.
-- **The message body rides with the stream.** The generic parameter `<DocumentUploaded>` tells the bus what message type to serialize and include in the stream's metadata. The receiver's handler gets this instance along with the assembled bytes.
+- **The generic parameter names the handler target.** The generic parameter `<DocumentUploaded>` names the message type the receiver's handler will be dispatched for. The bytes written into the stream are deserialised as `DocumentUploaded` on the receiver — that is the message the handler receives. No separate message instance is sent alongside the bytes.
 
 ## The receiver
 

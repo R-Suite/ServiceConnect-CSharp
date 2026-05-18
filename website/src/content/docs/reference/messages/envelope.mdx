@@ -25,6 +25,18 @@ Gets the headers accumulated by the pipeline.
 
 **Remarks.** Header values are untyped because transports such as RabbitMQ expose bytes, strings, and numeric values through a single `object`-typed channel. Code that reads a header should defensively cast or decode.
 
+**Decoding header values.** RabbitMQ delivers header values as `byte[]`, `string`, or numeric primitives depending on how they were written. The static helper `ServiceConnect.Interfaces.Headers.HeaderDecoder.Decode(object? value)` normalises the variants to a `string?` (UTF-8 decoded where the underlying value is `byte[]`), which keeps consumer-side parsing terse:
+
+```csharp
+if (envelope.Headers.TryGetValue("X-Dedupe-Key", out var raw)
+    && Guid.TryParse(HeaderDecoder.Decode(raw), out var key))
+{
+    // ...
+}
+```
+
+Use `HeaderDecoder.Decode` whenever you read a header that might cross the byte-array/string boundary.
+
 <Aside type="note" title="Reading type information from headers">
   `MessageType` carries the **operation name** — `"Publish"`, `"Send"`, or `"ByteStream"` — not the CLR type. For type information use `TypeName` (the type's `FullName`, e.g. `"OrderService.Messages.OrderPlaced"`) or `FullTypeName` (its `AssemblyQualifiedName`). Both are stamped server-authoritatively on outbound and cannot be overridden by caller-supplied headers.
 </Aside>

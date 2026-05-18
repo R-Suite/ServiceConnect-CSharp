@@ -26,27 +26,27 @@ public abstract class Aggregator<T> where T : Message
 ### `Timeout`
 
 ```csharp
-public virtual TimeSpan Timeout()
+public abstract TimeSpan Timeout()
 ```
 
-Gets the maximum amount of time to wait before dispatching the current batch. Override to enable a time-based flush; leave the default to disable it.
+Gets the maximum amount of time to wait before dispatching the current batch.
 
-**Returns.** The maximum aggregation window. The default returns `Timeout.InfiniteTimeSpan`, which disables the timeout-based flush (the dispatcher gates scheduling on a value strictly greater than `TimeSpan.Zero`). Returning any positive `TimeSpan` enables time-based flushing.
+**Returns.** A strictly positive `TimeSpan`. `TimeSpan.Zero` and `Timeout.InfiniteTimeSpan` are rejected by the registry at startup — every aggregator must declare a finite time-based flush path so buffered messages always have a route to dispatch.
 
 ---
 
 ### `BatchSize`
 
 ```csharp
-public virtual int BatchSize()
+public abstract int BatchSize()
 ```
 
-Gets the maximum number of messages to buffer before dispatching the batch. Override to enable a size-based flush; leave the default to disable it.
+Gets the maximum number of messages to buffer before dispatching the batch.
 
-**Returns.** The batch size limit. Returning `0` means no size-based flush is enforced.
+**Returns.** A strictly positive integer. Zero and negative values are rejected by the registry at startup.
 
-<Aside type="caution" title="Always set at least one flush trigger">
-  If both `Timeout()` and `BatchSize()` return their defaults (`Timeout.InfiniteTimeSpan` and `0` respectively), the aggregator accumulates indefinitely and never flushes. Override at least one.
+<Aside type="caution" title="Both triggers are mandatory">
+  `Timeout()` and `BatchSize()` are `abstract`; every subclass must override both. The registry throws `InvalidOperationException` at startup if either returns a non-positive value (or if `Timeout()` returns `Timeout.InfiniteTimeSpan`). The batch flushes on whichever condition fires first.
 </Aside>
 
 ---
@@ -70,7 +70,7 @@ Processes a completed batch. The framework calls this on a background flush afte
 ```csharp
 public interface IAggregatorSnapshot
 {
-    IReadOnlyList<object> ResolvedMessages { get; }
+    IReadOnlyList<IHasCorrelationId> ResolvedMessages { get; }
     IReadOnlyList<Guid> ResolvedIds { get; }
     int UnresolvedCount { get; }
 }
@@ -82,7 +82,7 @@ The contract returned by `IAggregatorPersistor.GetSnapshotAsync` — implement i
 
 ```csharp
 public sealed record AggregatorSnapshot(
-    IReadOnlyList<object> ResolvedMessages,
+    IReadOnlyList<IHasCorrelationId> ResolvedMessages,
     IReadOnlyList<Guid> ResolvedIds,
     int UnresolvedCount) : IAggregatorSnapshot
 ```
@@ -92,10 +92,10 @@ The default `IAggregatorSnapshot` implementation. A point-in-time capture of agg
 ### `ResolvedMessages`
 
 ```csharp
-IReadOnlyList<object> ResolvedMessages { get; init; }
+IReadOnlyList<IHasCorrelationId> ResolvedMessages { get; init; }
 ```
 
-Gets the deserialised messages recovered from the persistor. Values are boxed to `object` because the snapshot spans heterogeneous record types; cast to `T` before handing the list to `Aggregator<T>.ExecuteAsync`.
+Gets the deserialised messages recovered from the persistor. Typed as `IReadOnlyList<IHasCorrelationId>` because every aggregated record carries a correlation id; the framework casts to `T` (where `T : Message` and `Message` implements `IHasCorrelationId`) before calling `Aggregator<T>.ExecuteAsync`.
 
 ---
 

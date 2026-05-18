@@ -62,7 +62,7 @@ dotnet add Your.Contracts package ServiceConnect
 
 ## Serialisation
 
-The default `IMessageSerializer` is `NewtonsoftJsonMessageSerializer`. Messages are serialised to JSON and travel as a byte array in the AMQP payload.
+The default `IMessageSerializer` is `SystemTextJsonMessageSerializer` (backed by System.Text.Json). Messages are serialised to JSON and travel as a byte array in the AMQP payload.
 
 You can replace the serialiser by registering your own `IMessageSerializer` singleton before `AddServiceConnect`:
 

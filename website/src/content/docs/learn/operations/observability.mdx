@@ -185,6 +185,7 @@ Tags follow the [OpenTelemetry messaging-metrics conventions](https://openteleme
 | `messaging.serviceconnect.audit.drops` | Counter | \{drop\} | Audit messages that failed to publish |
 | `messaging.serviceconnect.outgoing_filters.blocked` | Counter | \{message\} | Outgoing operations aborted because an outgoing filter returned `FilterAction.Stop`. No publish/send span is emitted for blocked operations, so this counter is the operator-visible signal for filter-suppressed deliveries. Tagged with `messaging.system=serviceconnect` and (when known) `messaging.message.type`. |
 | `messaging.serviceconnect.process.messages.inflight` | UpDownCounter | \{message\} | Currently-dispatched, not-yet-acked messages |
+| `messaging.serviceconnect.aggregator.snapshot_remove_failed_after_dispatch` | Counter | \{failure\} | Aggregator snapshot-remove failures after a successful handler dispatch — indicates the at-least-once duplicate window has been entered for the affected rows |
 
 The `error.type` tag is added on failure paths via an allow-list mapper. Stable mapped values are: `cancelled` (`OperationCanceledException`), `timeout` (`TimeoutException`), `channel_closed` (`AlreadyClosedException`), `broker_unreachable` (`BrokerUnreachableException`), `publish_nacked` (`PublishException`), `broker_interrupted` (`OperationInterruptedException` and its subclasses). Everything else falls back to the exception's `Type.Name`. Exception messages are never used as tags — they're unbounded cardinality.
 
@@ -242,7 +243,7 @@ using ServiceConnect.HealthChecks;
 
 services.AddServiceConnect(builder =>
 {
-    builder.UseRabbitMQ(opts => opts.Host = "rabbit");
+    builder.UseRabbitMQ(t => t.Host = "rabbit");
 });
 
 services.AddHealthChecks()

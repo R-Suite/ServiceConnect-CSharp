@@ -25,7 +25,7 @@ Registers the core ServiceConnect services, handler discovery, message processor
 
 **Parameters**
 - `services` — the service collection to extend.
-- `configure` — a callback that receives a `ServiceConnectBuilder`. Chain calls to `UseRabbitMQ`, `ConfigureQueues`, `ConfigurePersistence`, and `ConfigurePipeline` inside it to build up the bus configuration.
+- `configure` — a callback that receives a `ServiceConnectBuilder`. Chain calls to `UseRabbitMQ`, `ConfigureQueues`, `ConfigurePersistence`, and the typed `Add*Filter<T>` / `Add*Middleware<T>` methods inside it to build up the bus configuration.
 
 **Returns.** The same `services` instance for chaining.
 
