@@ -144,7 +144,7 @@ internal sealed class TelemetryProcessingMiddleware(
             traceState = HeaderDecoder.Decode(traceStateObj);
         }
 
-        return ServiceConnectActivitySource.SetInboundTraceFallback(traceParent, traceState);
+        return TraceContextPropagation.SetInboundTraceFallback(traceParent, traceState);
     }
 
     private const string TraceParentHeaderKey = "traceparent";
