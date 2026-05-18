@@ -39,6 +39,7 @@ public class RabbitMqConsumerHostTests
             It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(0u);
         channel.Setup(c => c.CloseAsync(It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+        channel.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
         channel.Setup(c => c.BasicAckAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
         channel.Setup(c => c.BasicNackAsync(It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>())).Returns(ValueTask.CompletedTask);
         return channel;
@@ -739,7 +740,7 @@ public class RabbitMqConsumerHostTests
         await disposeTask;
 
         channel.Verify(c => c.BasicCancelAsync("tag", false, It.IsAny<CancellationToken>()), Times.Once);
-        channel.Verify(c => c.Dispose(), Times.Once);
+        channel.Verify(c => c.DisposeAsync(), Times.Once);
     }
 
     [Fact]
@@ -779,7 +780,7 @@ public class RabbitMqConsumerHostTests
         await disposeTask;
 
         channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
-        channel.Verify(c => c.Dispose(), Times.Once);
+        channel.Verify(c => c.DisposeAsync(), Times.Once);
     }
 
     [Fact]

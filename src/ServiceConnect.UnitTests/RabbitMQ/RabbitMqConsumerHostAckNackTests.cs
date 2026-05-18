@@ -24,12 +24,16 @@ public sealed class RabbitMqConsumerHostAckNackTests
     {
         var (host, _, _, capturedLogs) = await BuildHostAsync();
 
-        // Null out _model via reflection so EventAsync's local `model` captures null.
-        // Must happen BEFORE RaiseDeliveryForTests so EventAsync sees null at entry.
-        var modelField = typeof(RabbitMqConsumerHost).GetField(
+        // Null out _model on the channel host via reflection so EventAsync's local
+        // `model` capture sees null. Must happen BEFORE RaiseDeliveryForTests.
+        var channelHostField = typeof(RabbitMqConsumerHost).GetField(
+            "_channelHost",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        var channelHost = channelHostField!.GetValue(host)!;
+        var modelField = channelHost.GetType().GetField(
             "_model",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        modelField!.SetValue(host, null);
+        modelField!.SetValue(channelHost, null);
 
         var args = MakeArgs();
         await host.RaiseDeliveryForTests(args);

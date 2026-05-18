@@ -46,9 +46,38 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
 
     /// <summary>
     /// True if a non-Application channel shutdown fired (broker tore down the channel, e.g.
-    /// queue deleted, policy expired, peer protocol error). Latched until disposal.
+    /// queue deleted, policy expired, peer protocol error), or if the host explicitly
+    /// reported a broker-initiated basic.cancel via <see cref="NotifyBrokerCancelled"/>.
+    /// Latched until disposal.
     /// </summary>
     internal bool IsCancelledByBroker => Volatile.Read(ref _consumerCancelledByBroker) != 0;
+
+    /// <summary>
+    /// Sets the broker-cancelled flag. Called by the consumer host when the broker issues
+    /// a basic.cancel against the consumer (queue deleted, policy expired, mirror promoted).
+    /// Idempotent — repeated calls are no-ops.
+    /// </summary>
+    internal void NotifyBrokerCancelled()
+        => Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
+
+    /// <summary>
+    /// Removes the channel-shutdown event subscriptions without closing or disposing the channels.
+    /// Call this before issuing BasicCancelAsync during a graceful stop so a stale-tag protocol
+    /// error (Library-initiator channel close) cannot flip IsCancelledByBroker on an intentional
+    /// shutdown. DisposeAsync unsubscribes again idempotently; the delegate removal is a no-op
+    /// if the handler is not currently subscribed.
+    /// </summary>
+    internal void UnsubscribeShutdownHandlers()
+    {
+        if (_model is not null)
+        {
+            _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
+        }
+        if (_publishChannel is not null)
+        {
+            _publishChannel.ChannelShutdownAsync -= OnPublishChannelShutdownAsync;
+        }
+    }
 
     /// <summary>
     /// Opens the consume + publish channels and subscribes the shutdown event handlers.
@@ -120,7 +149,14 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
         return Task.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync() => DisposeAsync(CancellationToken.None);
+
+    /// <summary>
+    /// Disposes channels with an optional deadline token. Passing a pre-cancelled or
+    /// deadline-expiry token causes any stalled <c>CloseAsync</c> to be abandoned,
+    /// preserving the consumer host's graceful-shutdown grace window.
+    /// </summary>
+    internal async ValueTask DisposeAsync(CancellationToken cancellationToken)
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
@@ -128,24 +164,40 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
         }
 
         // Unsubscribe shutdown handlers BEFORE close so a late shutdown signal doesn't fire
-        // OnXxxShutdownAsync against a half-disposed host. Match the host's existing dispose
-        // ordering for the channels themselves: publish channel first (so retry/audit
-        // publishes that may still be in flight see a clean close), then the consume channel.
+        // OnXxxShutdownAsync against a half-disposed host. Close in reverse-of-create order:
+        // publish channel first (so in-flight retry/audit publishes drain cleanly before the
+        // consume channel closes), then the consume channel.
         if (_publishChannel is not null)
         {
             _publishChannel.ChannelShutdownAsync -= OnPublishChannelShutdownAsync;
-            try { await _publishChannel.CloseAsync().ConfigureAwait(false); }
-            catch { /* closing an already-closed channel throws; swallow it */ }
-            await _publishChannel.DisposeAsync().ConfigureAwait(false);
+            // Race close against the deadline token. Task.Delay(Infinite, ct) completes
+            // when ct fires, so a stalled CloseAsync (broker unresponsive, mock in tests)
+            // doesn't block disposal beyond the caller's grace window.
+            try
+            {
+                await Task.WhenAny(
+                    _publishChannel.CloseAsync(200, "Goodbye", false, cancellationToken),
+                    Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+            }
+            catch { /* already-closed and deadline-cancelled close are both expected on teardown */ }
+            try { await _publishChannel.DisposeAsync().ConfigureAwait(false); }
+            catch { /* swallow any dispose-time error so model close still runs */ }
             _publishChannel = null;
         }
 
         if (_model is not null)
         {
             _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
-            try { await _model.CloseAsync().ConfigureAwait(false); }
-            catch { /* closing an already-closed channel throws; swallow it */ }
-            await _model.DisposeAsync().ConfigureAwait(false);
+            // Same deadline-race as publish channel above.
+            try
+            {
+                await Task.WhenAny(
+                    _model.CloseAsync(200, "Goodbye", false, cancellationToken),
+                    Task.Delay(Timeout.Infinite, cancellationToken)).ConfigureAwait(false);
+            }
+            catch { /* already-closed and deadline-cancelled close are both expected on teardown */ }
+            try { await _model.DisposeAsync().ConfigureAwait(false); }
+            catch { /* swallow any dispose-time error */ }
             _model = null;
         }
     }

@@ -38,11 +38,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly bool _deadLetterUnhandledMessages;
     private readonly long _maxInboundMessageSize;
 
-    private IChannel? _model;
-    // RabbitMQ.Client requires per-channel serialization. The consumer channel is used for
-    // ack/nack only; all retry/audit/error publishes happen on a dedicated publish channel
-    // so helper publishes cannot interleave with the consumer's ack/nack stream.
-    private IChannel? _publishChannel;
+    private readonly RabbitMqChannelHost _channelHost;
     private ConsumerEventHandler? _consumerEventHandler;
     // Per-delivery dispatcher (handler invocation + retry/terminal/audit routing) — built
     // in StartConsumingAsync once the queue / retry-queue names are known. The host owns
@@ -66,10 +62,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private string _queueName = "";
     private string _retryQueueName = "";
     private int _shutdownTimedOut;
-    // Set by OnConsumerUnregisteredAsync when the broker cancels our consumer (queue deleted,
-    // policy expired, mirror promoted). Bubbled up through Consumer.IsCancelledByBroker → Bus.IsConsuming
-    // → BusConsumingHealthCheck so operators see the bus go Unhealthy when this happens.
-    private int _consumerCancelledByBroker;
     // Defends against concurrent DisposeAsync calls. The admission gate's BeginShutdown is
     // idempotent under its own lock, but two concurrent disposes could both pass the
     // IsShuttingDown check before either calls BeginShutdown, then both run teardown.
@@ -82,10 +74,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private int _stopStarted;
     // Single-use guard: PrepareAsync may run at most once per host instance. The host is
     // documented as single-use (matches Consumer.cs's "fresh host per StartConsumingAsync"
-    // pattern). A second Prepare would need to also reset _admissionGate (readonly), _stopStarted,
-    // and _consumerCancelledByBroker — none of which currently reset, so the second cycle
-    // would silently drop every delivery via the latched admission gate. Single-use makes
-    // the constraint explicit and surfaces misuse loudly.
+    // pattern). A second Prepare would need to also reset _admissionGate (readonly) and
+    // _stopStarted — neither of which currently resets, so the second cycle would silently
+    // drop every delivery via the latched admission gate. Single-use makes the constraint
+    // explicit and surfaces misuse loudly.
     private int _prepared;
     private readonly CancellationTokenSource _shutdownPublishCts = new();
     // Consumer-lifetime token: created at StartConsumingAsync, cancelled on DisposeAsync.
@@ -143,6 +135,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             ? Convert.ToInt64(maxSizeVal, System.Globalization.CultureInfo.InvariantCulture)
             : 64 * 1024;
 
+        _channelHost = new RabbitMqChannelHost(_connection, _logger, _queueConfiguration.QueueName);
+
         // Constructed inside the host (not Consumer.cs) because the validator needs
         // GetShutdownPublishToken — a method on the host whose backing CTS lifetime
         // matches the host's single-use cycle. Injecting a delegate keeps the host
@@ -197,19 +191,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _autoDelete = autoDelete.Value;
         }
 
-        _model = await _connection.CreateChannelAsync(cancellationToken).ConfigureAwait(false);
-        // Dedicated publish channel for retry/audit/error; kept separate from the
-        // consumer channel because RabbitMQ.Client is not safe to use concurrently on
-        // a single channel. Publisher confirms ensure BasicPublishAsync awaits the
-        // broker ack before returning, so a lost retry/audit/error publish surfaces as
-        // an exception on the consumer path instead of silently disappearing.
-        var publishChannelOptions = new CreateChannelOptions(
-            publisherConfirmationsEnabled: true,
-            publisherConfirmationTrackingEnabled: true);
-        _publishChannel = await _connection.CreateChannelAsync(publishChannelOptions, cancellationToken).ConfigureAwait(false);
+        await _channelHost.OpenAsync(cancellationToken).ConfigureAwait(false);
         if (!_disablePrefetch)
         {
-            await _model.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
+            await _channelHost.Model!.BasicQosAsync(0, _prefetchCount, false).ConfigureAwait(false);
         }
 
         _deliveryToken = _deliveryCts.Token;
@@ -230,7 +215,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // late delivery fired after DisposeAsync disposed the CTS can still run without
         // throwing ObjectDisposedException from the Token property.
         var deliveryToken = _deliveryToken;
-        _consumer = new AsyncEventingBasicConsumer(_model);
+        _consumer = new AsyncEventingBasicConsumer(_channelHost.Model!);
         _receivedHandler = async (sender, args) => await EventAsync(sender, args, deliveryToken).ConfigureAwait(false);
         _consumer.ReceivedAsync += _receivedHandler;
         // Subscribe broker-initiated shutdown events so a queue deletion, channel close,
@@ -239,14 +224,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // UnregisteredAsync fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
         _consumer.ShutdownAsync += OnConsumerShutdownAsync;
         _consumer.UnregisteredAsync += OnConsumerUnregisteredAsync;
-        _model.ChannelShutdownAsync += OnChannelShutdownAsync;
-        // Publish channel needs an independent shutdown subscriber: RabbitMQ.Client v7 does
-        // NOT auto-recreate channels closed by a broker protocol error (404 NOT_FOUND on a
-        // deleted retry/error exchange, 406 PRECONDITION_FAILED on topology drift). Without
-        // this hook a dead publish channel goes unobserved, retry/audit/terminal-failure
-        // publishes throw AlreadyClosedException on every delivery, the host nacks-with-requeue,
-        // and the broker hot-loops the same delivery against the same dead channel.
-        _publishChannel.ChannelShutdownAsync += OnPublishChannelShutdownAsync;
         _subscribedUnderlyingConnection = _connection.UnderlyingConnection;
         if (_subscribedUnderlyingConnection is not null)
         {
@@ -264,7 +241,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     /// </summary>
     public async Task BeginConsumingAsync(CancellationToken cancellationToken = default)
     {
-        if (_model == null || _consumer == null)
+        if (_channelHost.Model == null || _consumer == null)
         {
             throw new InvalidOperationException("PrepareAsync must be called before BeginConsumingAsync.");
         }
@@ -279,7 +256,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // Volatile.Write so a later acquire-fenced read in Stop/Dispose (or in the recovery
         // handler) observes the initial tag without depending on the ambient ordering of the
         // BasicConsumeAsync await's continuation.
-        Volatile.Write(ref _consumerTag, await _model.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer, cancellationToken).ConfigureAwait(false));
+        Volatile.Write(ref _consumerTag, await _channelHost.Model!.BasicConsumeAsync(_queueName, false, "", false, false, null, _consumer, cancellationToken).ConfigureAwait(false));
         _logger.LogDebug("Started consuming on {QueueName}, tag={ConsumerTag}", _queueName, _consumerTag);
     }
 
@@ -299,7 +276,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     public async Task ConsumeMessageTypeAsync(string messageTypeName, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        await _model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, null, cancellationToken: cancellationToken).ConfigureAwait(false);
+        await _channelHost.Model!.QueueBindAsync(_queueName, messageTypeName, string.Empty, null, cancellationToken: cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -308,7 +285,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     /// and surfaced through <see cref="IBus.IsConsuming"/> so <c>BusConsumingHealthCheck</c>
     /// flips to Unhealthy without needing its own broker-cancel logic.
     /// </summary>
-    internal bool IsCancelledByBroker => Volatile.Read(ref _consumerCancelledByBroker) != 0;
+    internal bool IsCancelledByBroker => _channelHost.IsCancelledByBroker;
 
     /// <summary>
     /// Drives a delivery directly through the admission and processing pipeline.
@@ -334,8 +311,8 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // Capture channels before any await so that a concurrent DisposeAsync cannot
         // null them out from under the dispatch pipeline. The pipeline's AckOrNackAsync
         // tolerates a null model (logs at Debug, does not ack).
-        var model = _model;
-        var publishChannel = _publishChannel;
+        var model = _channelHost.Model;
+        var publishChannel = _channelHost.PublishChannel;
 
         try
         {
@@ -448,47 +425,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // Fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
         // Set the flag *before* logging so a downstream health probe racing with the log call
         // observes Unhealthy on the same tick the operator first sees the warning.
-        Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
+        _channelHost.NotifyBrokerCancelled();
         _logger.LogWarning(
             "AMQP consumer '{ConsumerTag}' unregistered by broker (broker-initiated shutdown) on queue '{Queue}'; reporting unhealthy via BusConsumingHealthCheck",
             _consumerTag, _queueName);
-        return Task.CompletedTask;
-    }
-
-    private Task OnChannelShutdownAsync(object? sender, ShutdownEventArgs args)
-    {
-        // Broker- or peer-initiated channel close (e.g. queue deleted via management UI;
-        // 404/406 against the consumer channel) is NOT auto-recovered by RabbitMQ.Client v7
-        // and consumption stops silently otherwise. Flip the broker-cancelled flag so
-        // BusConsumingHealthCheck and ConsumerConnectionHealthCheck flip Unhealthy and
-        // operators see the failure rather than green-dashboarding a stalled consumer.
-        // ShutdownInitiator.Application is our own DisposeAsync / StopAsync — those must
-        // not flip the flag (they're intentional shutdown, not broker cancellation).
-        if (args.Initiator != ShutdownInitiator.Application)
-        {
-            Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
-        }
-        _logger.LogWarning(
-            "AMQP channel shutdown for queue '{Queue}': {ReplyCode} {ReplyText} (initiator: {Initiator})",
-            _queueName, args.ReplyCode, args.ReplyText, args.Initiator);
-        return Task.CompletedTask;
-    }
-
-    private Task OnPublishChannelShutdownAsync(object? sender, ShutdownEventArgs args)
-    {
-        // Publish channel close is invisible to the consumer's IsConsuming/IsCancelledByBroker
-        // chain unless we explicitly raise it. A non-Application close means the broker (or
-        // peer protocol error) tore the channel down; downstream retry/audit publishes will
-        // throw AlreadyClosedException and the message gets nacked-with-requeue forever.
-        // Flip the broker-cancelled flag so the health checks surface the failure and the
-        // pod is removed from rotation rather than burning CPU on a redelivery hot-loop.
-        if (args.Initiator != ShutdownInitiator.Application)
-        {
-            Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
-        }
-        _logger.LogWarning(
-            "AMQP publish-channel shutdown for queue '{Queue}': {ReplyCode} {ReplyText} (initiator: {Initiator})",
-            _queueName, args.ReplyCode, args.ReplyText, args.Initiator);
         return Task.CompletedTask;
     }
 
@@ -585,35 +525,25 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
         }
 
-        // Unsubscribe both channel shutdown handlers before BasicCancelAsync so neither can
-        // flip _consumerCancelledByBroker during the stop window:
-        //   - The consumer channel can receive a Library-initiator close when BasicCancelAsync
-        //     sends a stale tag from a prior auto-recovery (the broker rejects it and tears
-        //     the channel down as a protocol error).
-        //   - The publish channel can receive a broker-initiated close if a topology error
-        //     (404/406 on the retry or error exchange) races with the stop; without this
-        //     unsubscribe that close would set the flag and lie to the health check even
-        //     though the consumer is stopping cleanly.
-        if (_model is not null)
-        {
-            _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
-        }
-        if (_publishChannel is not null)
-        {
-            _publishChannel.ChannelShutdownAsync -= OnPublishChannelShutdownAsync;
-        }
+        // Unsubscribe channel-shutdown handlers BEFORE BasicCancelAsync. Sending BasicCancel
+        // with a stale tag (replaced by auto-recovery) causes the broker to close the channel
+        // with a Library initiator, not Application. Without this unsubscribe the channel host's
+        // OnChannelShutdownAsync would flip IsCancelledByBroker, falsely marking the bus
+        // Unhealthy even though the stop is intentional. DisposeAsync re-runs the same
+        // unsubscribe idempotently via the channel host's disposal path.
+        _channelHost.UnsubscribeShutdownHandlers();
 
         // Snapshot _consumerTag under an acquire fence — pairs with the release-fence
         // write in OnConsumerTagChangedAfterRecoveryAsync. Without the fence the JIT can
         // hoist the read across the unsubscribe boundary above, racing a recovery event
         // that has already swapped the tag.
         var tagForCancel = Volatile.Read(ref _consumerTag);
-        if (_model != null && tagForCancel != null)
+        if (_channelHost.Model != null && tagForCancel != null)
         {
             try
             {
                 if (!await WaitForShutdownOperationAsync(
-                        _model.BasicCancelAsync(tagForCancel, false, cancellationToken),
+                        _channelHost.Model!.BasicCancelAsync(tagForCancel, false, cancellationToken),
                         deadline).ConfigureAwait(false))
                 {
                     _logger.LogWarning("Timed out cancelling consumer during graceful stop");
@@ -686,12 +616,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // Volatile.Read pairs with OnConsumerTagChangedAfterRecoveryAsync's write — same
         // rationale as in StopAsync: defend against a JIT hoist across the unsubscribe.
         var tagForCancel = Volatile.Read(ref _consumerTag);
-        if (_model != null && tagForCancel != null)
+        if (_channelHost.Model != null && tagForCancel != null)
         {
             try
             {
                 if (!await WaitForShutdownOperationAsync(
-                        _model.BasicCancelAsync(tagForCancel, false),
+                        _channelHost.Model!.BasicCancelAsync(tagForCancel, false),
                         deadline).ConfigureAwait(false))
                 {
                     _logger.LogWarning("Timed out cancelling consumer during dispose");
@@ -728,13 +658,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
         }
 
-        if (_autoDelete && _model != null)
+        if (_autoDelete && _channelHost.Model != null)
         {
             try
             {
                 _logger.LogDebug("Deleting retry queue");
                 if (!await WaitForShutdownOperationAsync(
-                        _model.QueueDeleteAsync(_retryQueueName, false, false, false),
+                        _channelHost.Model!.QueueDeleteAsync(_retryQueueName, false, false, false),
                         deadline).ConfigureAwait(false))
                 {
                     _logger.LogWarning("Timed out deleting retry queue during dispose");
@@ -765,15 +695,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
                 _receivedHandler = null;
             }
         }
-        if (_model is not null)
-        {
-            _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
-        }
-        if (_publishChannel is not null)
-        {
-            _publishChannel.ChannelShutdownAsync -= OnPublishChannelShutdownAsync;
-        }
-
         // Unsubscribe against the SAME IConnection reference we subscribed to. Re-fetching
         // _connection.UnderlyingConnection here would return null after the parent Connection's
         // DisposeAsync has already nulled the field, leaking these handlers on the original
@@ -790,18 +711,42 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             _subscribedUnderlyingConnection = null;
         }
 
-        await CloseChannelAsync(deadline).ConfigureAwait(false);
-        await ClosePublishChannelAsync(deadline).ConfigureAwait(false);
+        // Bound the channel-host dispose against the remaining grace window. The channel host
+        // passes the token into each CloseAsync call; if the test (or real) time provider fires
+        // a deadline, the stalled CloseAsync is abandoned and we continue teardown.
+        var closeRemaining = deadline - _timeProvider.GetUtcNow();
+        if (closeRemaining > TimeSpan.Zero)
+        {
+            using var closeCts = new CancellationTokenSource(closeRemaining, _timeProvider);
+            var closeTask = _channelHost.DisposeAsync(closeCts.Token).AsTask();
+            // Task.Delay with _timeProvider so fake-time providers used in tests can fire
+            // the deadline exactly when Advance() crosses the boundary.
+            var deadlineTask = Task.Delay(closeRemaining, _timeProvider);
+#pragma warning disable VSTHRD003
+            if (await Task.WhenAny(closeTask, deadlineTask).ConfigureAwait(false) != closeTask)
+            {
+                _logger.LogWarning("Timed out closing channels during dispose");
+                ObserveAbandonedRpc(closeTask);
+            }
+#pragma warning restore VSTHRD003
+        }
+        else
+        {
+            // Deadline already expired: fire with pre-cancelled token and don't await.
+            using var closeCts = new CancellationTokenSource();
+            await closeCts.CancelAsync().ConfigureAwait(false);
+            ObserveAbandonedRpc(_channelHost.DisposeAsync(closeCts.Token).AsTask());
+        }
         await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
         shutdownPublishCts.Dispose();
         var deliveryCts = _deliveryCts;
         try { await deliveryCts.CancelAsync().ConfigureAwait(false); } catch (ObjectDisposedException) { }
         deliveryCts.Dispose();
-        // Null the consumer field AFTER channel close — symmetric with _model/_publishChannel
-        // nulling, but deferred to here so a late delivery firing during the close window
-        // (the AsyncEventingBasicConsumer is the source of the ReceivedAsync event and may
-        // still emit after we unsubscribed but before the channel close completes) can still
-        // be observed by the admission gate, which short-circuits via TryAdmit.
+        // Null the consumer field AFTER channel close so a late delivery firing during the
+        // close window (the AsyncEventingBasicConsumer is the source of the ReceivedAsync
+        // event and may still emit after we unsubscribed but before the channel close
+        // completes) can still be observed by the admission gate, which short-circuits via
+        // TryAdmit.
         _consumer = null;
     }
 
@@ -883,62 +828,6 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             CancellationToken.None,
             TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
-    }
-
-    private async Task CloseChannelAsync(DateTimeOffset deadline)
-    {
-        if (_model == null)
-        {
-            return;
-        }
-
-        try
-        {
-            if (_model.IsOpen)
-            {
-                if (!await WaitForShutdownOperationAsync(_model.CloseAsync(200, "Goodbye", false), deadline).ConfigureAwait(false))
-                {
-                    _logger.LogWarning("Timed out closing channel during dispose");
-                }
-            }
-
-            _model.Dispose();
-        }
-        catch (ObjectDisposedException) { }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error closing channel during dispose");
-        }
-        _model = null;
-        _consumerTag = null;
-    }
-
-    private async Task ClosePublishChannelAsync(DateTimeOffset deadline)
-    {
-        var publishChannel = _publishChannel;
-        if (publishChannel == null)
-        {
-            return;
-        }
-
-        try
-        {
-            if (publishChannel.IsOpen)
-            {
-                if (!await WaitForShutdownOperationAsync(publishChannel.CloseAsync(200, "Goodbye", false), deadline).ConfigureAwait(false))
-                {
-                    _logger.LogWarning("Timed out closing publish channel during dispose");
-                }
-            }
-
-            publishChannel.Dispose();
-        }
-        catch (ObjectDisposedException) { }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error closing publish channel during dispose");
-        }
-        _publishChannel = null;
     }
 
     private static Dictionary<string, object?> CoerceToQueueArgs(IReadOnlyDictionary<string, object> settings, string key)
