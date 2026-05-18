@@ -3,7 +3,6 @@ using Moq;
 using RabbitMQ.Client;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces.Configuration;
-using ServiceConnect.UnitTests;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.RabbitMQ;

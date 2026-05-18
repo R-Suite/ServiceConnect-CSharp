@@ -10,7 +10,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 public class ConsumerTests
 {

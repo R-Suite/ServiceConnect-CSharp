@@ -6,7 +6,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
 /// Verifies that reserved transport headers are server-authoritative: caller-supplied values

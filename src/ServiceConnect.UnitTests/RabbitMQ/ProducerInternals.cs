@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using ServiceConnect.Client.RabbitMQ;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
 /// Reflection helpers for the Producer test suite. Producer's internal state is split

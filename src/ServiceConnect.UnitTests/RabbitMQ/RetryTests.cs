@@ -2,7 +2,7 @@ using System.Reflection;
 using ServiceConnect.Client.RabbitMQ;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 public class RetryTests
 {

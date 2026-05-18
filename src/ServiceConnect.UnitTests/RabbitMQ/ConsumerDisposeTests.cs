@@ -7,7 +7,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
 /// Unit-level guards on Consumer.DisposeAsync — covers field-state invariants that

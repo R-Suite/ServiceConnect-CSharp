@@ -5,7 +5,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
 /// Verifies that <see cref="Producer.DisposeAsync"/> always tears down the channel and

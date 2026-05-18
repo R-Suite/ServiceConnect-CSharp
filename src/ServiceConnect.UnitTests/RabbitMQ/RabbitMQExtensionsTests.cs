@@ -6,7 +6,7 @@ using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 public class RabbitMQExtensionsTests
 {

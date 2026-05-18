@@ -6,7 +6,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
 /// Verifies that <see cref="Producer"/> enforces a publish-side timeout under publisher confirms.

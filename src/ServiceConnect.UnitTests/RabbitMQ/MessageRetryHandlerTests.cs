@@ -7,7 +7,7 @@ using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 public class MessageRetryHandlerTests
 {

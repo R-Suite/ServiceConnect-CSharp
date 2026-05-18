@@ -6,7 +6,7 @@ using RabbitMQ.Client.Exceptions;
 using ServiceConnect.Client.RabbitMQ;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.RabbitMQ;
 
 public class RabbitMqTopologyProvisionerTests
 {
