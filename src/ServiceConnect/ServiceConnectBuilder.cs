@@ -334,7 +334,7 @@ public sealed class ServiceConnectBuilder
         if (bus.MaxActiveStreams <= 0)
         {
             throw new InvalidOperationException(
-                $"BusConfiguration.MaxActiveStreams must be positive (was {bus.MaxActiveStreams}). " +
+                $"BusConfiguration.MaxActiveStreams must be positive (got {bus.MaxActiveStreams}). " +
                 "The active-stream cap defends against DoS via slot exhaustion; zero or negative values would reject every new stream.");
         }
     }

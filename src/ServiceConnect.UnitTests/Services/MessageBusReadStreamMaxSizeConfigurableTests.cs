@@ -46,7 +46,7 @@ public class MessageBusReadStreamMaxSizeConfigurableTests
         stream.Write(new byte[1024], 0);
 
         var ex = Assert.Throws<InvalidOperationException>(() => stream.Write(new byte[1], 1));
-        Assert.Contains("1024", ex.Message);
+        Assert.Contains("1,024 bytes", ex.Message);
     }
 
     [Fact]
