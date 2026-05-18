@@ -26,15 +26,23 @@ internal sealed class Consumer : IConsumer
     private int _started; // 0 = not started, 1 = started; access only via Interlocked
     private int _stopped; // 0 = active, 1 = stopped or disposed; latched for IsStopped readers
     // Startup paths (StartConsumingAsync) acquire this. DisposeAsync uses a SEPARATE
-    // semaphore so a wedged startup cannot block SIGTERM shutdown — they touch
-    // different state (startup builds the _hosts ConcurrentBag; dispose drains it).
-    // The ConcurrentBag handles the concurrent producer/consumer pattern correctly.
+    // semaphore so a wedged startup cannot block SIGTERM shutdown. The two paths share
+    // _connection and _model state; safety is preserved by the _disposed latch:
+    // DisposeAsync sets _disposed FIRST, atomically claims _connection/_model via
+    // Interlocked.Exchange, and disposes whatever it claimed. StartConsumingAsync checks
+    // _disposed after each await point that establishes shared state and cleans up its
+    // own partial work if dispose fired mid-setup.
     private readonly SemaphoreSlim _startupSemaphore = new(1, 1);
 
     // DisposeAsync acquires this. Bounded by BusConfiguration.DisposeTimeout so a
     // wedged dispose path (e.g. broker handshake stuck) eventually surfaces rather
     // than blocking process exit.
     private readonly SemaphoreSlim _disposeSemaphore = new(1, 1);
+
+    // Latched on DisposeAsync entry. StartConsumingAsync's await-resumption checks
+    // Volatile.Read(ref _disposed) after each step and bails out if non-zero, so
+    // dispose-during-startup cannot race the _connection/_model field assignments.
+    private int _disposed;
     private readonly bool _durable;
     private readonly int _retryDelay;
     private readonly bool _exclusive;
@@ -137,12 +145,29 @@ internal sealed class Consumer : IConsumer
             {
                 _connection = new Connection(_transportConfiguration, queueName, _logger);
                 _ownsConnection = true;
+                // Check immediately: DisposeAsync may have latched _disposed and atomically
+                // claimed _connection (returning null) while we were assigning. If so, throw
+                // so the catch block's Interlocked.Exchange(_connection) will claim the live
+                // instance we just wrote and dispose it.
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    throw new OperationCanceledException("Consumer was disposed during startup.");
+                }
             }
             IChannel? setupChannel = null;
             try
             {
                 setupChannel = await _connection.CreateChannelAsync(cancellationToken).ConfigureAwait(false);
                 _model = setupChannel;
+
+                // DisposeAsync may have run during CreateChannelAsync and claimed _model via
+                // Interlocked.Exchange. If so, throw so the inner finally closes setupChannel
+                // (which DisposeAsync already disposed — IsOpen: true guard prevents double-close)
+                // and the catch block atomically claims _connection and disposes it.
+                if (Volatile.Read(ref _disposed) != 0)
+                {
+                    throw new OperationCanceledException("Consumer was disposed during startup.");
+                }
 
                 // Mark as initial setup for re-throwing on first topology setup.
                 const bool isInitialSetup = true;
@@ -246,14 +271,18 @@ internal sealed class Consumer : IConsumer
             // requiring an explicit DisposeAsync to recover.
             Interlocked.Exchange(ref _started, 0);
 
-            // Snapshot and detach the owned connection BEFORE releasing the lifecycle
-            // semaphore (see RecoverStartFailureAsync for the race rationale).
+            // Atomically claim the connection before releasing the lifecycle semaphore
+            // so a concurrent DisposeAsync (which also uses Interlocked.Exchange on
+            // _connection) cannot race this cleanup path. If DisposeAsync already claimed
+            // the field, Exchange returns null and RecoverStartFailureAsync skips disposal.
             IServiceConnectConnection? connectionToDispose = null;
-            if (_ownsConnection && _connection != null)
+            if (_ownsConnection)
             {
-                connectionToDispose = _connection;
-                _connection = null;
-                _ownsConnection = false;
+                connectionToDispose = Interlocked.Exchange(ref _connection, null);
+                if (connectionToDispose is not null)
+                {
+                    _ownsConnection = false;
+                }
             }
 
             if (lifecycleHeld)
@@ -335,7 +364,15 @@ internal sealed class Consumer : IConsumer
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        // Latch IsStopped first so a health probe firing during disposal reports the
+        // Latch _disposed FIRST so StartConsumingAsync's post-await checks see the flag
+        // before DisposeAsync proceeds to atomically claim _connection/_model below.
+        // Idempotent: if a concurrent DisposeAsync already set the flag, return immediately.
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        // Latch IsStopped so a health probe firing during disposal reports the
         // consumer as permanently stopped rather than waiting out the recovery-grace window.
         Interlocked.Exchange(ref _stopped, 1);
 
@@ -383,27 +420,46 @@ internal sealed class Consumer : IConsumer
         // are retained for the lifetime of the Consumer.
         _clients.Clear();
 
-        // Only tear down _model and _connection when this DisposeAsync holds the semaphore.
-        // Without the guard, two concurrent DisposeAsync calls could both attempt teardown
-        // simultaneously, producing opaque AlreadyClosedException or double-dispose faults.
+        // Atomically claim ownership of _model and _connection. Two scenarios:
+        //   (a) Startup already wrote the fields: Exchange returns the live instances and we
+        //       dispose them here. Startup's next _disposed check throws OCE; the catch block
+        //       tries Interlocked.Exchange on _connection and finds null (already taken), so
+        //       it skips the double-dispose.
+        //   (b) Startup hasn't written yet: Exchange returns null; we skip dispose. Startup
+        //       writes the field, then immediately checks _disposed, sees 1, throws OCE, and
+        //       its catch block's Interlocked.Exchange claims and disposes the live value.
+        // The _disposed latch at the top and these atomic claims together ensure both
+        // directions are covered without requiring the startup/dispose semaphores to be shared.
         if (lifecycleAcquired)
         {
-            if (_model is { IsOpen: true })
+            var modelToClear = Interlocked.Exchange(ref _model, null);
+            if (modelToClear is { IsOpen: true })
             {
-                try { await _model.CloseAsync().ConfigureAwait(false); }
+                try { await modelToClear.CloseAsync().ConfigureAwait(false); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Error closing consumer setup channel"); }
             }
-            _model?.Dispose();
-            _model = null;
-            if (_ownsConnection && _connection != null)
+            modelToClear?.Dispose();
+
+            // Only claim and null the connection field when this Consumer owns it.
+            // A caller-supplied connection must remain in the field so a subsequent
+            // StartConsumingAsync cycle can reuse the same instance (it checks _connection
+            // is null before creating a new one). Caller-owned connections are never disposed here.
+            IServiceConnectConnection? connectionToDispose = null;
+            if (_ownsConnection)
             {
-                await _connection.DisposeAsync().ConfigureAwait(false);
-                // Null the field so a subsequent StartConsumingAsync recreates the
-                // connection rather than handing back a disposed one. _ownsConnection
-                // is set fresh on the next StartConsumingAsync, so it does not need a
-                // matching reset here.
-                _connection = null;
+                connectionToDispose = Interlocked.Exchange(ref _connection, null);
+                // _ownsConnection is set fresh on the next StartConsumingAsync.
             }
+            if (connectionToDispose is not null)
+            {
+                await connectionToDispose.DisposeAsync().ConfigureAwait(false);
+            }
+
+            // Reset _disposed before resetting _started. _started = 0 is the signal that
+            // allows a new StartConsumingAsync to proceed; resetting _disposed first ensures
+            // that once _started becomes available, the disposed latch is already clear and
+            // the new startup will not spuriously see a stale dispose-in-progress signal.
+            Interlocked.Exchange(ref _disposed, 0);
 
             // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
             Interlocked.Exchange(ref _started, 0);
