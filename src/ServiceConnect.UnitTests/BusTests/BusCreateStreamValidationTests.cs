@@ -9,7 +9,7 @@ using ServiceConnect.Services;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 public sealed class BusCreateStreamValidationTests
 {

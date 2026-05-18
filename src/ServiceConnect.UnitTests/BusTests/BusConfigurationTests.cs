@@ -1,7 +1,7 @@
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 public class BusConfigurationTests
 {

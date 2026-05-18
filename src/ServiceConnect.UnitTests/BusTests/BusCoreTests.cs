@@ -18,9 +18,9 @@ using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
-public class BusTests
+public class BusCoreTests
 {
     private readonly Mock<IMessageSerializer> _mockSerializer;
     private readonly Mock<IFilterPipeline> _mockFilterPipeline;
@@ -36,7 +36,7 @@ public class BusTests
     private readonly ConsumeScopeAccessor _scopeAccessor;
     private readonly Bus _bus;
 
-    public BusTests()
+    public BusCoreTests()
     {
         _mockSerializer = new Mock<IMessageSerializer>();
         _mockFilterPipeline = new Mock<IFilterPipeline>();

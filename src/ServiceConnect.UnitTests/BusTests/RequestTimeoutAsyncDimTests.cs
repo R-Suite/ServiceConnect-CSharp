@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using Xunit;
 
-namespace ServiceConnect.UnitTests.BusInterface;
+namespace ServiceConnect.UnitTests.BusTests;
 
 public class RequestTimeoutAsyncDimTests
 {

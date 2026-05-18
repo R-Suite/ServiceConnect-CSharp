@@ -10,7 +10,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 /// <summary>
 /// Pins the ordering contract for <see cref="Bus.StartConsumingAsync"/>: <c>_consuming</c>

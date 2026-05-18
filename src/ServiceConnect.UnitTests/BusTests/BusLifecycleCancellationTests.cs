@@ -11,7 +11,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 // Invariant: StopConsumingCoreAsync rethrows OperationCanceledException without
 // mutating _consuming/_stopped. All mutation sits behind _lifecycleSemaphore.WaitAsync,

@@ -6,9 +6,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
 
-// Namespace deliberately does NOT match the folder name to avoid shadowing the
-// ServiceConnect.Bus type for sibling tests under ServiceConnect.UnitTests.*.
-namespace ServiceConnect.UnitTests.BusInterface;
+namespace ServiceConnect.UnitTests.BusTests;
 
 public sealed class BusHostedServiceMissingProducerTests
 {

@@ -10,7 +10,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 // IConsumer and IProducer are registered as DI singletons; their lifecycle is owned by the
 // host's IServiceProvider, which disposes them on host shutdown. The Bus must NOT dispose

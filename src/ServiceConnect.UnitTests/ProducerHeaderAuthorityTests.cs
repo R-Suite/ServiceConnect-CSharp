@@ -11,7 +11,7 @@ namespace ServiceConnect.UnitTests;
 /// <summary>
 /// Verifies that reserved transport headers are server-authoritative: caller-supplied values
 /// must be silently overwritten by the producer for the four security-relevant keys.
-/// MessageId is authoritative at the Bus layer instead (see BusTests) so outgoing filters
+/// MessageId is authoritative at the Bus layer instead (see BusCoreTests) so outgoing filters
 /// can observe it before the send pipeline runs; direct Producer callers are trusted to
 /// preserve it.
 /// </summary>

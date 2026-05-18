@@ -8,7 +8,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 /// <summary>
 /// Pins the invariant that <see cref="Bus.IsConsuming"/> returns false once

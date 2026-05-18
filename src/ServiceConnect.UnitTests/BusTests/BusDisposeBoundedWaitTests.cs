@@ -13,7 +13,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 /// <summary>
 /// Pins the bounded-semaphore-wait fix in <see cref="Bus.DisposeAsync"/>: when the

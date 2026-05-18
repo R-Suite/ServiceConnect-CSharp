@@ -14,7 +14,7 @@ using ServiceConnect.UnitTests.Fakes;
 using ServiceConnect.UnitTests.Fakes.Messages;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 /// <summary>
 /// Tests for the fan-out partial-failure matrix of <see cref="Bus.SendToManyAsync{T}"/>.

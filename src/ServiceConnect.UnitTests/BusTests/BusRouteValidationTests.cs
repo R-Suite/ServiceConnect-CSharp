@@ -12,7 +12,7 @@ using ServiceConnect.Services;
 using ServiceConnect.UnitTests.Fakes;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.BusTests;
 
 public sealed class BusRouteValidationTests
 {
