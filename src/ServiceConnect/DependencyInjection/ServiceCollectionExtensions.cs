@@ -104,11 +104,11 @@ public static partial class ServiceCollectionExtensions
         RegisterRequestReplyManager(services);
         services.TryAddSingleton<ISendMessagePipeline, SendMessagePipeline>();
         services.TryAddSingleton<ConsumeContextPool>();
-        services.TryAddSingleton<ConsumeContextAccessor>();
+        services.TryAddSingleton<IConsumeContextAccessor, ConsumeContextAccessor>();
         // The consume-scope accessor flows the current DI scope through AsyncLocal so
         // inbound filters, middleware, and processors resolve scoped services from the
         // per-message scope established by MessageDispatcher and outgoing filter sites.
-        services.TryAddSingleton<ConsumeScopeAccessor>();
+        services.TryAddSingleton<IConsumeScopeAccessor, ConsumeScopeAccessor>();
     }
 
     private static void RegisterProcessors(IServiceCollection services)
@@ -159,11 +159,11 @@ public static partial class ServiceCollectionExtensions
                 sp.GetRequiredService<IReadOnlyList<HandlerReference>>(),
                 sp.GetRequiredService<IPipelineConfiguration>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
-                sp.GetRequiredService<ConsumeScopeAccessor>(),
+                sp.GetRequiredService<IConsumeScopeAccessor>(),
                 sp.GetService<IConsumer>(),
                 sp.GetService<IProducer>(),
                 timeoutStore: sp.GetService<ITimeoutStore>(),
-                consumeContextAccessor: sp.GetRequiredService<ConsumeContextAccessor>(),
+                consumeContextAccessor: sp.GetRequiredService<IConsumeContextAccessor>(),
                 busConfig: sp.GetRequiredService<IBusConfiguration>(),
                 timeProvider: sp.GetService<TimeProvider>());
             sp.GetRequiredService<BusAccessor>().Set(bus);

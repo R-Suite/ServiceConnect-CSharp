@@ -20,7 +20,7 @@ public interface IFilter
     /// <b>Lifetime.</b> The pipeline resolves <see cref="IFilter"/> via
     /// <c>IServiceProvider.GetRequiredService</c> per dispatch. Register filters as
     /// Scoped to share state across the inbound stages of a single message (the
-    /// dispatcher's scope flows through <c>ConsumeScopeAccessor</c> so all stages see
+    /// dispatcher's scope is flowed through the scope accessor so all stages see
     /// the same instance), or as Transient for stateless filters. Singleton filters are
     /// permitted but the filter author owns thread-safety — multiple dispatches may
     /// invoke the same instance concurrently. Avoid storing per-message state on a

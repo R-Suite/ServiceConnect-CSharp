@@ -8,7 +8,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
 {
-    private readonly ConsumeScopeAccessor _scopeAccessor;
+    private readonly IConsumeScopeAccessor _scopeAccessor;
     private readonly ILogger<StreamProcessor> _logger;
     private readonly IMessageTypeRegistry _typeRegistry;
     private readonly StreamHandlerRegistry _streamHandlerRegistry;
@@ -48,7 +48,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private static readonly Task<ProcessResult> HandledTask = Task.FromResult(ProcessResult.Handled);
 
     public StreamProcessor(
-        ConsumeScopeAccessor scopeAccessor,
+        IConsumeScopeAccessor scopeAccessor,
         ILogger<StreamProcessor> logger,
         IMessageTypeRegistry typeRegistry,
         StreamHandlerRegistry streamHandlerRegistry,

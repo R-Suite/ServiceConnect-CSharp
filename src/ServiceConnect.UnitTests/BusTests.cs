@@ -1409,7 +1409,7 @@ public class BusTests
     {
         var constructor = typeof(Bus)
             .GetConstructors(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .SingleOrDefault(ctor => ctor.GetParameters().Any(p => p.ParameterType == accessor.GetType()));
+            .SingleOrDefault(ctor => ctor.GetParameters().Any(p => p.Name == "consumeContextAccessor" && p.ParameterType.IsAssignableFrom(accessor.GetType())));
 
         Assert.NotNull(constructor);
 

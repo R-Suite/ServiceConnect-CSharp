@@ -2,7 +2,7 @@ using System.Threading;
 
 namespace ServiceConnect.Services;
 
-internal sealed class ConsumeContextAccessor
+internal sealed class ConsumeContextAccessor : IConsumeContextAccessor
 {
     private readonly AsyncLocal<IReadOnlyDictionary<string, object>?> _currentHeaders = new();
 

@@ -10,16 +10,16 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class ProcessManagerProcessor(
     ProcessManagerHandlerRegistry registry,
-    ConsumeScopeAccessor scopeAccessor,
+    IConsumeScopeAccessor scopeAccessor,
     Lazy<IBus> bus,
     ILogger<ProcessManagerProcessor> logger,
     IBusConfiguration busConfig,
     IQueueConfiguration queueConfig,
     ConsumeContextPool contextPool,
-    ConsumeContextAccessor consumeContextAccessor,
+    IConsumeContextAccessor consumeContextAccessor,
     IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null) : IMessageProcessor
 {
-    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
+    private readonly IConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
 
     // Verdict is a function of the value's runtime type only; cache per-Type.

@@ -11,16 +11,16 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class HandlerProcessor(
     MessageHandlerRegistry registry,
-    ConsumeScopeAccessor scopeAccessor,
+    IConsumeScopeAccessor scopeAccessor,
     Lazy<IBus> bus,
     IBusConfiguration busConfig,
     IQueueConfiguration queueConfig,
     ConsumeContextPool contextPool,
-    ConsumeContextAccessor consumeContextAccessor,
+    IConsumeContextAccessor consumeContextAccessor,
     ILogger<HandlerProcessor> logger,
     IReplyStatusRequestReplyManager? replyStatusRequestReplyManager = null) : IMessageProcessor
 {
-    private readonly ConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
+    private readonly IConsumeContextAccessor _consumeContextAccessor = consumeContextAccessor;
     private readonly ConsumeContextPool _contextPool = contextPool;
 
     public async Task<ProcessResult> ProcessAsync(

@@ -6,10 +6,10 @@ namespace ServiceConnect.Services;
 
 /// <summary>
 /// Resolves and executes configured filters for outgoing and incoming message envelopes.
-/// Filters are resolved per call from <see cref="ConsumeScopeAccessor.Current"/> so that
+/// Filters are resolved per call from <see cref="IConsumeScopeAccessor.Current"/> so that
 /// scoped dependencies honour the same message scope as the dispatcher and handlers.
 /// </summary>
-internal sealed class FilterPipeline(IPipelineConfiguration config, ConsumeScopeAccessor scopeAccessor) : IFilterPipeline
+internal sealed class FilterPipeline(IPipelineConfiguration config, IConsumeScopeAccessor scopeAccessor) : IFilterPipeline
 {
     /// <inheritdoc />
     public Task<FilterAction> ExecuteOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken = default)

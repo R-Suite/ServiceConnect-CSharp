@@ -23,7 +23,7 @@ namespace ServiceConnect.Services;
 /// into a local before starting fire-and-forget work.
 /// </para>
 /// </remarks>
-internal sealed class ConsumeScopeAccessor
+internal sealed class ConsumeScopeAccessor : IConsumeScopeAccessor
 {
     // Instance-scoped AsyncLocal so multiple ConsumeScopeAccessor instances in the same
     // AppDomain (e.g. two Bus instances) maintain independent scopes. A static AsyncLocal

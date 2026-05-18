@@ -26,9 +26,9 @@ internal sealed class Bus : IBus
     private readonly IConsumer? _consumer;
     private readonly IProducer? _producer;
     private readonly ITimeoutStore? _timeoutStore;
-    private readonly ConsumeContextAccessor _consumeContextAccessor;
+    private readonly IConsumeContextAccessor _consumeContextAccessor;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ConsumeScopeAccessor _scopeAccessor;
+    private readonly IConsumeScopeAccessor _scopeAccessor;
     private readonly IBusConfiguration _busConfig;
     private readonly TimeProvider _timeProvider;
     private readonly bool _hasOutgoingFilters;
@@ -55,11 +55,11 @@ internal sealed class Bus : IBus
         IReadOnlyList<HandlerReference> handlerReferences,
         IPipelineConfiguration pipelineConfig,
         IServiceScopeFactory scopeFactory,
-        ConsumeScopeAccessor scopeAccessor,
+        IConsumeScopeAccessor scopeAccessor,
         IConsumer? consumer = null,
         IProducer? producer = null,
         ITimeoutStore? timeoutStore = null,
-        ConsumeContextAccessor? consumeContextAccessor = null,
+        IConsumeContextAccessor? consumeContextAccessor = null,
         IBusConfiguration? busConfig = null,
         TimeProvider? timeProvider = null)
     {
@@ -810,7 +810,7 @@ internal sealed class Bus : IBus
     }
 
     // Outgoing filters share the scoped-pipeline contract with inbound filters and
-    // middleware: a fresh per-send DI scope is pushed through ConsumeScopeAccessor so
+    // middleware: a fresh per-send DI scope is pushed through IConsumeScopeAccessor so
     // scoped/transient filter dependencies are honoured instead of being leaked via
     // the root provider. The scope is disposed as soon as the filter chain completes.
     private async Task<FilterAction> RunOutgoingFiltersAsync(Envelope envelope, CancellationToken cancellationToken)

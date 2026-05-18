@@ -9,7 +9,7 @@ namespace ServiceConnect.Services;
 
 /// <summary>
 /// Deserializes incoming envelopes and routes them through filters, processors, and middleware.
-/// A fresh DI scope is created for each dispatch and flowed through <see cref="ConsumeScopeAccessor"/>
+/// A fresh DI scope is created for each dispatch and flowed through <see cref="IConsumeScopeAccessor"/>
 /// so filters, middleware, and handlers share the same per-message container scope.
 /// <para>
 /// Filters (before- and after-consuming) run on every dispatch, including pre-deserialization
@@ -30,9 +30,9 @@ internal sealed class MessageDispatcher(
     IBusConfiguration config,
     IPipelineConfiguration pipelineConfig,
     IServiceScopeFactory scopeFactory,
-    ConsumeScopeAccessor scopeAccessor,
+    IConsumeScopeAccessor scopeAccessor,
     IMessageTypeRegistry typeRegistry,
-    ConsumeContextAccessor? consumeContextAccessor = null) : IMessageDispatcher
+    IConsumeContextAccessor? consumeContextAccessor = null) : IMessageDispatcher
 {
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
     private readonly IFilterPipeline _filterPipeline = filterPipeline ?? throw new ArgumentNullException(nameof(filterPipeline));
@@ -41,14 +41,14 @@ internal sealed class MessageDispatcher(
     private readonly IBusConfiguration _config = config ?? throw new ArgumentNullException(nameof(config));
     private readonly IPipelineConfiguration _pipelineConfig = pipelineConfig ?? throw new ArgumentNullException(nameof(pipelineConfig));
     private readonly IServiceScopeFactory _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
-    private readonly ConsumeScopeAccessor _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
+    private readonly IConsumeScopeAccessor _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
     private readonly IMessageTypeRegistry _typeRegistry = typeRegistry ?? throw new ArgumentNullException(nameof(typeRegistry));
     // Optional so test rigs that construct the dispatcher directly without DI keep working —
     // a null accessor means middleware that resolves the inbound headers via the ambient
-    // ConsumeContextAccessor sees null (the pre-existing behaviour). In production wiring,
-    // ServiceCollectionExtensions registers ConsumeContextAccessor as a singleton and DI
+    // IConsumeContextAccessor sees null (the pre-existing behaviour). In production wiring,
+    // ServiceCollectionExtensions registers IConsumeContextAccessor as a singleton and DI
     // threads it in here automatically.
-    private readonly ConsumeContextAccessor? _consumeContextAccessor = consumeContextAccessor;
+    private readonly IConsumeContextAccessor? _consumeContextAccessor = consumeContextAccessor;
 
     /// <inheritdoc />
     public async Task<ConsumeEventResult> DispatchAsync(
@@ -84,7 +84,7 @@ internal sealed class MessageDispatcher(
                 // Push the inbound-context accessor BEFORE filters/middleware run so any outbound
                 // call made from a middleware (e.g. an auto-forward IMessageProcessingMiddleware
                 // that invokes Bus.RouteAsync or Bus.SendAsync) reads the inbound hop counter via
-                // ConsumeContextAccessor.CurrentHeaders.
+                // IConsumeContextAccessor.CurrentHeaders.
                 // Without this, middleware sees CurrentHeaders == null and the framework stamps
                 // RoutingSlipHopsCompleted=1 regardless of the inbound hop count — defeating
                 // MaxRoutingSlipHops as the cross-service amplification defence.

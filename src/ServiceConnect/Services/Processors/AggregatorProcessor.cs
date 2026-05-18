@@ -8,7 +8,7 @@ namespace ServiceConnect.Services.Processors;
 
 internal sealed class AggregatorProcessor(
     AggregatorRegistry registry,
-    ConsumeScopeAccessor scopeAccessor,
+    IConsumeScopeAccessor scopeAccessor,
     IServiceScopeFactory scopeFactory,
     ILogger<AggregatorProcessor> logger,
     IAggregatorPersistor? persistor = null,
@@ -223,7 +223,7 @@ internal sealed class AggregatorProcessor(
         {
             // Pass null for ambientScope so FlushAggregatorAsync always creates a fresh DI
             // scope. The Timer captured the dispatcher's ExecutionContext (and therefore
-            // the AsyncLocal-backed ConsumeScopeAccessor) at construction time, so reading
+            // the AsyncLocal-backed IConsumeScopeAccessor) at construction time, so reading
             // the accessor from this callback would observe the disposed dispatcher scope.
             // Timer path: flush if any messages are buffered (minThreshold = 1).
             // The batch-size threshold only applies when ProcessAsync triggers the flush.
