@@ -98,5 +98,6 @@ public static class RabbitMQExtensions
         if (options.PublishTimeout.HasValue) { transport.SetClientSetting(RabbitMQSettingKeys.PublishTimeout, options.PublishTimeout.Value); }
         if (options.MaxOutstandingPublishConfirms.HasValue) { transport.SetClientSetting(RabbitMQSettingKeys.MaxOutstandingPublishConfirms, options.MaxOutstandingPublishConfirms.Value); }
         if (options.NetworkRecoveryInterval.HasValue) { transport.SetClientSetting(RabbitMQSettingKeys.NetworkRecoveryInterval, options.NetworkRecoveryInterval.Value); }
+        if (options.MaxHeaderCount.HasValue) { transport.SetClientSetting(RabbitMQSettingKeys.MaxHeaderCount, options.MaxHeaderCount.Value); }
     }
 }

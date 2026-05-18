@@ -282,6 +282,18 @@ Sets the interval RabbitMQ.Client waits between automatic-recovery attempts afte
 
 ---
 
+### `MaxHeaderCount` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.MaxHeaderCount, 128);
+```
+
+Caps the number of headers the consumer will accept on an inbound message. Accepts a positive `int`; defaults to **64** when unset. Equivalent to `RabbitMqOptions.MaxHeaderCount` on the typed overload.
+
+**Remarks.** Inbound messages whose header count exceeds the cap are rejected at admission and routed to the error queue (acknowledged-then-published, not redelivered — a retry would just hit the same rule). Raise the cap for tracing-heavy producers that legitimately stamp wide header sets (W3C baggage, tenant headers); lower it to tighten resource-exhaustion defence against hostile inputs. The cap pairs with the per-value byte budget (8 KiB) and an aggregate header-size budget (the message-size budget, shared with the body cap) — together they bound the worst-case header weight an attacker can pack onto a single delivery.
+
+---
+
 ### `SetClientSetting`
 
 ```csharp

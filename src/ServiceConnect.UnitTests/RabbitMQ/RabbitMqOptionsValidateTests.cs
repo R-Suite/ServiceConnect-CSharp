@@ -78,6 +78,22 @@ public sealed class RabbitMqOptionsValidateTests
     }
 
     [Fact]
+    public void Validate_ZeroMaxHeaderCount_ReturnsError()
+    {
+        var options = new RabbitMqOptions { MaxHeaderCount = 0 };
+        var errors = options.Validate();
+        Assert.Contains(errors, e => e.Contains("MaxHeaderCount", System.StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validate_NegativeMaxHeaderCount_ReturnsError()
+    {
+        var options = new RabbitMqOptions { MaxHeaderCount = -1 };
+        var errors = options.Validate();
+        Assert.Contains(errors, e => e.Contains("MaxHeaderCount", System.StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Validate_AggregatesMultipleErrors()
     {
         var options = new RabbitMqOptions

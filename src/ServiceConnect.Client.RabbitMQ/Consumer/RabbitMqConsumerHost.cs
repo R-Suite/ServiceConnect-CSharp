@@ -37,6 +37,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     private readonly bool _includeMachineNameInHeaders;
     private readonly bool _deadLetterUnhandledMessages;
     private readonly long _maxInboundMessageSize;
+    private readonly int _maxHeaderCount;
 
     private readonly RabbitMqChannelHost _channelHost;
     private ConsumerEventHandler? _consumerEventHandler;
@@ -134,6 +135,9 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _maxInboundMessageSize = settings.TryGetValue(RabbitMQSettingKeys.MessageSize, out var maxSizeVal)
             ? Convert.ToInt64(maxSizeVal, System.Globalization.CultureInfo.InvariantCulture)
             : 64 * 1024;
+        _maxHeaderCount = settings.TryGetValue(RabbitMQSettingKeys.MaxHeaderCount, out var maxHeaderCountVal)
+            ? Convert.ToInt32(maxHeaderCountVal, System.Globalization.CultureInfo.InvariantCulture)
+            : DefaultMaxHeaderCount;
 
         _channelHost = new RabbitMqChannelHost(_connection, _logger, _queueConfiguration.QueueName);
 
@@ -144,7 +148,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         _validator = new RabbitMqHeaderValidator(
             retryHandler,
             _maxInboundMessageSize,
-            DefaultMaxHeaderCount,
+            _maxHeaderCount,
             DefaultMaxHeaderValueBytes,
             GetShutdownPublishToken,
             logger);

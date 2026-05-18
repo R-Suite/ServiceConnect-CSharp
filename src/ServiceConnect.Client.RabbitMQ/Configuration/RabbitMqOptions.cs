@@ -73,6 +73,14 @@ public sealed record class RabbitMqOptions
     public TimeSpan? NetworkRecoveryInterval { get; set; }
 
     /// <summary>
+    /// Maximum number of headers allowed on an inbound message. Defaults to 64. Inbound
+    /// messages with more headers are rejected (NACK'd to retry / dead-letter). Increase
+    /// if your producers legitimately stamp wider header sets (e.g. heavy distributed-
+    /// tracing baggage); decrease to tighten resource-exhaustion defence on hostile inputs.
+    /// </summary>
+    public int? MaxHeaderCount { get; set; }
+
+    /// <summary>
     /// Validates the option values that have explicit range constraints. Properties
     /// typed as <see cref="ushort"/>? are non-negative by type and need no runtime check;
     /// this method covers the <see cref="int"/>?, <see cref="long"/>?, and
@@ -116,6 +124,11 @@ public sealed record class RabbitMqOptions
         if (NetworkRecoveryInterval is { } recoveryInterval && recoveryInterval <= TimeSpan.Zero)
         {
             errors.Add($"NetworkRecoveryInterval must be positive (was {recoveryInterval}).");
+        }
+
+        if (MaxHeaderCount is { } maxHeaderCount && maxHeaderCount < 1)
+        {
+            errors.Add($"MaxHeaderCount must be positive (was {maxHeaderCount}).");
         }
 
         return errors;

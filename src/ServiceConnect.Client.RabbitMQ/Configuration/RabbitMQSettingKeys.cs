@@ -79,4 +79,13 @@ public static class RabbitMQSettingKeys
     /// during prolonged broker outages.
     /// </summary>
     public const string NetworkRecoveryInterval = nameof(NetworkRecoveryInterval);
+
+    /// <summary>
+    /// Maximum number of headers allowed on an inbound message before the consumer rejects
+    /// the delivery (NACK'd to retry / dead-letter). Accepts a positive <see cref="int"/>;
+    /// defaults to 64 when unset. Raise for tracing-heavy producers that legitimately stamp
+    /// wide header sets (W3C baggage, tenant headers); lower to tighten resource-exhaustion
+    /// defence on hostile inputs.
+    /// </summary>
+    public const string MaxHeaderCount = nameof(MaxHeaderCount);
 }
