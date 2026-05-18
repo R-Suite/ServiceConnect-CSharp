@@ -104,7 +104,7 @@ public static class ServiceConnectActivitySource
                 }
             }
 
-            TryEnrich(activity, eventArgs.Message, options);
+            TelemetryEnrichment.TryEnrich(activity, eventArgs.Message, options);
 
             return activity;
         }
@@ -228,7 +228,7 @@ public static class ServiceConnectActivitySource
 
             if (eventArgs.Message is { Length: > 0 })
             {
-                TryEnrich(activity, eventArgs.Message, options);
+                TelemetryEnrichment.TryEnrich(activity, eventArgs.Message, options);
             }
 
             return activity;
@@ -338,7 +338,7 @@ public static class ServiceConnectActivitySource
                 return activity;
             }
 
-            TryEnrich(activity, eventArgs.Message, options);
+            TelemetryEnrichment.TryEnrich(activity, eventArgs.Message, options);
 
             return activity;
         }
@@ -732,54 +732,6 @@ public static class ServiceConnectActivitySource
         return activity;
     }
 
-    private static void TryEnrich(Activity activity, Message? message, ServiceConnectInstrumentationOptions options)
-    {
-        if (message is null)
-        {
-            return;
-        }
-
-        try
-        {
-            options.EnrichWithMessage?.Invoke(activity, message);
-        }
-        catch (OperationCanceledException)
-        {
-            // Co-operative cancellation — propagate so callers can distinguish
-            // shutdown from enrichment failure.
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // Tag the exception type only. Message strings can contain caller-
-            // controlled payloads or PII; the type name is sufficient diagnostic.
-            activity.SetTag("enrichment.exception", ex.GetType().FullName);
-        }
-    }
-
-    private static void TryEnrich(Activity activity, byte[]? message, ServiceConnectInstrumentationOptions options)
-    {
-        if (message is null)
-        {
-            return;
-        }
-
-        try
-        {
-            options.EnrichWithMessageBytes?.Invoke(activity, message);
-        }
-        catch (OperationCanceledException)
-        {
-            // See Message overload for rationale on OCE rethrow.
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // See Message overload for rationale on tagging the type only.
-            activity.SetTag("enrichment.exception", ex.GetType().FullName);
-        }
-    }
-
     internal static bool IsPublishTelemetryEnabled(ServiceConnectInstrumentationOptions options)
         => options.EnablePublishTelemetry && _activitySource.HasListeners();
 
@@ -790,8 +742,8 @@ public static class ServiceConnectActivitySource
         => options.EnableConsumeTelemetry && _activitySource.HasListeners();
 
     internal static void InvokeTryEnrichForTest(Activity activity, Message? message, ServiceConnectInstrumentationOptions options) =>
-        TryEnrich(activity, message, options);
+        TelemetryEnrichment.TryEnrich(activity, message, options);
 
     internal static void InvokeTryEnrichForTest(Activity activity, byte[]? bytes, ServiceConnectInstrumentationOptions options) =>
-        TryEnrich(activity, bytes, options);
+        TelemetryEnrichment.TryEnrich(activity, bytes, options);
 }
