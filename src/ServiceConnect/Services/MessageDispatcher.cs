@@ -85,6 +85,9 @@ internal sealed class MessageDispatcher(
                 // call made from a middleware (e.g. an auto-forward IMessageProcessingMiddleware
                 // that invokes Bus.RouteAsync or Bus.SendAsync) reads the inbound hop counter via
                 // ConsumeContextAccessor.CurrentHeaders.
+                // Without this, middleware sees CurrentHeaders == null and the framework stamps
+                // RoutingSlipHopsCompleted=1 regardless of the inbound hop count — defeating
+                // MaxRoutingSlipHops as the cross-service amplification defence.
                 //
                 // The Dictionary fast-path covers the production transport (Bus constructs as
                 // Dictionary<,>); third-party transports passing a non-Dictionary IDictionary
@@ -182,6 +185,7 @@ internal sealed class MessageDispatcher(
         {
             return new ConsumeEventResult { Success = true, NotHandled = true };
         }
+        // Type is non-null whenever ShouldReturnNotHandled is false (helper contract).
         var type = typeResolution.Type!;
 
         if (hasResponseMessageId)
