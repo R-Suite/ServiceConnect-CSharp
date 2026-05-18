@@ -113,7 +113,8 @@ internal sealed class MessageBusReadStream(string sequenceId, long maxTotalStrea
         {
             Interlocked.Add(ref _totalBytesWritten, -data.Length);
             throw new InvalidOperationException(
-                $"Stream exceeds maximum size of {_maxTotalStreamSize:N0} bytes (~{_maxTotalStreamSize / (1024.0 * 1024.0):F1} MB).");
+                FormattableString.Invariant(
+                    $"Stream exceeds maximum size of {_maxTotalStreamSize:N0} bytes (~{_maxTotalStreamSize / (1024.0 * 1024.0):F1} MB)."));
         }
 
         if (!_packets.TryAdd(packetNumber, stored))
