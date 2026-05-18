@@ -195,6 +195,7 @@ builder.ConfigureBus(bus =>
     bus.IncludeMachineNameInHeaders = false; // default; opt in only when safe
     bus.MaxInflightRequests = 25_000;        // raise for high-concurrency request fans
     bus.MaxStreamSizeBytes = 500L * 1024 * 1024; // 500 MB for large file streams
+    bus.MaxActiveStreams = 5_000;             // raise for high-concurrency file transfers
     bus.ExceptionHandler = (ex, _) => { _metrics.RecordHandlerFailure(ex); return ValueTask.CompletedTask; };
 });
 ```
@@ -207,6 +208,7 @@ A few worth a note:
 - **`IncludeMachineNameInHeaders`** — adds `SourceMachine`/`DestinationMachine` headers. Off by default because the hostname leak is a problem in shared-broker deployments.
 - **`MaxInflightRequests`** (default **10,000**) — caps concurrent `SendRequestAsync` / `SendRequestMultiAsync` exchanges. Each pending request pins a timer + TCS + cancellation registration; the cap defends against `Timeout.Infinite` leaks and unawaited request loops. Raise for genuine high-concurrency request fans; lower to harden against caller bugs.
 - **`MaxStreamSizeBytes`** (default **100 MB**) — maximum bytes a single inbound stream may reassemble. `MessageBusReadStream.Write` throws `InvalidOperationException` if exceeded. Raise for file-upload or large-artefact workloads; lower to harden memory-constrained hosts.
+- **`MaxActiveStreams`** (default **1,000**) — maximum concurrent partial inbound streams. Defends against DoS via stream-slot exhaustion. Raise for high-concurrency file transfers; lower to harden memory-constrained hosts.
 
 ## Configuration is immutable after build
 

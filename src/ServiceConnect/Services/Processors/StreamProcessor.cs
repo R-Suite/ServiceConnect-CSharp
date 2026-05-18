@@ -16,6 +16,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private readonly IMessageSerializer _serializer;
     private readonly TimeProvider _timeProvider;
     private readonly long _maxStreamSizeBytes;
+    private readonly int _maxActiveStreams;
     private readonly ConcurrentDictionary<string, ActiveStreamState> _activeStreams = new(StringComparer.Ordinal);
     // Tracks admitted stream count separately so admission can be gated with Interlocked
     // without relying on ConcurrentDictionary.Count (which is accurate but does not compose
@@ -34,11 +35,6 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private static readonly TimeSpan StreamTimeout = TimeSpan.FromMinutes(5);
     /// <summary>Interval at which the sweeper runs to evict stale partial streams.</summary>
     private static readonly TimeSpan StreamCleanupInterval = TimeSpan.FromMinutes(1);
-    /// <summary>
-    /// Maximum number of concurrently tracked partial streams.
-    /// Prevents DoS via stream slot exhaustion.
-    /// </summary>
-    private const int MaxActiveStreams = 1000;
     /// <summary>
     /// Upper bound on LastPacketNumber to prevent attacker-controlled allocation
     /// of unbounded packet-count state.
@@ -64,11 +60,14 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
-        // Snapshot the per-stream byte cap at construction time so each fresh
-        // MessageBusReadStream carries the configured ceiling without re-reading
-        // IBusConfiguration on every admission. The configuration is frozen by the
-        // time the processor is resolved from DI, so the snapshot is final.
-        _maxStreamSizeBytes = (busConfig ?? throw new ArgumentNullException(nameof(busConfig))).MaxStreamSizeBytes;
+        // Snapshot the per-stream byte cap and active-stream slot cap at construction
+        // time so each fresh MessageBusReadStream and admission check uses the configured
+        // ceilings without re-reading IBusConfiguration on every packet. The configuration
+        // is frozen by the time the processor is resolved from DI, so the snapshots are
+        // final. The active-stream cap defends against DoS via stream-slot exhaustion.
+        ArgumentNullException.ThrowIfNull(busConfig);
+        _maxStreamSizeBytes = busConfig.MaxStreamSizeBytes;
+        _maxActiveStreams = busConfig.MaxActiveStreams;
         _cleanupTimer = _timeProvider.CreateTimer(_ => EvictStaleStreams(), null, StreamCleanupInterval, StreamCleanupInterval);
     }
 
@@ -151,10 +150,10 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         if (!_activeStreams.TryGetValue(sequenceId, out _))
         {
             var newCount = Interlocked.Increment(ref _streamCount);
-            if (newCount > MaxActiveStreams)
+            if (newCount > _maxActiveStreams)
             {
                 Interlocked.Decrement(ref _streamCount);
-                _logger.LogWarning("Active stream cap {Cap} reached; rejecting new stream {SequenceId}", MaxActiveStreams, sequenceId);
+                _logger.LogWarning("Active stream cap {Cap} reached; rejecting new stream {SequenceId}", _maxActiveStreams, sequenceId);
                 return NotHandledTask;
             }
 

@@ -32,6 +32,7 @@ internal sealed class BusConfiguration : IBusConfiguration
     private bool _allowMissingProducer;
     private int _maxInflightRequests = 10_000;
     private long _maxStreamSizeBytes = 100L * 1024 * 1024;
+    private int _maxActiveStreams = 1000;
 
     /// <inheritdoc />
     public bool ScanForMessageHandlers { get => _scanForMessageHandlers; set { ThrowIfFrozen(); _scanForMessageHandlers = value; } }
@@ -65,6 +66,8 @@ internal sealed class BusConfiguration : IBusConfiguration
     public int MaxInflightRequests { get => _maxInflightRequests; set { ThrowIfFrozen(); _maxInflightRequests = value; } }
     /// <inheritdoc />
     public long MaxStreamSizeBytes { get => _maxStreamSizeBytes; set { ThrowIfFrozen(); _maxStreamSizeBytes = value; } }
+    /// <inheritdoc />
+    public int MaxActiveStreams { get => _maxActiveStreams; set { ThrowIfFrozen(); _maxActiveStreams = value; } }
     /// <summary>
     /// Gets the transport configuration used to connect to the broker.
     /// </summary>

@@ -207,6 +207,18 @@ Caps the cumulative byte count a single inbound stream may reassemble before `Me
 
 **Remarks.** Every admitted stream pins a `ConcurrentDictionary<long, byte[]>` and a running total — without a ceiling, a hostile or buggy producer that never closes its stream would drive unbounded heap growth on the receiver. Raise for deployments that legitimately stream large artefacts (file uploads, ML model weights, image batches); lower to harden memory-constrained hosts where 100 MB per concurrent stream is too generous. Startup throws if a non-positive value is configured.
 
+---
+
+### `MaxActiveStreams`
+
+```csharp
+int MaxActiveStreams { get; set; }
+```
+
+Caps the number of concurrently-tracked partial inbound streams `StreamProcessor` will admit before rejecting new sequences (warning log + drop). Defaults to **1,000**.
+
+**Remarks.** Each admitted stream holds a `MessageBusReadStream` instance, a packet dictionary, and a per-sequence record in the processor's active-stream map until completion, eviction, or fault. Without a slot ceiling, a producer (hostile or buggy) that opens streams without ever completing them would drive unbounded growth on the receiver. Raise for high-concurrency file-transfer workloads where 1,000 simultaneous in-flight reassemblies is too tight; lower to harden memory-constrained hosts. Snapshotted into the processor at construction — the configuration is frozen by the time the processor resolves from DI, so changes after `AddServiceConnect` returns are rejected. Startup throws if a non-positive value is configured.
+
 ## Usage
 
 ### Configuring a RabbitMQ bus with a named queue

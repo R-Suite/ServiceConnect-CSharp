@@ -173,4 +173,13 @@ public interface IBusConfiguration
     /// lower to harden memory-constrained hosts. Must be positive.
     /// </summary>
     long MaxStreamSizeBytes { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of concurrently-tracked partial inbound streams.
+    /// Defaults to 1,000. <c>StreamProcessor</c> rejects new streams (warning log + drop)
+    /// when this cap is reached; defends against DoS via stream-slot exhaustion. Raise
+    /// for high-concurrency file-transfer workloads; lower to harden memory-constrained
+    /// hosts. Must be positive.
+    /// </summary>
+    int MaxActiveStreams { get; set; }
 }

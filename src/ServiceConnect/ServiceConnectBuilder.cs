@@ -327,6 +327,16 @@ public sealed class ServiceConnectBuilder
                 "The stream-reassembly cap defends against unbounded memory growth from hostile producers; " +
                 "zero or negative values would reject every stream write.");
         }
+
+        // MaxActiveStreams gates new-stream admission in StreamProcessor. A zero or
+        // negative cap would reject every first-packet at the > check, leaving the bus
+        // unable to admit any new stream. Reject at startup.
+        if (bus.MaxActiveStreams <= 0)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.MaxActiveStreams must be positive (was {bus.MaxActiveStreams}). " +
+                "The active-stream cap defends against DoS via slot exhaustion; zero or negative values would reject every new stream.");
+        }
     }
 
     /// <summary>
