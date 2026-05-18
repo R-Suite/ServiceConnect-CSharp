@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.Time.Testing;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
+using ServiceConnect.UnitTests.Persistence.InMemory;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Persistence;

@@ -10,6 +10,7 @@ using ServiceConnect.Persistence.InMemory;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using ServiceConnect.UnitTests.Fakes;
+using ServiceConnect.UnitTests.Persistence.InMemory;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Processors;

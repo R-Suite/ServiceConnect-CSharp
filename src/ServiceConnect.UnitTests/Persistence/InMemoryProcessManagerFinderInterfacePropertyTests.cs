@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
+using ServiceConnect.UnitTests.Persistence.InMemory;
 using Xunit;
 
 namespace ServiceConnect.UnitTests.Persistence;

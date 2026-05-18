@@ -4,6 +4,8 @@ using ServiceConnect;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
 
+namespace ServiceConnect.UnitTests.Persistence;
+
 public class MongoDbPersistenceExtensionsIdempotencyTests
 {
     [Fact]
