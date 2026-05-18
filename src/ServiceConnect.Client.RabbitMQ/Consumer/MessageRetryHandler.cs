@@ -62,7 +62,7 @@ internal sealed class MessageRetryHandler(
                 _logger.LogWarning(
                     "Malformed or out-of-range RetryCount header '{RetryCount}' for MessageId {MessageId}; routing to error exchange.",
                     raw, args.BasicProperties.MessageId);
-                await PublishErrorAsync(channel, args, headers, ex, logAsMaxRetries: false, cancellationToken).ConfigureAwait(false);
+                await PublishErrorAsync(channel, args, headers, ex, PublishErrorReason.MalformedRetryCountHeader, cancellationToken).ConfigureAwait(false);
                 return;
             }
             retryCount = candidate;
@@ -96,7 +96,7 @@ internal sealed class MessageRetryHandler(
             return;
         }
 
-        await PublishErrorAsync(channel, args, headers, ex, logAsMaxRetries: true, cancellationToken).ConfigureAwait(false);
+        await PublishErrorAsync(channel, args, headers, ex, PublishErrorReason.MaxRetriesExceeded, cancellationToken).ConfigureAwait(false);
     }
 
     public Task HandleTerminalFailureAsync(
@@ -106,7 +106,7 @@ internal sealed class MessageRetryHandler(
         Exception ex,
         CancellationToken cancellationToken = default)
     {
-        return PublishErrorAsync(channel, args, headers, ex, logAsMaxRetries: false, cancellationToken);
+        return PublishErrorAsync(channel, args, headers, ex, PublishErrorReason.PermanentlyInvalidPayload, cancellationToken);
     }
 
     private async Task PublishErrorAsync(
@@ -114,7 +114,7 @@ internal sealed class MessageRetryHandler(
         BasicDeliverEventArgs args,
         Dictionary<string, object> headers,
         Exception? ex,
-        bool logAsMaxRetries,
+        PublishErrorReason reason,
         CancellationToken cancellationToken)
     {
         if (ex != null)
@@ -128,25 +128,14 @@ internal sealed class MessageRetryHandler(
         }
 
         // IQueueConfiguration.DisableErrors=true contract: "failed messages bypass the error
-        // queue." Honour it here at the single PublishErrorAsync site so both the exhausted-
-        // retry path (HandleFailureAsync) and the validator/no-handler terminal path
-        // (HandleTerminalFailureAsync) skip the publish. The caller acks the original delivery,
-        // the message is dropped, and operators see the drop on the dedicated counter rather
-        // than the message landing in the error queue they explicitly asked us not to use.
+        // queue." Honour it here at the single PublishErrorAsync site so every reason path
+        // (max retries, malformed header, permanently-invalid payload) skips the publish.
+        // The caller acks the original delivery, the message is dropped, and operators see
+        // the drop on the dedicated counter rather than the message landing in the error
+        // queue they explicitly asked us not to use.
         if (_errorsDisabled)
         {
-            if (logAsMaxRetries)
-            {
-                _logger.LogWarning(ex,
-                    "Max retries exceeded for MessageId {MessageId}; dropping per DisableErrors=true (no error-queue publish).",
-                    args.BasicProperties.MessageId);
-            }
-            else
-            {
-                _logger.LogWarning(ex,
-                    "Rejecting permanently invalid inbound message with MessageId {MessageId}; dropping per DisableErrors=true (no error-queue publish).",
-                    args.BasicProperties.MessageId);
-            }
+            LogDropDueToErrorsDisabled(reason, ex, args);
             ServiceConnectMeter.AddRetryDrop(new TagList
             {
                 { "messaging.system", "rabbitmq" },
@@ -156,21 +145,7 @@ internal sealed class MessageRetryHandler(
             return;
         }
 
-        if (logAsMaxRetries)
-        {
-            if (ex != null)
-            {
-                _logger.LogError(ex, "Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
-            }
-            else
-            {
-                _logger.LogError("Max retries exceeded for MessageId {MessageId}", args.BasicProperties.MessageId);
-            }
-        }
-        else
-        {
-            _logger.LogError(ex, "Rejecting permanently invalid inbound message with MessageId {MessageId}", args.BasicProperties.MessageId);
-        }
+        LogPublishToErrorExchange(reason, ex, args);
 
         // Same field-by-field copy as the retry-publish path — see BasicPropertiesCopier.
         var errorProps = BasicPropertiesCopier.CreateCopy(args.BasicProperties, HeaderHelpers.ToNullableHeaders(headers));
@@ -178,5 +153,58 @@ internal sealed class MessageRetryHandler(
         // surfaces through the InboundMessageProcessor catch; logged at Error and acked to
         // prevent unbounded redelivery.
         await channel.BasicPublishAsync(_errorExchange, string.Empty, true, errorProps, args.Body, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void LogDropDueToErrorsDisabled(PublishErrorReason reason, Exception? ex, BasicDeliverEventArgs args)
+    {
+        var messageId = args.BasicProperties.MessageId;
+        switch (reason)
+        {
+            case PublishErrorReason.MaxRetriesExceeded:
+                _logger.LogWarning(ex,
+                    "Max retries exceeded for MessageId {MessageId}; dropping per DisableErrors=true (no error-queue publish).",
+                    messageId);
+                break;
+            case PublishErrorReason.MalformedRetryCountHeader:
+                _logger.LogWarning(ex,
+                    "Malformed RetryCount header for MessageId {MessageId}; dropping per DisableErrors=true (no error-queue publish).",
+                    messageId);
+                break;
+            case PublishErrorReason.PermanentlyInvalidPayload:
+                _logger.LogWarning(ex,
+                    "Rejecting permanently invalid inbound message with MessageId {MessageId}; dropping per DisableErrors=true (no error-queue publish).",
+                    messageId);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
+        }
+    }
+
+    private void LogPublishToErrorExchange(PublishErrorReason reason, Exception? ex, BasicDeliverEventArgs args)
+    {
+        var messageId = args.BasicProperties.MessageId;
+        switch (reason)
+        {
+            case PublishErrorReason.MaxRetriesExceeded:
+                if (ex != null)
+                {
+                    _logger.LogError(ex, "Max retries exceeded for MessageId {MessageId}", messageId);
+                }
+                else
+                {
+                    _logger.LogError("Max retries exceeded for MessageId {MessageId}", messageId);
+                }
+                break;
+            case PublishErrorReason.MalformedRetryCountHeader:
+                _logger.LogError(ex,
+                    "Malformed RetryCount header for MessageId {MessageId}; routing to error exchange.",
+                    messageId);
+                break;
+            case PublishErrorReason.PermanentlyInvalidPayload:
+                _logger.LogError(ex, "Rejecting permanently invalid inbound message with MessageId {MessageId}", messageId);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(reason), reason, null);
+        }
     }
 }
