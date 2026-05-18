@@ -25,14 +25,16 @@ internal sealed class Consumer : IConsumer
     private readonly ConcurrentBag<IAsyncDisposable> _clients = [];
     private int _started; // 0 = not started, 1 = started; access only via Interlocked
     private int _stopped; // 0 = active, 1 = stopped or disposed; latched for IsStopped readers
-    // Serialises StartConsumingAsync against DisposeAsync. Without this, a DisposeAsync
-    // that lands while StartConsumingAsync is still inside the topology-provision /
-    // setup-channel section (between `_model = setupChannel` and the finally that nulls
-    // it) can close and dispose the in-flight setup channel from under the running
-    // start path. Both lifecycle methods acquire this semaphore; Dispose's wait is
-    // bounded by BusConfiguration.DisposeTimeout so a wedged broker handshake cannot
-    // block container shutdown indefinitely.
-    private readonly SemaphoreSlim _lifecycleSemaphore = new(1, 1);
+    // Startup paths (StartConsumingAsync) acquire this. DisposeAsync uses a SEPARATE
+    // semaphore so a wedged startup cannot block SIGTERM shutdown — they touch
+    // different state (startup builds the _hosts ConcurrentBag; dispose drains it).
+    // The ConcurrentBag handles the concurrent producer/consumer pattern correctly.
+    private readonly SemaphoreSlim _startupSemaphore = new(1, 1);
+
+    // DisposeAsync acquires this. Bounded by BusConfiguration.DisposeTimeout so a
+    // wedged dispose path (e.g. broker handshake stuck) eventually surfaces rather
+    // than blocking process exit.
+    private readonly SemaphoreSlim _disposeSemaphore = new(1, 1);
     private readonly bool _durable;
     private readonly int _retryDelay;
     private readonly bool _exclusive;
@@ -120,11 +122,11 @@ internal sealed class Consumer : IConsumer
         // DisposeAsync) must report the freshly-started consumer as not-stopped.
         Interlocked.Exchange(ref _stopped, 0);
 
-        // Acquire the lifecycle lock for the duration of setup. A concurrent DisposeAsync
-        // waits here (bounded by its own deadline) so it cannot tear down the in-flight
-        // setup channel from under us. Honour the caller's cancellation: a wedged dispose
-        // holding the lock past the caller's CT cancellation should release us with an OCE.
-        await _lifecycleSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+        // Acquire the startup lock for the duration of setup. Serialises concurrent
+        // StartConsumingAsync calls so only one sets up the channel and _hosts bag at
+        // a time. Honour the caller's cancellation token directly; this lock is
+        // independent of DisposeAsync so a dispose cannot block entry here.
+        await _startupSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
         var lifecycleHeld = true;
 
         try
@@ -256,7 +258,7 @@ internal sealed class Consumer : IConsumer
 
             if (lifecycleHeld)
             {
-                _lifecycleSemaphore.Release();
+                _startupSemaphore.Release();
                 lifecycleHeld = false;
             }
 
@@ -267,7 +269,7 @@ internal sealed class Consumer : IConsumer
         {
             if (lifecycleHeld)
             {
-                _lifecycleSemaphore.Release();
+                _startupSemaphore.Release();
             }
         }
     }
@@ -337,21 +339,22 @@ internal sealed class Consumer : IConsumer
         // consumer as permanently stopped rather than waiting out the recovery-grace window.
         Interlocked.Exchange(ref _stopped, 1);
 
-        // Wait for any in-flight StartConsumingAsync to complete its setup section before
-        // tearing down _model / _connection. Without this, dispose-during-startup can close
-        // and dispose the setup channel from under the running start path, producing an
-        // opaque AlreadyClosedException / ObjectDisposedException out of topology declares.
-        // Bounded by DisposeTimeout so a wedged start cannot hang container shutdown.
+        // Bounded by DisposeTimeout so a wedged dispose itself cannot hang container shutdown.
+        // The semaphore is dedicated to DisposeAsync; a still-running StartConsumingAsync
+        // acquires its own _startupSemaphore and runs concurrently with dispose. This is
+        // intentional — the pre-split single-semaphore design had StartConsumingAsync
+        // blocking SIGTERM when a topology-provision retry loop held the lock.
         var lifecycleTimeout = _busConfiguration.DisposeTimeout > TimeSpan.Zero
             ? _busConfiguration.DisposeTimeout
             : TimeSpan.FromSeconds(30);
-        var lifecycleAcquired = await _lifecycleSemaphore.WaitAsync(lifecycleTimeout).ConfigureAwait(false);
+        var lifecycleAcquired = await _disposeSemaphore.WaitAsync(lifecycleTimeout).ConfigureAwait(false);
         if (!lifecycleAcquired)
         {
             _logger.LogWarning(
-                "Consumer.DisposeAsync timed out waiting for in-flight StartConsumingAsync after {Timeout}. " +
-                "The setup channel and connection remain owned by the wedged start; _started is left set so a " +
-                "subsequent StartConsumingAsync fails fast instead of deadlocking. Resolve the wedge (process restart) before resuming consumption.",
+                "Consumer.DisposeAsync timed out waiting to acquire the dispose semaphore after {Timeout}. " +
+                "A concurrent DisposeAsync may still be running. _model and _connection are not torn down; " +
+                "_started is left set so a subsequent StartConsumingAsync fails fast. " +
+                "Resolve the wedge (process restart) before resuming consumption.",
                 lifecycleTimeout);
         }
 
@@ -380,10 +383,9 @@ internal sealed class Consumer : IConsumer
         // are retained for the lifetime of the Consumer.
         _clients.Clear();
 
-        // The setup channel and connection are only safe to tear down when we hold
-        // the lifecycle lock. Without it, an in-flight StartConsumingAsync still owns
-        // those handles inside its own finally; closing them here would surface as an
-        // opaque AlreadyClosedException out of topology declares.
+        // Only tear down _model and _connection when this DisposeAsync holds the semaphore.
+        // Without the guard, two concurrent DisposeAsync calls could both attempt teardown
+        // simultaneously, producing opaque AlreadyClosedException or double-dispose faults.
         if (lifecycleAcquired)
         {
             if (_model is { IsOpen: true })
@@ -406,19 +408,18 @@ internal sealed class Consumer : IConsumer
             // Reset the started flag so a DisposeAsync → StartConsumingAsync sequence remains valid.
             Interlocked.Exchange(ref _started, 0);
 
-            // The semaphore is intentionally NOT disposed: a concurrent late-arriving Start
-            // (e.g. test harness restart) would otherwise observe ObjectDisposedException
-            // out of WaitAsync. Leaving it un-disposed costs only the un-allocated lazy
+            // The semaphore is intentionally NOT disposed: a concurrent late-arriving
+            // dispose call would otherwise observe ObjectDisposedException out of
+            // WaitAsync. Leaving it un-disposed costs only the un-allocated lazy
             // WaitHandle (we never call AvailableWaitHandle) which is reclaimed with the
             // Consumer instance.
-            _lifecycleSemaphore.Release();
+            _disposeSemaphore.Release();
         }
-        // When lifecycleAcquired is false the wedged StartConsumingAsync still holds
-        // the semaphore and owns _model / _connection. Leaving _started at 1 makes a
-        // subsequent StartConsumingAsync fail fast with InvalidOperationException
-        // ("already consuming") instead of CAS-ing to 1 and then deadlocking on
-        // WaitAsync against the semaphore that no one will release. Operators must
-        // resolve the wedge (typically process restart) before consumption resumes.
+        // When lifecycleAcquired is false a wedged DisposeAsync path held the semaphore
+        // beyond the timeout. _started is left at 1 so a subsequent StartConsumingAsync
+        // fails fast with InvalidOperationException ("already consuming") rather than
+        // silently building duplicate state. Operators must resolve the wedge (typically
+        // process restart) before consumption resumes.
     }
 
     private static Dictionary<string, object?> CoerceToQueueArgs(IReadOnlyDictionary<string, object> settings, string key)

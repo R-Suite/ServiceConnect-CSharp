@@ -10,9 +10,10 @@ using Xunit;
 namespace ServiceConnect.UnitTests.RabbitMQ;
 
 /// <summary>
-/// Verifies that DisposeAsync, when it times out waiting for an in-flight StartConsumingAsync,
-/// leaves the started flag set and does not null out the setup channel that the wedged start
-/// still owns.
+/// Verifies that DisposeAsync, when it times out waiting to acquire the dispose semaphore,
+/// leaves the started flag set and does not null out any in-use setup channel.
+/// The dispose semaphore (_disposeSemaphore) is independent of the startup semaphore
+/// (_startupSemaphore), so a wedged startup cannot block container shutdown.
 /// </summary>
 public class RabbitMqConsumerDisposeLifecycleTests
 {
@@ -63,13 +64,14 @@ public class RabbitMqConsumerDisposeLifecycleTests
     }
 
     /// <summary>
-    /// Drains the lifecycle semaphore on the consumer so the next WaitAsync call times out.
+    /// Drains the dispose semaphore on the consumer so the next DisposeAsync WaitAsync call times out,
+    /// simulating a concurrent DisposeAsync that already holds the permit.
     /// </summary>
-    private static void DrainLifecycleSemaphore(object consumer)
+    private static void DrainDisposeSemaphore(object consumer)
     {
-        var semaphore = GetPrivateField<SemaphoreSlim>(consumer, "_lifecycleSemaphore")
-            ?? throw new InvalidOperationException("_lifecycleSemaphore was null");
-        // WaitAsync(0) returns false if already at 0; we need to take the one available permit.
+        var semaphore = GetPrivateField<SemaphoreSlim>(consumer, "_disposeSemaphore")
+            ?? throw new InvalidOperationException("_disposeSemaphore was null");
+        // Take the one available permit so a subsequent WaitAsync with a short timeout returns false.
         semaphore.Wait(TimeSpan.Zero);
     }
 
@@ -80,17 +82,18 @@ public class RabbitMqConsumerDisposeLifecycleTests
         var connection = new Mock<IServiceConnectConnection>();
         var consumer = CreateConsumer(TimeSpan.FromMilliseconds(200), connection.Object);
 
-        // Simulate that StartConsumingAsync has CAS'd _started to 1 and is mid-setup,
-        // holding the semaphore.
+        // Simulate that a concurrent DisposeAsync already holds the dispose semaphore,
+        // and StartConsumingAsync has CAS'd _started to 1. The second DisposeAsync must
+        // time out rather than hang indefinitely.
         SetPrivateField(consumer, "_started", 1);
-        DrainLifecycleSemaphore(consumer);
+        DrainDisposeSemaphore(consumer);
 
-        // Act: DisposeAsync should time out acquiring the lifecycle semaphore.
+        // Act: DisposeAsync should time out acquiring the dispose semaphore.
         await consumer.DisposeAsync();
 
         // Assert: _started must remain 1. A subsequent StartConsumingAsync must throw
-        // InvalidOperationException ("already consuming") instead of CAS-ing to 1 and
-        // then deadlocking on the semaphore the wedged start still holds.
+        // InvalidOperationException ("already consuming") instead of silently building
+        // duplicate state.
         var started = GetPrivateField<int>(consumer, "_started");
         Assert.Equal(1, started);
     }
@@ -103,18 +106,19 @@ public class RabbitMqConsumerDisposeLifecycleTests
         var consumer = CreateConsumer(TimeSpan.FromMilliseconds(200), connection.Object);
 
         // Set up a sentinel channel to represent the setup channel that an in-flight
-        // StartConsumingAsync has assigned to _model.
+        // StartConsumingAsync has assigned to _model. Drain the dispose semaphore to
+        // simulate a concurrent DisposeAsync already holding the permit; this causes
+        // the next DisposeAsync.WaitAsync to time out and skip teardown.
         var sentinelChannel = new Mock<RabbitMqClient.IChannel>().Object;
         SetPrivateField(consumer, "_started", 1);
         SetPrivateField(consumer, "_model", sentinelChannel);
-        DrainLifecycleSemaphore(consumer);
+        DrainDisposeSemaphore(consumer);
 
-        // Act: DisposeAsync should time out acquiring the lifecycle semaphore.
+        // Act: DisposeAsync should time out acquiring the dispose semaphore.
         await consumer.DisposeAsync();
 
         // Assert: _model must still be the sentinel. Nulling it here would tear down
-        // the setup channel from under the running start path, causing AlreadyClosed
-        // exceptions out of topology declares.
+        // a channel still in active use, producing opaque AlreadyClosed exceptions.
         var model = GetPrivateField<RabbitMqClient.IChannel>(consumer, "_model");
         Assert.Same(sentinelChannel, model);
     }
