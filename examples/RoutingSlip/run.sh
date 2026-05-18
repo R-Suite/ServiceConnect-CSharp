@@ -70,11 +70,12 @@ start_passive() {
   SC_EXAMPLES_INVENTORY_QUEUE_NAME="$INVENTORY_QUEUE_NAME" \
     SC_EXAMPLES_BILLING_QUEUE_NAME="$BILLING_QUEUE_NAME" \
     SC_EXAMPLES_SHIPPING_QUEUE_NAME="$SHIPPING_QUEUE_NAME" \
-    dotnet run --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
+    dotnet run --no-build --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/RoutingSlip.sln"
 > "$OUTPUT_LOG"
 
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.RoutingSlip.InventoryStep/ServiceConnect.Examples.RoutingSlip.InventoryStep.csproj"
@@ -90,7 +91,7 @@ SC_EXAMPLES_INVENTORY_QUEUE_NAME="$INVENTORY_QUEUE_NAME" \
   SC_EXAMPLES_BILLING_QUEUE_NAME="$BILLING_QUEUE_NAME" \
   SC_EXAMPLES_SHIPPING_QUEUE_NAME="$SHIPPING_QUEUE_NAME" \
   SC_EXAMPLES_ORDER_ID="$ORDER_ID" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.RoutingSlip.Starter/ServiceConnect.Examples.RoutingSlip.Starter.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.RoutingSlip.Starter/ServiceConnect.Examples.RoutingSlip.Starter.csproj" >> "$OUTPUT_LOG" 2>&1 &
 STARTER_PID=$!
 PIDS+=("$STARTER_PID")
 wait "$STARTER_PID"

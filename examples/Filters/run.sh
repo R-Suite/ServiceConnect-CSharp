@@ -54,10 +54,11 @@ wait_for_success() {
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/Filters.sln"
 > "$OUTPUT_LOG"
 
 SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Filters.Consumer/ServiceConnect.Examples.Filters.Consumer.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Filters.Consumer/ServiceConnect.Examples.Filters.Consumer.csproj" >> "$OUTPUT_LOG" 2>&1 &
 CONSUMER_PID=$!
 PIDS+=("$CONSUMER_PID")
 
@@ -67,7 +68,7 @@ if ! wait_for_ready; then
 fi
 
 SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Filters.Sender/ServiceConnect.Examples.Filters.Sender.csproj" >> "$OUTPUT_LOG" 2>&1
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Filters.Sender/ServiceConnect.Examples.Filters.Sender.csproj" >> "$OUTPUT_LOG" 2>&1
 
 if ! wait_for_success; then
   echo "ERROR: Filters run did not produce the expected consumer success line within 30 seconds"

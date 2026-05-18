@@ -66,11 +66,12 @@ start_passive() {
   local project_path="$1"
   SC_EXAMPLES_PRIORITY_QUEUE_NAME="$PRIORITY_QUEUE_NAME" \
     SC_EXAMPLES_STANDARD_QUEUE_NAME="$STANDARD_QUEUE_NAME" \
-    dotnet run --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
+    dotnet run --no-build --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/ContentBasedRouting.sln"
 > "$OUTPUT_LOG"
 
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.ContentBasedRouting.PriorityConsumer/ServiceConnect.Examples.ContentBasedRouting.PriorityConsumer.csproj"
@@ -83,7 +84,7 @@ fi
 
 SC_EXAMPLES_PREMIUM_ORDER_ID="$PREMIUM_ORDER_ID" \
   SC_EXAMPLES_STANDARD_ORDER_ID="$STANDARD_ORDER_ID" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ContentBasedRouting.Publisher/ServiceConnect.Examples.ContentBasedRouting.Publisher.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ContentBasedRouting.Publisher/ServiceConnect.Examples.ContentBasedRouting.Publisher.csproj" >> "$OUTPUT_LOG" 2>&1 &
 PUBLISHER_PID=$!
 PIDS+=("$PUBLISHER_PID")
 wait "$PUBLISHER_PID"

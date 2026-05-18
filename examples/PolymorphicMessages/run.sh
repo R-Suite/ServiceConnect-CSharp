@@ -36,11 +36,12 @@ wait_for_success() {
 }
 
 start_passive() {
-  dotnet run --project "$1" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$1" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/PolymorphicMessages.sln"
 > "$OUTPUT_LOG"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.PolymorphicMessages.AuditSubscriber/ServiceConnect.Examples.PolymorphicMessages.AuditSubscriber.csproj"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.PolymorphicMessages.ShippingSubscriber/ServiceConnect.Examples.PolymorphicMessages.ShippingSubscriber.csproj"
@@ -53,7 +54,7 @@ if ! wait_for_ready; then
   exit 1
 fi
 
-dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.PolymorphicMessages.Publisher/ServiceConnect.Examples.PolymorphicMessages.Publisher.csproj" &
+dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.PolymorphicMessages.Publisher/ServiceConnect.Examples.PolymorphicMessages.Publisher.csproj" &
 PUBLISHER_PID=$!
 PIDS+=("$PUBLISHER_PID")
 wait "$PUBLISHER_PID"

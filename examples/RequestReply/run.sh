@@ -21,11 +21,12 @@ wait_for_ready() {
 }
 
 start_passive() {
-  dotnet run --project "$1" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$1" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/RequestReply.sln"
 > "$OUTPUT_LOG"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.RequestReply.Responder/ServiceConnect.Examples.RequestReply.Responder.csproj"
 
@@ -37,7 +38,7 @@ if ! wait_for_ready; then
   exit 1
 fi
 
-dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.RequestReply.Requester/ServiceConnect.Examples.RequestReply.Requester.csproj" >> "$OUTPUT_LOG" 2>&1 &
+dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.RequestReply.Requester/ServiceConnect.Examples.RequestReply.Requester.csproj" >> "$OUTPUT_LOG" 2>&1 &
 REQUESTER_PID=$!
 PIDS+=("$REQUESTER_PID")
 wait "$REQUESTER_PID"

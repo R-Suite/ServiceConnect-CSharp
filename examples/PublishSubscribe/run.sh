@@ -35,11 +35,12 @@ wait_for_success() {
 }
 
 start_passive() {
-  dotnet run --project "$1" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$1" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/PublishSubscribe.sln"
 > "$OUTPUT_LOG"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.PublishSubscribe.BillingSubscriber/ServiceConnect.Examples.PublishSubscribe.BillingSubscriber.csproj"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.PublishSubscribe.AnalyticsSubscriber/ServiceConnect.Examples.PublishSubscribe.AnalyticsSubscriber.csproj"
@@ -52,7 +53,7 @@ if ! wait_for_ready; then
   exit 1
 fi
 
-dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.PublishSubscribe.Publisher/ServiceConnect.Examples.PublishSubscribe.Publisher.csproj" &
+dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.PublishSubscribe.Publisher/ServiceConnect.Examples.PublishSubscribe.Publisher.csproj" &
 PUBLISHER_PID=$!
 PIDS+=("$PUBLISHER_PID")
 wait "$PUBLISHER_PID"

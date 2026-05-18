@@ -70,18 +70,8 @@ wait_for_completion() {
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/ProcessManager.sln"
 > "$OUTPUT_LOG"
-
-# Pre-build sequentially: the four projects share ServiceConnect.Interfaces, and
-# concurrent `dotnet run` races on the output DLL lock ("process cannot access
-# the file ... because it is being used by another process").
-for proj in \
-  ServiceConnect.Examples.ProcessManager.Orchestrator \
-  ServiceConnect.Examples.ProcessManager.InventoryWorker \
-  ServiceConnect.Examples.ProcessManager.PaymentWorker \
-  ServiceConnect.Examples.ProcessManager.Starter; do
-  dotnet build "$SCRIPT_DIR/src/$proj/$proj.csproj" >> "$OUTPUT_LOG" 2>&1
-done
 
 SC_EXAMPLES_WORKFLOW_QUEUE_NAME="$WORKFLOW_QUEUE_NAME" \
   SC_EXAMPLES_INVENTORY_QUEUE_NAME="$INVENTORY_QUEUE_NAME" \

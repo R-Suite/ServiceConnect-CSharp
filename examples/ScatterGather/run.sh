@@ -67,11 +67,12 @@ start_passive() {
   local project_path="$1"
   SC_EXAMPLES_CATALOG_A_QUEUE_NAME="$CATALOG_A_QUEUE_NAME" \
     SC_EXAMPLES_CATALOG_B_QUEUE_NAME="$CATALOG_B_QUEUE_NAME" \
-    dotnet run --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
+    dotnet run --no-build --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/ScatterGather.sln"
 > "$OUTPUT_LOG"
 
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.ScatterGather.CatalogA/ServiceConnect.Examples.ScatterGather.CatalogA.csproj"
@@ -86,7 +87,7 @@ SC_EXAMPLES_REQUESTER_QUEUE_NAME="$REQUESTER_QUEUE_NAME" \
   SC_EXAMPLES_CATALOG_A_QUEUE_NAME="$CATALOG_A_QUEUE_NAME" \
   SC_EXAMPLES_CATALOG_B_QUEUE_NAME="$CATALOG_B_QUEUE_NAME" \
   SC_EXAMPLES_SEARCH_QUERY="$SEARCH_QUERY" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ScatterGather.Requester/ServiceConnect.Examples.ScatterGather.Requester.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.ScatterGather.Requester/ServiceConnect.Examples.ScatterGather.Requester.csproj" >> "$OUTPUT_LOG" 2>&1 &
 REQUESTER_PID=$!
 PIDS+=("$REQUESTER_PID")
 if ! wait "$REQUESTER_PID"; then

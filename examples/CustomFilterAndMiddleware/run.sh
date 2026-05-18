@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../scripts/common.sh"
 
 OUTPUT_LOG="$SCRIPT_DIR/output.log"
 PIDS=()
@@ -63,6 +64,7 @@ wait_for_ready() {
 docker run -d --rm --name custom-filter-rabbit -p 5672:5672 rabbitmq:3.13-management
 wait_for_rabbitmq
 
+prebuild_solution "$SCRIPT_DIR/CustomFilterAndMiddleware.slnx"
 > "$OUTPUT_LOG"
 
 dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer.csproj" >> "$OUTPUT_LOG" 2>&1 &

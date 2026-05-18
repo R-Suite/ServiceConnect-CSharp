@@ -62,11 +62,12 @@ wait_for_completion() {
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/Aggregator.sln"
 > "$OUTPUT_LOG"
 
 SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" \
   SC_EXAMPLES_DATABASE_NAME="$DATABASE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Aggregator.Consumer/ServiceConnect.Examples.Aggregator.Consumer.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Aggregator.Consumer/ServiceConnect.Examples.Aggregator.Consumer.csproj" >> "$OUTPUT_LOG" 2>&1 &
 CONSUMER_PID=$!
 PIDS+=("$CONSUMER_PID")
 
@@ -77,13 +78,13 @@ fi
 
 SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" \
   SC_EXAMPLES_CORRELATION_ID="$CORRELATION_ID" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Aggregator.ProducerA/ServiceConnect.Examples.Aggregator.ProducerA.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Aggregator.ProducerA/ServiceConnect.Examples.Aggregator.ProducerA.csproj" >> "$OUTPUT_LOG" 2>&1 &
 PRODUCER_A_PID=$!
 PIDS+=("$PRODUCER_A_PID")
 
 SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" \
   SC_EXAMPLES_CORRELATION_ID="$CORRELATION_ID" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Aggregator.ProducerB/ServiceConnect.Examples.Aggregator.ProducerB.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Aggregator.ProducerB/ServiceConnect.Examples.Aggregator.ProducerB.csproj" >> "$OUTPUT_LOG" 2>&1 &
 PRODUCER_B_PID=$!
 PIDS+=("$PRODUCER_B_PID")
 

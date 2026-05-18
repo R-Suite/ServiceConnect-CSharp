@@ -55,10 +55,11 @@ wait_for_success() {
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/Streaming.sln"
 > "$OUTPUT_LOG"
 
 SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Streaming.Receiver/ServiceConnect.Examples.Streaming.Receiver.csproj" >> "$OUTPUT_LOG" 2>&1 &
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Streaming.Receiver/ServiceConnect.Examples.Streaming.Receiver.csproj" >> "$OUTPUT_LOG" 2>&1 &
 RECEIVER_PID=$!
 PIDS+=("$RECEIVER_PID")
 
@@ -68,7 +69,7 @@ if ! wait_for_ready; then
 fi
 
 SC_EXAMPLES_ENDPOINT_NAME="$QUEUE_NAME" \
-  dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Streaming.Uploader/ServiceConnect.Examples.Streaming.Uploader.csproj" >> "$OUTPUT_LOG" 2>&1
+  dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.Streaming.Uploader/ServiceConnect.Examples.Streaming.Uploader.csproj" >> "$OUTPUT_LOG" 2>&1
 
 if ! wait_for_success; then
   echo "ERROR: Streaming run did not produce the expected success lines within 30 seconds"

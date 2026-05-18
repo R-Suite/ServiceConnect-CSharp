@@ -19,13 +19,14 @@ cleanup() {
 trap cleanup EXIT
 
 start_passive() {
-  dotnet run --project "$1" &
+  dotnet run --no-build --project "$1" &
   PIDS+=("$!")
 }
 
 start_dependencies
 docker compose -f "$SCRIPT_DIR/../docker-compose.yml" exec -T rabbitmq rabbitmqctl purge_queue point-to-point-consumer || true
+prebuild_solution "$SCRIPT_DIR/PointToPoint.sln"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.PointToPoint.Consumer/ServiceConnect.Examples.PointToPoint.Consumer.csproj"
 sleep 5
-dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.PointToPoint.Sender/ServiceConnect.Examples.PointToPoint.Sender.csproj"
+dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.PointToPoint.Sender/ServiceConnect.Examples.PointToPoint.Sender.csproj"
 sleep 5

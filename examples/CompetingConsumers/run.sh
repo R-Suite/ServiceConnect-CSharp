@@ -66,11 +66,12 @@ wait_for_completion() {
 
 start_passive() {
   local project_path="$1"
-  SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" dotnet run --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
+  SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" dotnet run --no-build --project "$project_path" >> "$OUTPUT_LOG" 2>&1 &
   PIDS+=("$!")
 }
 
 start_dependencies
+prebuild_solution "$SCRIPT_DIR/CompetingConsumers.sln"
 > "$OUTPUT_LOG"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.CompetingConsumers.WorkerA/ServiceConnect.Examples.CompetingConsumers.WorkerA.csproj"
 start_passive "$SCRIPT_DIR/src/ServiceConnect.Examples.CompetingConsumers.WorkerB/ServiceConnect.Examples.CompetingConsumers.WorkerB.csproj"
@@ -83,7 +84,7 @@ if ! wait_for_ready; then
   exit 1
 fi
 
-SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" dotnet run --project "$SCRIPT_DIR/src/ServiceConnect.Examples.CompetingConsumers.Producer/ServiceConnect.Examples.CompetingConsumers.Producer.csproj" >> "$OUTPUT_LOG" 2>&1 &
+SC_EXAMPLES_QUEUE_NAME="$QUEUE_NAME" dotnet run --no-build --project "$SCRIPT_DIR/src/ServiceConnect.Examples.CompetingConsumers.Producer/ServiceConnect.Examples.CompetingConsumers.Producer.csproj" >> "$OUTPUT_LOG" 2>&1 &
 PUBLISHER_PID=$!
 wait "$PUBLISHER_PID"
 
