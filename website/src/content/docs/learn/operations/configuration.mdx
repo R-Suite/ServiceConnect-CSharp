@@ -83,6 +83,21 @@ transport.SetClientSetting("RequestedHeartbeat", TimeSpan.FromSeconds(30));
 
 The keys are passed through to the RabbitMQ client; see that client's documentation for the full list.
 
+#### Typed RabbitMQ options overload
+
+A typed `Action<RabbitMqOptions>` overload of `UseRabbitMQ` is available when you prefer named properties over string-keyed settings:
+
+```csharp
+builder.UseRabbitMQ("amqps://user:pass@rabbit.prod.example.com/vhost", opts =>
+{
+    opts.PrefetchCount = 25;
+    opts.HeartbeatTime = 30;
+    opts.PublishTimeout = TimeSpan.FromSeconds(10);
+});
+```
+
+The typed overload is equivalent to `SetClientSetting` — internally the option values are written back into `ClientSettings` — so the two forms are interchangeable. Use whichever reads more clearly for your project's configuration style.
+
 - **`PublishTimeout`** (default **30 seconds**) — time to wait for a broker publisher-confirm before failing a publish. Prevents a half-open connection from blocking a producer indefinitely. `TimeoutException` on this path is *not* retried.
 
 ### Producer concurrency invariants

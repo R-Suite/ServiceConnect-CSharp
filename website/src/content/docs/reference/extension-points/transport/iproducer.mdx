@@ -178,6 +178,16 @@ Default-interface method that returns a single-snapshot read of `IsHealthy` and 
 
 ---
 
+### `SupportsRoutingKey`
+
+```csharp
+bool SupportsRoutingKey { get; }
+```
+
+`true` when the producer honors the `routingKey` parameter on `PublishAsync(Type, ReadOnlyMemory<byte>, string?, ...)`. The default-interface-method value is `false`; the RabbitMQ producer overrides to `true`. When `false`, the bus emits a once-per-bus `LogWarning` if a caller supplies `PublishOptions.RoutingKey` to a producer that drops the key on the wire. Custom producers that route by key should override this to `true` and handle the key in their `PublishAsync` implementation.
+
+---
+
 ### Lifecycle
 
 `IProducer` extends `IAsyncDisposable`. Lifecycle is owned exclusively by `DisposeAsync` — there is no separate `DisconnectAsync` method. Implementations should flush any pending in-flight sends before closing the underlying broker connection inside `DisposeAsync`.

@@ -67,6 +67,8 @@ Every `SendAsync` and `PublishAsync` on this bus now runs through `TraceHeaderFi
 
 Note the DI registration. Filters are resolved from the container, so they **must** be registered as services — the builder's `AddOutgoingFilter<T>()` call only tells the pipeline which type to resolve; the container is what actually constructs one. Register filters as `Singleton` unless they hold per-message state, which they shouldn't.
 
+When an outgoing filter returns `FilterAction.Stop`, the corresponding `PublishAsync` / `SendAsync` / `SendToManyAsync` / `RouteAsync` call throws `OutgoingFiltersBlockedException`. Callers that intentionally use `FilterAction.Stop` to suppress a message must catch this exception (or rely on a higher-level handler).
+
 ## Incoming filters
 
 Three hooks on the incoming side, each for a different purpose:

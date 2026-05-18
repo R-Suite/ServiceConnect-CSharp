@@ -30,6 +30,9 @@ Broadcasts a message to every subscriber of the message type. Use for domain eve
 - `options` — optional headers, routing key override, priority, or per-call overrides.
 - `cancellationToken` — cancels the publish before the broker acknowledges.
 
+**Throws**
+- `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop` before the message reached the transport.
+
 **Remarks.** Publish is fire-and-forget from the publisher's perspective; it completes once the broker accepts the message, not when subscribers process it. There is no built-in guarantee that any subscriber exists.
 
 ---
@@ -50,6 +53,9 @@ Sends a message to a specific endpoint or to the queue resolved from the configu
 - `message` — the command instance; must derive from `Message`.
 - `options` — optional destination override, headers, or priority.
 - `cancellationToken` — cancels the send before the broker acknowledges.
+
+**Throws**
+- `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop` before the message reached the transport.
 
 **Remarks.** If no destination is supplied via `options` and no queue mapping is registered for the message type, the call throws.
 
@@ -83,6 +89,7 @@ Sends `message` to every endpoint in `endPoints` as an independent point-to-poin
 **Throws**
 - `ArgumentNullException` — `message` or `endPoints` is `null`.
 - `ArgumentException` — `endPoints` is empty.
+- `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop` before the message reached the transport.
 - `AggregateException` — one or more endpoints failed. Inner exceptions are the per-endpoint failures in the order they occurred. If caller cancellation fired after some endpoints had already failed, the `OperationCanceledException` appears at slot 0 of the aggregate so callers can distinguish "cancelled with prior failures" from "cancelled clean".
 - `OperationCanceledException` — caller cancelled before any endpoint failed.
 
@@ -196,6 +203,9 @@ Starts a routing slip: sends the message to the first destination with a routing
 - `message` — the payload to route; must derive from `Message`.
 - `destinations` — an ordered list of queue names the message should visit.
 - `cancellationToken` — cancels the initial send.
+
+**Throws**
+- `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop` before the message reached the transport.
 
 **Remarks.** Routing-slip forwarding is handled by the consumer side and requires `IBusConfiguration.EnableRoutingSlipProcessing` (the default) to be true on every intermediate service.
 

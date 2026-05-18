@@ -101,7 +101,7 @@ await bus.PublishAsync(new OrderPlaced(Guid.NewGuid()) { OrderId = "ORD-001" });
 - **Process Manager** — long-running, stateful workflows (sagas)
 - **Aggregator** — accumulate related messages until complete
 - **Streaming** — chunked delivery of large payloads
-- **Filters & Middleware** — inspect, transform, or short-circuit the pipeline
+- **Filters & Middleware** — inspect, transform, or short-circuit the pipeline. Outgoing filters that return `FilterAction.Stop` throw `OutgoingFiltersBlockedException` so callers can distinguish a blocked send from a successful one.
 
 Each pattern has a conceptual guide and worked example in [the docs](https://r-suite.github.io/ServiceConnect-CSharp/learn/).
 

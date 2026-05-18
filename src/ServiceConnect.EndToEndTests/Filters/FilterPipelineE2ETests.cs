@@ -3,6 +3,7 @@ using Moq;
 using ServiceConnect.DependencyInjection;
 using ServiceConnect.EndToEndTests.Messages;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 using Xunit;
 
@@ -34,7 +35,7 @@ file sealed class HeaderAddingFilter : IFilter
 public class FilterPipelineE2ETests
 {
     [Fact]
-    public async Task OutgoingFilter_CanBlockMessage()
+    public async Task OutgoingFilter_BlockingMessage_ThrowsOutgoingFiltersBlocked()
     {
         var mockProducer = new Mock<IProducer>();
         var services = new ServiceCollection();
@@ -54,10 +55,12 @@ public class FilterPipelineE2ETests
 
         var message = new TestMessage(Guid.NewGuid()) { Content = "blocked message" };
 
-        await bus.PublishAsync(message);
+        var ex = await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
+            () => bus.PublishAsync(message));
 
+        Assert.Contains("published", ex.Message, StringComparison.OrdinalIgnoreCase);
         Assert.True(filter.WasCalled);
-        // Producer should NOT have been called since filter blocked
+        // Producer must not be called when the filter pipeline stops before the transport.
         mockProducer.Verify(p => p.PublishAsync(It.IsAny<Type>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
