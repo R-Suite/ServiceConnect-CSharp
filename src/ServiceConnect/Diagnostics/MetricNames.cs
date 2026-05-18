@@ -45,4 +45,14 @@ public static class MetricNames
     /// returned <c>FilterAction.Stop</c>. No publish/send span is emitted for blocked operations,
     /// so this counter is the operator-visible signal for filter-suppressed deliveries.</summary>
     public const string OutgoingFiltersBlocked = "messaging.serviceconnect.outgoing_filters.blocked";
+
+    /// <summary>
+    /// Counter incremented when an aggregator handler succeeds but the subsequent
+    /// <c>RemoveSnapshotAsync</c> call fails. The framework intentionally swallows the
+    /// remove failure to avoid re-running the handler via broker NACK; the rows remain
+    /// leased until the lease expires and a peer may then re-claim and re-dispatch
+    /// (the at-least-once trade-off). A spike on this counter translates directly into
+    /// duplicate handler invocations after the lease expires.
+    /// </summary>
+    public const string SnapshotRemoveFailedAfterDispatch = "messaging.serviceconnect.aggregator.snapshot_remove_failed_after_dispatch";
 }

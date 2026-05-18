@@ -435,6 +435,12 @@ internal sealed class AggregatorProcessor(
                 logger.LogWarning(removeEx,
                     "Aggregator {AggregatorName} RemoveSnapshotAsync failed after successful handler dispatch; rows remain under lease and will be reclaimed when the lease expires. Handler side effects are NOT replayed by NACKing the broker.",
                     descriptor.AggregatorName);
+                var tags = new System.Diagnostics.TagList
+                {
+                    { "messaging.system", "serviceconnect" },
+                    { "aggregator.name", descriptor.AggregatorName },
+                };
+                ServiceConnect.Diagnostics.ServiceConnectMeter.AddSnapshotRemoveFailedAfterDispatch(tags);
             }
 
             if (snapshot.UnresolvedCount > 0)

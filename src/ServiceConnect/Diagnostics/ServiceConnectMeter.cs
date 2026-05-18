@@ -68,6 +68,11 @@ public static class ServiceConnectMeter
         unit: "{message}",
         description: "Outgoing operations aborted because an outgoing filter returned FilterAction.Stop.");
 
+    private static readonly Counter<long> _snapshotRemoveFailedAfterDispatch = _meter.CreateCounter<long>(
+        name: MetricNames.SnapshotRemoveFailedAfterDispatch,
+        unit: "{failure}",
+        description: "Aggregator snapshot-remove failures after a successful handler dispatch — invisible at-least-once window.");
+
     private static readonly UpDownCounter<long> _inFlightMessages = _meter.CreateUpDownCounter<long>(
         name: MetricNames.InFlightMessages,
         unit: "{message}",
@@ -101,6 +106,9 @@ public static class ServiceConnectMeter
 
     /// <summary>Increments the outgoing-filters-blocked counter by 1 with the given tags.</summary>
     public static void AddOutgoingFiltersBlocked(in TagList tags) => _outgoingFiltersBlocked.Add(1, tags);
+
+    /// <summary>Increments the snapshot-remove-after-dispatch failure counter by 1 with the given tags.</summary>
+    public static void AddSnapshotRemoveFailedAfterDispatch(in TagList tags) => _snapshotRemoveFailedAfterDispatch.Add(1, tags);
 
     /// <summary>Adjusts the in-flight UpDownCounter by <paramref name="delta"/> with the given tags.</summary>
     public static void AddInFlight(long delta, in TagList tags) => _inFlightMessages.Add(delta, tags);
