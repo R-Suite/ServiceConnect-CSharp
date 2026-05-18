@@ -68,25 +68,6 @@ internal sealed class MessageDispatcher(
         var beforeFiltersRan = false;
         try
         {
-            // 1. Collect candidate wire-type names, in priority order. The public
-            //    IMessageDispatcher contract passes messageType as a first-class parameter,
-            //    so it must be honoured — but a transport may pass a short/alias name that
-            //    doesn't resolve in the registry while also stamping the AQN header. Try
-            //    each candidate against the registry until one resolves.
-            string? fullTypeName = null;
-            string? primaryCandidate = string.IsNullOrWhiteSpace(messageType) ? null : messageType;
-            string? fullTypeNameCandidate = headers.TryGetValue(HeaderKeys.FullTypeName, out var fullTypeNameRaw)
-                ? HeaderDecoder.Decode(fullTypeNameRaw) : null;
-            string? typeNameCandidate = headers.TryGetValue(HeaderKeys.TypeName, out var typeNameRaw)
-                ? HeaderDecoder.Decode(typeNameRaw) : null;
-
-            if (primaryCandidate is null && fullTypeNameCandidate is null && typeNameCandidate is null)
-            {
-                throw new InvalidOperationException("Message is missing type information: messageType parameter is empty and neither FullTypeName nor TypeName header is present.");
-            }
-
-            fullTypeName = primaryCandidate ?? fullTypeNameCandidate ?? typeNameCandidate!;
-
             // Downstream pipeline (IMessageProcessor, MessageProcessingDelegate, Envelope.Headers)
             // requires a mutable IDictionary<string,object> for middleware mutation. Fast-path
             // succeeds when the runtime type is Dictionary<,> (the expected hot path); the fallback
@@ -143,36 +124,16 @@ internal sealed class MessageDispatcher(
                 return new ConsumeEventResult { Success = true };
             }
 
-            Type? type = null;
-            bool typeResolvedFromRegistry =
-                (primaryCandidate is not null && _typeRegistry.TryResolve(primaryCandidate, out type))
-                || (fullTypeNameCandidate is not null && _typeRegistry.TryResolve(fullTypeNameCandidate, out type))
-                || (typeNameCandidate is not null && _typeRegistry.TryResolve(typeNameCandidate, out type));
-            if (!typeResolvedFromRegistry)
+            var typeResolution = TryResolveMessageType(messageType, headers, hasResponseMessageId);
+            if (typeResolution.ShouldReturnNotHandled)
             {
-                if (!hasResponseMessageId)
-                {
-                    // Unregistered type is a terminal failure — retrying never resolves it.
-                    // Reuse the existing not-handled path so the consumer host either dead-letters
-                    // (when DeadLetterUnhandledMessages is enabled) or ack-and-drops, instead of
-                    // burning the full retry budget through Success=false → nack/requeue.
-                    _logger.LogWarning("Unregistered message type '{TypeName}'. Routing as not-handled.", fullTypeName);
-                    return new ConsumeEventResult { Success = true, NotHandled = true };
-                }
-
-                type = typeof(Message);
+                return new ConsumeEventResult { Success = true, NotHandled = true };
             }
+            var type = typeResolution.Type!;
 
             if (hasResponseMessageId)
             {
-                return await DispatchReplyAsync(replyProcessor, messageBytes, type!, mutableHeaders, envelope, headers, cancellationToken).ConfigureAwait(false);
-            }
-
-            if (!typeResolvedFromRegistry)
-            {
-                // Same rationale as the earlier unresolved-type branch: terminal failure, route
-                // as not-handled rather than driving nack/requeue → retry → DLQ.
-                return new ConsumeEventResult { Success = true, NotHandled = true };
+                return await DispatchReplyAsync(replyProcessor, messageBytes, type, mutableHeaders, envelope, headers, cancellationToken).ConfigureAwait(false);
             }
 
             var message = _serializer.Deserialize(messageBytes, type!);
@@ -329,6 +290,67 @@ internal sealed class MessageDispatcher(
         {
             _logger.LogError(handlerEx, "ExceptionHandler threw while handling dispatch error for message of type {MessageType}", messageType);
         }
+    }
+
+    /// <summary>
+    /// Outcome of resolving the inbound delivery's message-type. When <see cref="Type"/> is non-null
+    /// the caller dispatches against it (it may be <c>typeof(Message)</c> on the reply-path fallback);
+    /// when <see cref="ShouldReturnNotHandled"/> is true the caller returns a Success+NotHandled
+    /// result immediately (terminal — no retry, no dispatch).
+    /// </summary>
+    private readonly record struct MessageTypeResolution(Type? Type, bool ShouldReturnNotHandled);
+
+    /// <summary>
+    /// Resolves the type to dispatch against from the inbound delivery's <paramref name="messageType"/>
+    /// argument and the FullTypeName / TypeName headers, falling back to <c>typeof(Message)</c> for
+    /// the reply path (<paramref name="hasResponseMessageId"/> == true) when the registry doesn't
+    /// know the type.
+    /// </summary>
+    /// <remarks>
+    /// Unregistered + not-a-reply is a terminal not-handled: retrying never resolves it, so the caller
+    /// routes to dead-letter (when configured) or ack-and-drops rather than burning the full retry
+    /// budget through Success=false → nack/requeue.
+    /// </remarks>
+    private MessageTypeResolution TryResolveMessageType(
+        string messageType,
+        IReadOnlyDictionary<string, object> headers,
+        bool hasResponseMessageId)
+    {
+        string? primaryCandidate = string.IsNullOrWhiteSpace(messageType) ? null : messageType;
+        string? fullTypeNameCandidate = headers.TryGetValue(HeaderKeys.FullTypeName, out var fullTypeNameRaw)
+            ? HeaderDecoder.Decode(fullTypeNameRaw) : null;
+        string? typeNameCandidate = headers.TryGetValue(HeaderKeys.TypeName, out var typeNameRaw)
+            ? HeaderDecoder.Decode(typeNameRaw) : null;
+
+        if (primaryCandidate is null && fullTypeNameCandidate is null && typeNameCandidate is null)
+        {
+            throw new InvalidOperationException(
+                "Message is missing type information: messageType parameter is empty and neither FullTypeName nor TypeName header is present.");
+        }
+
+        var fullTypeName = primaryCandidate ?? fullTypeNameCandidate ?? typeNameCandidate!;
+
+        Type? type = null;
+        bool typeResolvedFromRegistry =
+            (primaryCandidate is not null && _typeRegistry.TryResolve(primaryCandidate, out type))
+            || (fullTypeNameCandidate is not null && _typeRegistry.TryResolve(fullTypeNameCandidate, out type))
+            || (typeNameCandidate is not null && _typeRegistry.TryResolve(typeNameCandidate, out type));
+
+        if (typeResolvedFromRegistry)
+        {
+            return new MessageTypeResolution(type, ShouldReturnNotHandled: false);
+        }
+
+        if (hasResponseMessageId)
+        {
+            // Reply with unregistered payload type: the dispatcher can still route the reply via
+            // DispatchReplyAsync. The base Message type is the conservative deserialise target;
+            // the matched pending request's ReplyType supplies the real shape downstream.
+            return new MessageTypeResolution(typeof(Message), ShouldReturnNotHandled: false);
+        }
+
+        _logger.LogWarning("Unregistered message type '{TypeName}'. Routing as not-handled.", fullTypeName);
+        return new MessageTypeResolution(Type: null, ShouldReturnNotHandled: true);
     }
 
     // Iterates all processors. Pre-deserialization processors run immediately; ReplyProcessor
