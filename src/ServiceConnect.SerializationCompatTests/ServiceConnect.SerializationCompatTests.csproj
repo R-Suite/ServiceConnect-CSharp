@@ -32,7 +32,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
 
     <!-- Newtonsoft is referenced only here, scoped to wire-compat verification.
-         Production packages have no Newtonsoft dependency after Phase A.2. -->
+         Production packages have no Newtonsoft dependency. -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 </Project>
