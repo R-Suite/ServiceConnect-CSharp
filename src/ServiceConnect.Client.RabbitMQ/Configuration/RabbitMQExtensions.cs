@@ -55,6 +55,14 @@ public static class RabbitMQExtensions
             var options = new RabbitMqOptions();
             configure(options);
 
+            var validationErrors = options.Validate();
+            if (validationErrors.Count > 0)
+            {
+                throw new ArgumentException(
+                    "RabbitMqOptions contains invalid values: " + string.Join("; ", validationErrors),
+                    nameof(configure));
+            }
+
             builder.ConfigureTransport(transport => ApplyToClientSettings(transport, options));
         }
 

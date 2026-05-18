@@ -71,4 +71,53 @@ public sealed record class RabbitMqOptions
 
     /// <summary>Interval between auto-recovery attempts after a connection drop.</summary>
     public TimeSpan? NetworkRecoveryInterval { get; set; }
+
+    /// <summary>
+    /// Validates the option values that have explicit range constraints. Properties
+    /// typed as <see cref="ushort"/>? are non-negative by type and need no runtime check;
+    /// this method covers the <see cref="int"/>?, <see cref="long"/>?, and
+    /// <see cref="TimeSpan"/>? properties whose acceptable range cannot be expressed in
+    /// the type system.
+    /// </summary>
+    /// <returns>
+    /// A list of human-readable error messages — one per invalid property. Returns an
+    /// empty list when all set values are within range. Properties left at <see langword="null"/>
+    /// (i.e. not configured) are skipped; defaults are not asserted here.
+    /// </returns>
+    public IReadOnlyList<string> Validate()
+    {
+        var errors = new List<string>();
+
+        if (Port is { } port && (port < 1 || port > 65535))
+        {
+            errors.Add($"Port must be between 1 and 65535 (was {port}).");
+        }
+
+        if (RetryCount is { } retryCount && retryCount < 0)
+        {
+            errors.Add($"RetryCount must be non-negative (was {retryCount}).");
+        }
+
+        if (MessageSize is { } messageSize && messageSize <= 0)
+        {
+            errors.Add($"MessageSize must be positive (was {messageSize}).");
+        }
+
+        if (PublishTimeout is { } publishTimeout && publishTimeout <= TimeSpan.Zero)
+        {
+            errors.Add($"PublishTimeout must be positive (was {publishTimeout}).");
+        }
+
+        if (MaxOutstandingPublishConfirms is { } maxOutstanding && maxOutstanding <= 0)
+        {
+            errors.Add($"MaxOutstandingPublishConfirms must be positive (was {maxOutstanding}).");
+        }
+
+        if (NetworkRecoveryInterval is { } recoveryInterval && recoveryInterval <= TimeSpan.Zero)
+        {
+            errors.Add($"NetworkRecoveryInterval must be positive (was {recoveryInterval}).");
+        }
+
+        return errors;
+    }
 }
