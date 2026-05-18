@@ -140,4 +140,15 @@ public interface IBusConfiguration
     /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> for no bound.
     /// </summary>
     TimeSpan DisposeTimeout { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether the host is allowed to start without an <see cref="IProducer"/>
+    /// registered. Defaults to <see langword="false"/>: <c>BusHostedService.StartAsync</c>
+    /// throws <see cref="InvalidOperationException"/> at host start if no <see cref="IProducer"/>
+    /// has been registered, surfacing the missing transport at host build time rather than
+    /// at the first publish/send/<c>CreateStream</c> call. Set to <see langword="true"/> only
+    /// in tests or specialised in-memory scenarios that legitimately operate without a
+    /// producer (consume-only buses).
+    /// </summary>
+    bool AllowMissingProducer { get; set; }
 }

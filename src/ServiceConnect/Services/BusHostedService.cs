@@ -27,7 +27,8 @@ internal sealed class BusHostedService(
     IBusConfiguration config,
     ITransportConfiguration transport,
     ILogger<BusHostedService> logger,
-    IReadOnlyList<HandlerScanWarning>? scanWarnings = null) : IHostedService
+    IReadOnlyList<HandlerScanWarning>? scanWarnings = null,
+    IProducer? producer = null) : IHostedService
 {
     /// <summary>
     /// Starts the bus automatically when <see cref="IBusConfiguration.AutoStartConsuming"/> is enabled.
@@ -35,6 +36,18 @@ internal sealed class BusHostedService(
     /// <param name="cancellationToken">A token used to cancel host startup.</param>
     public async Task StartAsync(CancellationToken cancellationToken)
     {
+        // Fail fast at host start if no producer was registered. The IConsumer-missing
+        // case is already caught further down by bus.StartConsumingAsync; the producer-
+        // missing case used to surface only at first Publish/Send/CreateStream, which
+        // delayed the operator signal from host build to first message dispatch.
+        if (producer is null && !config.AllowMissingProducer)
+        {
+            throw new InvalidOperationException(
+                "No IProducer is registered. Call UseRabbitMQ() (or another transport extension) before " +
+                "the host is built, or set BusConfiguration.AllowMissingProducer = true if this is an " +
+                "intentional consume-only or in-memory test bus.");
+        }
+
         // Replay handler-scan warnings captured before the logger was available.
         // A broken handler assembly that survives the scan with no warning shows up
         // only when a message arrives with no registered handler — surfacing the

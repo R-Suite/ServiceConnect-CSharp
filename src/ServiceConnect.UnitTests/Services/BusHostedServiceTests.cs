@@ -23,6 +23,11 @@ public class BusHostedServiceTests
         _mockTransport.SetupGet(t => t.SslEnabled).Returns(true);
         _mockTransport.SetupGet(t => t.Host).Returns("localhost");
         _mockTransport.SetupGet(t => t.SuppressPlaintextWarning).Returns(false);
+        // These tests exercise the auto-start / replay / shutdown branches of BusHostedService
+        // without injecting a real IProducer mock; opt out of the producer presence check so
+        // those branches are reachable. Producer-presence is covered by
+        // BusHostedServiceMissingProducerTests in the BusInterface namespace.
+        _mockConfig.SetupGet(c => c.AllowMissingProducer).Returns(true);
         return new(_mockBus.Object, _mockConfig.Object, _mockTransport.Object, Logger);
     }
 

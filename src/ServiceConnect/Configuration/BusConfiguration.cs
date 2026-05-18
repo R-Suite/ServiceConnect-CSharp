@@ -29,6 +29,7 @@ internal sealed class BusConfiguration : IBusConfiguration
     private bool _deadLetterUnhandledMessages;
     private bool _strictReplyValidation;
     private TimeSpan _disposeTimeout = TimeSpan.FromSeconds(30);
+    private bool _allowMissingProducer;
 
     /// <inheritdoc />
     public bool ScanForMessageHandlers { get => _scanForMessageHandlers; set { ThrowIfFrozen(); _scanForMessageHandlers = value; } }
@@ -56,6 +57,8 @@ internal sealed class BusConfiguration : IBusConfiguration
     public bool StrictReplyValidation { get => _strictReplyValidation; set { ThrowIfFrozen(); _strictReplyValidation = value; } }
     /// <inheritdoc />
     public TimeSpan DisposeTimeout { get => _disposeTimeout; set { ThrowIfFrozen(); _disposeTimeout = value; } }
+    /// <inheritdoc />
+    public bool AllowMissingProducer { get => _allowMissingProducer; set { ThrowIfFrozen(); _allowMissingProducer = value; } }
     /// <summary>
     /// Gets the transport configuration used to connect to the broker.
     /// </summary>
