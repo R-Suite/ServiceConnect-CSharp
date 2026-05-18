@@ -240,7 +240,7 @@ public class BusTests
     }
 
     [Fact]
-    public async Task PublishAsync_ShouldNotPublish_WhenFilterBlocksMessage()
+    public async Task PublishAsync_WhenFilterBlocksMessage_ThrowsOutgoingFiltersBlocked()
     {
         // Arrange — must have outgoing filters registered so the filter pipeline is invoked
         _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
@@ -261,10 +261,10 @@ public class BusTests
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
         _mockSerializer.SetupSerialize<FakeMessage1>(message, [1, 2, 3]);
 
-        // Act
-        await busWithFilters.PublishAsync(message);
+        var ex = await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
+            () => busWithFilters.PublishAsync(message));
 
-        // Assert
+        Assert.Contains("published", ex.Message, StringComparison.OrdinalIgnoreCase);
         _mockSendPipeline.Verify(x => x.ExecutePublishMessagePipelineAsync(
             It.IsAny<SendContext>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -740,7 +740,7 @@ public class BusTests
     }
 
     [Fact]
-    public async Task SendAsync_ShouldNotSend_WhenFilterBlocksMessage()
+    public async Task SendAsync_WhenFilterBlocksMessage_ThrowsOutgoingFiltersBlocked()
     {
         // Arrange — must have outgoing filters registered so the filter pipeline is invoked
         _mockFilterPipeline.Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>())).ReturnsAsync(FilterAction.Stop);
@@ -761,10 +761,10 @@ public class BusTests
         var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
         _mockSerializer.SetupSerialize<FakeMessage1>(message, [1, 2, 3]);
 
-        // Act
-        await busWithFilters.SendAsync(message);
+        var ex = await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
+            () => busWithFilters.SendAsync(message));
 
-        // Assert
+        Assert.Contains("sent", ex.Message, StringComparison.OrdinalIgnoreCase);
         _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
             It.IsAny<SendContext>(), It.IsAny<CancellationToken>()),
             Times.Never);
@@ -937,6 +937,76 @@ public class BusTests
             () => busWithFilters.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(message));
 
         Assert.Equal("Outgoing filters blocked the request message.", ex.Message);
+    }
+
+    [Fact]
+    public async Task SendToManyAsync_WhenFilterBlocksMessage_ThrowsOutgoingFiltersBlocked()
+    {
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        _mockSerializer.SetupSerialize<FakeMessage1>(message, [1, 2, 3]);
+
+        var ex = await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
+            () => busWithFilters.SendToManyAsync(message, ["endpoint1", "endpoint2"]));
+
+        Assert.Contains("multi-endpoint send", ex.Message, StringComparison.OrdinalIgnoreCase);
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<SendContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task RouteAsync_WhenFilterBlocksMessage_ThrowsOutgoingFiltersBlocked()
+    {
+        _mockFilterPipeline
+            .Setup(x => x.ExecuteOutgoingFiltersAsync(It.IsAny<Envelope>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FilterAction.Stop);
+
+        var pipelineConfigWithFilter = new Mock<IPipelineConfiguration>();
+        pipelineConfigWithFilter.Setup(x => x.OutgoingFilters).Returns([typeof(object)]);
+
+        var busWithFilters = new Bus(
+            _mockSerializer.Object,
+            _mockFilterPipeline.Object,
+            _mockSendPipeline.Object,
+            _mockRequestReplyManager.Object,
+            _mockLogger.Object,
+            _mockQueueConfig.Object,
+            _mockDispatcher.Object,
+            _handlerReferences,
+            pipelineConfigWithFilter.Object,
+            _scopeFactory,
+            _scopeAccessor);
+
+        var message = new FakeMessage1(Guid.NewGuid()) { Username = "Tim" };
+        _mockSerializer.SetupSerialize<FakeMessage1>(message, [1, 2, 3]);
+
+        var ex = await Assert.ThrowsAsync<OutgoingFiltersBlockedException>(
+            () => busWithFilters.RouteAsync(message, ["destination1"]));
+
+        Assert.Contains("routed", ex.Message, StringComparison.OrdinalIgnoreCase);
+        _mockSendPipeline.Verify(x => x.ExecuteSendMessagePipelineAsync(
+            It.IsAny<SendContext>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]

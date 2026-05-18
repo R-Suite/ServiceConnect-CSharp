@@ -131,7 +131,7 @@ internal sealed class Bus : IBus
         var prep = await PrepareOutboundAsync(message, options?.Headers, cancellationToken).ConfigureAwait(false);
         if (prep.Stopped)
         {
-            return;
+            throw new OutgoingFiltersBlockedException("Outgoing filters blocked the published message.");
         }
         var messageBytes = prep.Bytes;
         var headers = prep.Headers;
@@ -186,7 +186,7 @@ internal sealed class Bus : IBus
         var prep = await PrepareOutboundAsync(message, options?.Headers, cancellationToken).ConfigureAwait(false);
         if (prep.Stopped)
         {
-            return;
+            throw new OutgoingFiltersBlockedException("Outgoing filters blocked the sent message.");
         }
         var messageBytes = prep.Bytes;
         var headers = prep.Headers;
@@ -219,7 +219,7 @@ internal sealed class Bus : IBus
         var prep = await PrepareOutboundAsync(message, options?.Headers, cancellationToken).ConfigureAwait(false);
         if (prep.Stopped)
         {
-            return;
+            throw new OutgoingFiltersBlockedException("Outgoing filters blocked the multi-endpoint send.");
         }
         var messageBytes = prep.Bytes;
         var headers = prep.Headers;
@@ -418,7 +418,7 @@ internal sealed class Bus : IBus
         var prep = await PrepareOutboundAsync(message, null, cancellationToken).ConfigureAwait(false);
         if (prep.Stopped)
         {
-            return;
+            throw new OutgoingFiltersBlockedException("Outgoing filters blocked the routed message.");
         }
         var messageBytes = prep.Bytes;
         var headers = prep.Headers;

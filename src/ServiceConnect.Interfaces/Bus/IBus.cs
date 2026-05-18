@@ -31,12 +31,9 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Publishes a message to all subscribers of the message type.
     /// </summary>
-    /// <remarks>
-    /// An outgoing filter returning <see cref="FilterAction.Stop"/> causes this call to
-    /// return silently — the message is dropped before transport publish. No exception is thrown.
-    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The bus has been disposed.</exception>
+    /// <exception cref="Exceptions.OutgoingFiltersBlockedException">An outgoing filter returned <see cref="FilterAction.Stop"/> and blocked the publish.</exception>
     Task PublishAsync<T>(T message, PublishOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
 
     /// <summary>
@@ -50,12 +47,10 @@ public interface IBus : IAsyncDisposable
     /// has failed; on multi-endpoint fan-out with prior failures, the OCE is wrapped as the
     /// first inner exception of an <see cref="AggregateException"/> that also carries the prior
     /// endpoint failures (so callers see both the cancellation and the partial-fan-out failures).
-    /// An outgoing filter returning <see cref="FilterAction.Stop"/> causes this call
-    /// to return silently — the message is dropped before transport publish. No exception is
-    /// thrown.
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The bus has been disposed.</exception>
+    /// <exception cref="Exceptions.OutgoingFiltersBlockedException">An outgoing filter returned <see cref="FilterAction.Stop"/> and blocked the send.</exception>
     Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
 
     /// <summary>
@@ -72,13 +67,10 @@ public interface IBus : IAsyncDisposable
     /// preceded it. The <c>options.EndPoint</c> field is ignored when this method is called —
     /// the explicit <paramref name="endPoints"/> parameter wins.
     /// </summary>
-    /// <remarks>
-    /// An outgoing filter returning <see cref="FilterAction.Stop"/> causes this call
-    /// to return silently — the message is dropped before any transport publish.
-    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> or <paramref name="endPoints"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="endPoints"/> is empty.</exception>
     /// <exception cref="ObjectDisposedException">The bus has been disposed.</exception>
+    /// <exception cref="Exceptions.OutgoingFiltersBlockedException">An outgoing filter returned <see cref="FilterAction.Stop"/> and blocked the multi-endpoint send.</exception>
     Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message;
 
     /// <summary>
@@ -156,13 +148,10 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Routes a message through a series of destinations using a routing slip.
     /// </summary>
-    /// <remarks>
-    /// An outgoing filter returning <see cref="FilterAction.Stop"/> causes this call
-    /// to return silently — the routing slip is dropped before transport publish.
-    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> or <paramref name="destinations"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="destinations"/> is empty or contains an entry with a comma (the routing-slip separator) or that otherwise fails destination validation.</exception>
     /// <exception cref="ObjectDisposedException">The bus has been disposed.</exception>
+    /// <exception cref="Exceptions.OutgoingFiltersBlockedException">An outgoing filter returned <see cref="FilterAction.Stop"/> and blocked the routed message.</exception>
     Task RouteAsync<T>(T message, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default) where T : Message;
 
     /// <summary>
