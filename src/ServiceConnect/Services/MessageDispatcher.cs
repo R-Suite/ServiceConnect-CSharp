@@ -367,20 +367,26 @@ internal sealed class MessageDispatcher(
         return (replyProcessor, false);
     }
 
-    private async Task<ConsumeEventResult> RunProcessors(ReadOnlyMemory<byte> mb, Type mt, object m, IDictionary<string, object> h, Envelope e, CancellationToken ct)
+    private async Task<ConsumeEventResult> RunProcessors(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        CancellationToken cancellationToken)
     {
         foreach (var proc in _processors)
         {
             // Mirror the pre-deserialization loop: shutdown cancellation must propagate
             // between processors even when a processor completes synchronously.
-            ct.ThrowIfCancellationRequested();
+            cancellationToken.ThrowIfCancellationRequested();
 
             if (proc.RunBeforeDeserialization)
             {
                 continue;
             }
 
-            var result = await proc.ProcessAsync(mb, mt, m, h, e, ct).ConfigureAwait(false);
+            var result = await proc.ProcessAsync(messageBytes, messageType, message, headers, envelope, cancellationToken).ConfigureAwait(false);
             if (result == ProcessResult.Handled)
             {
                 return new ConsumeEventResult { Success = true };
@@ -392,7 +398,7 @@ internal sealed class MessageDispatcher(
         // saga, aggregator, stream) claimed it — on a topic-exchange topology where the bus
         // binds an exchange it doesn't fully service, that's the steady state for the unclaimed
         // subset, not an operator-actionable signal.
-        _logger.LogDebug("No processor handled message of type {MessageType}", mt.FullName);
+        _logger.LogDebug("No processor handled message of type {MessageType}", messageType.FullName);
         return new ConsumeEventResult { Success = true, NotHandled = true };
     }
 
@@ -409,7 +415,8 @@ internal sealed class MessageDispatcher(
         {
             var mw = (IMessageProcessingMiddleware)scopedProvider.GetRequiredService(middlewareTypes[i]);
             var next = chain;
-            chain = (mb, mt, m, h, e, ct) => mw.ProcessAsync(mb, mt, m, h, e, next, ct);
+            chain = (messageBytes, messageType, message, headers, envelope, cancellationToken) =>
+                mw.ProcessAsync(messageBytes, messageType, message, headers, envelope, next, cancellationToken);
         }
         return chain;
     }
