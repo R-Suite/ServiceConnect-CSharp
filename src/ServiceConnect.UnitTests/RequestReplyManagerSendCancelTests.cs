@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
@@ -48,7 +49,7 @@ public sealed class RequestReplyManagerSendCancelTests
                 }
             });
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
         var options = new RequestOptions { Timeout = 200, EndPoint = "test-endpoint" };
         var headers = new Dictionary<string, string>();
 
@@ -83,7 +84,7 @@ public sealed class RequestReplyManagerSendCancelTests
                 }
             });
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
         // Long timeout so the caller token wins the race.
         var options = new RequestOptions { Timeout = 60_000, EndPoint = "test-endpoint" };
         var headers = new Dictionary<string, string>();
@@ -111,7 +112,7 @@ public sealed class RequestReplyManagerSendCancelTests
             .Setup(p => p.ExecuteSendMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
         var options = new RequestOptions { Timeout = 100, EndPoint = "test-endpoint" };
         var headers = new Dictionary<string, string>();
 
@@ -139,7 +140,7 @@ public sealed class RequestReplyManagerSendCancelTests
                 }
             });
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
         var options = new RequestOptions
         {
             Timeout = 200,
@@ -176,7 +177,7 @@ public sealed class RequestReplyManagerSendCancelTests
                 }
             });
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
         var options = new RequestOptions { Timeout = 200, ExpectedReplyCount = 1 };
         var headers = new Dictionary<string, string>();
 

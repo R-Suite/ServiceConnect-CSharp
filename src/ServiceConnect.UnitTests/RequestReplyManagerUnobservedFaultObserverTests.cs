@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
@@ -106,7 +107,7 @@ public sealed class RequestReplyManagerUnobservedFaultObserverTests
                 .Setup(p => p.ExecutePublishMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
                 .Throws(new IOException("transport disconnect"));
 
-            var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+            var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
             await Assert.ThrowsAsync<IOException>(() =>
                 manager.PublishRequestAsync<FakeMessage1, FakeMessage1>(
@@ -158,7 +159,7 @@ public sealed class RequestReplyManagerUnobservedFaultObserverTests
                     }
                 });
 
-            var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+            var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
             using var callerCts = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
 
             var ex = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
@@ -193,7 +194,7 @@ public sealed class RequestReplyManagerUnobservedFaultObserverTests
             .Setup(p => p.ExecuteSendMessagePipelineAsync(It.IsAny<SendContext>(), It.IsAny<CancellationToken>()))
             .Throws(new IOException("transport disconnect"));
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         await Assert.ThrowsAsync<IOException>(() => act(manager));
     }

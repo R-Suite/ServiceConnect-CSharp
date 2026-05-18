@@ -183,6 +183,18 @@ The maximum time `IBus.DisposeAsync` waits for in-flight work to drain (graceful
 
 **Remarks.** Read-only on the interface — populated from the builder's `ConfigureBus` callback (`bus.DisposeTimeout = ...`) and frozen at startup. Pass `Timeout.InfiniteTimeSpan` to wait indefinitely; pass `TimeSpan.Zero` to skip the drain entirely (suits CLI tools and tests). Startup throws if a non-positive, non-infinite value is configured.
 
+---
+
+### `MaxInflightRequests`
+
+```csharp
+int MaxInflightRequests { get; set; }
+```
+
+Caps the number of concurrent request-reply exchanges the `RequestReplyManager` will track before rejecting new `SendRequestAsync` / `SendRequestMultiAsync` / `PublishRequestAsync` calls with `InvalidOperationException`. Defaults to **10,000**.
+
+**Remarks.** Each in-flight request pins a `Timer`, a `CancellationTokenSource`, a `TaskCompletionSource`, and a cancellation registration closure. The cap defends against unbounded memory growth from `Timeout.Infinite` callers that never wake up and from hot loops of unawaited requests. Raise for genuine high-concurrency request-fan workloads (parallel saga calls, fan-out aggregations); lower to harden against caller bugs in tight-budget hosts. Startup throws if a non-positive value is configured.
+
 ## Usage
 
 ### Configuring a RabbitMQ bus with a named queue

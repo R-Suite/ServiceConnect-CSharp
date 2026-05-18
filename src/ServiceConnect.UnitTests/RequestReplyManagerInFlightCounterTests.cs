@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
@@ -58,7 +59,7 @@ public sealed class RequestReplyManagerInFlightCounterTests
             })
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         var options = new RequestOptions { Timeout = 5_000, ExpectedReplyCount = 2 };
         var responses = await manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
@@ -106,7 +107,7 @@ public sealed class RequestReplyManagerInFlightCounterTests
             .Callback<SendContext, CancellationToken>((ctx, _) => capturedMessageId = ctx.Headers["RequestMessageId"])
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         // The awaited PublishRequestAsync must time out AFTER the send pipeline has
         // completed; a too-tight timeout (e.g. 1 ms) loses the race under suite load

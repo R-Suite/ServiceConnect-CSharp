@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
@@ -44,7 +45,7 @@ public sealed class RequestReplyManagerCallbackReentrancyTests
             .Callback<SendContext, CancellationToken>((ctx, _) => capturedMessageId = ctx.Headers["RequestMessageId"])
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         // Build a request whose internal onReply (set up by SendRequestMultiAsync to
         // append to a responses list) we wrap by spying on the public-visible side

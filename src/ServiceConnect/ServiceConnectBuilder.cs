@@ -304,6 +304,18 @@ public sealed class ServiceConnectBuilder
                 "Routing-slip processing is disabled via BusConfiguration.EnableRoutingSlipProcessing=false, " +
                 "not by setting MaxRoutingSlipHops to zero or negative.");
         }
+
+        // MaxInflightRequests gates every SendRequestAsync / SendRequestMultiAsync /
+        // PublishRequestAsync entry. A zero or negative cap would short-circuit every
+        // call at the >= check before allocating any RequestState, leaving the bus
+        // technically up but unable to issue requests. Reject at startup.
+        if (bus.MaxInflightRequests <= 0)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.MaxInflightRequests must be positive (got {bus.MaxInflightRequests}). " +
+                "The in-flight request cap defends against unbounded memory growth from Timeout.Infinite callers; " +
+                "zero or negative values would block all SendRequestAsync calls.");
+        }
     }
 
     /// <summary>

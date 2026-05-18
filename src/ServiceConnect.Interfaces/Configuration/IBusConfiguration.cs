@@ -151,4 +151,16 @@ public interface IBusConfiguration
     /// producer (consume-only buses).
     /// </summary>
     bool AllowMissingProducer { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum number of in-flight request-reply exchanges before
+    /// <c>SendRequestAsync</c> / <c>SendRequestMultiAsync</c> throws
+    /// <see cref="InvalidOperationException"/> ("cap reached"). Defaults to 10,000.
+    /// Each in-flight request pins a Timer, CancellationTokenSource, and TaskCompletionSource;
+    /// the cap defends against unbounded memory growth from <see cref="System.Threading.Timeout.Infinite"/>
+    /// callers that never wake or hot loops of unawaited requests. Increase for genuine
+    /// high-concurrency request-fan workloads; decrease to harden against caller bugs.
+    /// Must be positive.
+    /// </summary>
+    int MaxInflightRequests { get; set; }
 }

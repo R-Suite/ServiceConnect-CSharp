@@ -193,6 +193,7 @@ builder.ConfigureBus(bus =>
     bus.ValidateReplyDestinations = true;   // default; guard against unknown reply queues
 
     bus.IncludeMachineNameInHeaders = false; // default; opt in only when safe
+    bus.MaxInflightRequests = 25_000;        // raise for high-concurrency request fans
     bus.ExceptionHandler = (ex, _) => { _metrics.RecordHandlerFailure(ex); return ValueTask.CompletedTask; };
 });
 ```
@@ -203,6 +204,7 @@ A few worth a note:
 - **`AutoStartConsuming`** — when `true`, the bus starts consuming when the host starts; when `false`, you call `bus.StartConsumingAsync()` yourself. [Hosting & Lifecycle](/ServiceConnect-CSharp/learn/operations/hosting/) covers the trade-off.
 - **`ConsumerCount`** — how many parallel dispatch loops the bus runs. See [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for when to raise it.
 - **`IncludeMachineNameInHeaders`** — adds `SourceMachine`/`DestinationMachine` headers. Off by default because the hostname leak is a problem in shared-broker deployments.
+- **`MaxInflightRequests`** (default **10,000**) — caps concurrent `SendRequestAsync` / `SendRequestMultiAsync` exchanges. Each pending request pins a timer + TCS + cancellation registration; the cap defends against `Timeout.Infinite` leaks and unawaited request loops. Raise for genuine high-concurrency request fans; lower to harden against caller bugs.
 
 ## Configuration is immutable after build
 

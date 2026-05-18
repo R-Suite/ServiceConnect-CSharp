@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
@@ -67,7 +68,7 @@ public class RequestReplyManagerConcurrencyTests
             })
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         var tasks = Enumerable.Range(0, requestCount).Select(i => Task.Run(async () =>
         {
@@ -106,7 +107,7 @@ public class RequestReplyManagerConcurrencyTests
             .Callback<SendContext, CancellationToken>((ctx, _) => requestId = ctx.Headers["RequestMessageId"])
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         var requestTask = manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
             new FakeMessage1(Guid.NewGuid()) { Username = "x" },
@@ -161,7 +162,7 @@ public class RequestReplyManagerConcurrencyTests
                 .Callback<SendContext, CancellationToken>((ctx, _) => requestId = ctx.Headers["RequestMessageId"])
                 .Returns(Task.CompletedTask);
 
-            manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+            manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
             var requestTask = manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
                 new FakeMessage1(Guid.NewGuid()) { Username = "x" },
@@ -225,7 +226,7 @@ public class RequestReplyManagerConcurrencyTests
             })
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         var callerTasks = Enumerable.Range(0, callerCount).Select(_ => Task.Run(async () =>
         {

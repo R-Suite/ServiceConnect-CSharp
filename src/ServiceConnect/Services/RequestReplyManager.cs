@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
 
@@ -8,19 +9,17 @@ namespace ServiceConnect.Services;
 /// <summary>
 /// Tracks pending request-reply exchanges and correlates incoming replies with the originating request.
 /// </summary>
-internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline) : IRequestReplyManager, IReplyStatusRequestReplyManager, IAsyncDisposable
+internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMessagePipeline sendPipeline, IBusConfiguration busConfig) : IRequestReplyManager, IReplyStatusRequestReplyManager, IAsyncDisposable
 {
-    // Hard cap on in-flight requests to prevent unbounded memory growth from
-    // RequestOptions.Timeout = Timeout.Infinite (or a hot loop of unawaited requests).
-    // Each RequestState pins a Timer, CancellationTokenSource, TaskCompletionSource, and
-    // the cancellation-registration closure. 10_000 is sized to cover any realistic
-    // concurrent-fan-out scenario while still bounding the worst case. Exposed as an
-    // internal const so a future BusConfiguration knob can override.
-    internal const int MaxInflightRequests = 10_000;
-
     private readonly ConcurrentDictionary<Guid, RequestState> _pendingRequests = new();
     private readonly IMessageSerializer _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
     private readonly ISendMessagePipeline _sendPipeline = sendPipeline ?? throw new ArgumentNullException(nameof(sendPipeline));
+    // Hard cap on in-flight requests to prevent unbounded memory growth from
+    // RequestOptions.Timeout = Timeout.Infinite (or a hot loop of unawaited requests).
+    // Each RequestState pins a Timer, CancellationTokenSource, TaskCompletionSource, and
+    // the cancellation-registration closure. Snapshotted at construction so a frozen
+    // BusConfiguration's value is captured without re-reading the property on every call.
+    private readonly int _maxInflightRequests = (busConfig ?? throw new ArgumentNullException(nameof(busConfig))).MaxInflightRequests;
     private int _disposed;
 
     /// <inheritdoc />
@@ -49,10 +48,10 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
         // Capacity check BEFORE we mint the request id so a saturated manager fails fast
         // rather than allocating and then leaking the entry. The cap protects against
         // Timeout.Infinite callers that never wake up and against unawaited request loops.
-        if (_pendingRequests.Count >= MaxInflightRequests)
+        if (_pendingRequests.Count >= _maxInflightRequests)
         {
             throw new InvalidOperationException(
-                $"RequestReplyManager has reached its in-flight request cap ({MaxInflightRequests}). " +
+                $"RequestReplyManager has reached its in-flight request cap ({_maxInflightRequests}). " +
                 "This usually indicates callers with Timeout.Infinite that never complete, or a hot loop " +
                 "of unawaited SendRequestAsync calls. Lower the per-request Timeout, await prior requests, " +
                 "or investigate why responders are not replying.");
@@ -195,10 +194,10 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
         _serializer.Serialize(message, bufferWriter);
         var messageBytes = bufferWriter.WrittenMemory;
 
-        if (_pendingRequests.Count >= MaxInflightRequests)
+        if (_pendingRequests.Count >= _maxInflightRequests)
         {
             throw new InvalidOperationException(
-                $"RequestReplyManager has reached its in-flight request cap ({MaxInflightRequests}). " +
+                $"RequestReplyManager has reached its in-flight request cap ({_maxInflightRequests}). " +
                 "See SendRequestAsync for guidance.");
         }
 
@@ -377,10 +376,10 @@ internal sealed class RequestReplyManager(IMessageSerializer serializer, ISendMe
         _serializer.Serialize(message, bufferWriter);
         var messageBytes = bufferWriter.WrittenMemory;
 
-        if (_pendingRequests.Count >= MaxInflightRequests)
+        if (_pendingRequests.Count >= _maxInflightRequests)
         {
             throw new InvalidOperationException(
-                $"RequestReplyManager has reached its in-flight request cap ({MaxInflightRequests}). " +
+                $"RequestReplyManager has reached its in-flight request cap ({_maxInflightRequests}). " +
                 "See SendRequestAsync for guidance.");
         }
 

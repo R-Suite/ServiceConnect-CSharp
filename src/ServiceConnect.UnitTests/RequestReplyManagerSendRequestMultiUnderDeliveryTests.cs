@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Exceptions;
 using ServiceConnect.Interfaces.Options;
@@ -67,7 +68,7 @@ public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
             })
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+        manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object, new BusConfiguration());
 
         var ex = await Assert.ThrowsAsync<RequestTimeoutException>(() =>
             manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(request, headers, options));
@@ -111,7 +112,7 @@ public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
             })
             .Returns(Task.CompletedTask);
 
-        manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+        manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object, new BusConfiguration());
 
         var results = await manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
             request, headers, options);
@@ -138,7 +139,7 @@ public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object, new BusConfiguration());
 
         var task = manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
             new FakeMessage1(Guid.NewGuid()), headers, options, externalCts.Token);
@@ -167,7 +168,7 @@ public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object, new BusConfiguration());
 
         var results = await manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
             request, headers, options);
@@ -192,7 +193,7 @@ public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object, new BusConfiguration());
 
         var results = await manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(
             request, headers, options);
@@ -217,7 +218,7 @@ public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
                 It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object);
+        var manager = new RequestReplyManager(_mockSerializer.Object, _mockSendPipeline.Object, new BusConfiguration());
 
         var ex = await Assert.ThrowsAsync<RequestTimeoutException>(() =>
             manager.SendRequestMultiAsync<FakeMessage1, FakeMessage1>(request, headers, options));

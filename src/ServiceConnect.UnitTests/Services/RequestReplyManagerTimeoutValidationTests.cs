@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
@@ -17,7 +18,7 @@ public class RequestReplyManagerTimeoutValidationTests
     {
         var mockSerializer = new Mock<IMessageSerializer>(MockBehavior.Loose);
         var mockSendPipeline = new Mock<ISendMessagePipeline>(MockBehavior.Loose);
-        return new RequestReplyManager(mockSerializer.Object, mockSendPipeline.Object);
+        return new RequestReplyManager(mockSerializer.Object, mockSendPipeline.Object, new BusConfiguration());
     }
 
     [Fact]

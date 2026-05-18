@@ -30,6 +30,7 @@ internal sealed class BusConfiguration : IBusConfiguration
     private bool _strictReplyValidation;
     private TimeSpan _disposeTimeout = TimeSpan.FromSeconds(30);
     private bool _allowMissingProducer;
+    private int _maxInflightRequests = 10_000;
 
     /// <inheritdoc />
     public bool ScanForMessageHandlers { get => _scanForMessageHandlers; set { ThrowIfFrozen(); _scanForMessageHandlers = value; } }
@@ -59,6 +60,8 @@ internal sealed class BusConfiguration : IBusConfiguration
     public TimeSpan DisposeTimeout { get => _disposeTimeout; set { ThrowIfFrozen(); _disposeTimeout = value; } }
     /// <inheritdoc />
     public bool AllowMissingProducer { get => _allowMissingProducer; set { ThrowIfFrozen(); _allowMissingProducer = value; } }
+    /// <inheritdoc />
+    public int MaxInflightRequests { get => _maxInflightRequests; set { ThrowIfFrozen(); _maxInflightRequests = value; } }
     /// <summary>
     /// Gets the transport configuration used to connect to the broker.
     /// </summary>

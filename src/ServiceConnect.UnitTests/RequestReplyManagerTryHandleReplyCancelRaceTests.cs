@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Interfaces.Options;
 using ServiceConnect.Services;
@@ -50,7 +51,7 @@ public sealed class RequestReplyManagerTryHandleReplyCancelRaceTests
             .Callback<SendContext, CancellationToken>((ctx, _) => capturedMessageId = ctx.Headers["RequestMessageId"])
             .Returns(Task.CompletedTask);
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
 
         for (var i = 0; i < iterations; i++)
         {
@@ -133,7 +134,7 @@ public sealed class RequestReplyManagerTryHandleReplyCancelRaceTests
             .Callback<SendContext, CancellationToken>((ctx, _) => capturedMessageId = ctx.Headers["RequestMessageId"])
             .Returns(Task.CompletedTask);
 
-        var manager = new RequestReplyManager(serializer.Object, pipeline.Object);
+        var manager = new RequestReplyManager(serializer.Object, pipeline.Object, new BusConfiguration());
         using var cts = new CancellationTokenSource();
         var sendTask = manager.SendRequestAsync<FakeMessage1, FakeMessage1>(
             new FakeMessage1(Guid.NewGuid()),
