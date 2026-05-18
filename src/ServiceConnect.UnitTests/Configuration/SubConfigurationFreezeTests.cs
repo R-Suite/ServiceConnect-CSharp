@@ -1,7 +1,7 @@
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Configuration;
 
 /// <summary>
 /// Verifies that all sub-configurations (Transport, Queues, Persistence, Pipeline) throw

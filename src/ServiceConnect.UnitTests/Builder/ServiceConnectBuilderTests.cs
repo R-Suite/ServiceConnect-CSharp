@@ -3,7 +3,7 @@ using ServiceConnect;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Builder;
 
 public class TestFilter : IFilter
 {

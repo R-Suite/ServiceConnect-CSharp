@@ -3,7 +3,7 @@ using Moq;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Handlers;
 
 public class HandlerScannerExceptionBreadthTests
 {

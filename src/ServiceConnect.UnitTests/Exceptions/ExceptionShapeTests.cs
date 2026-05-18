@@ -1,7 +1,7 @@
 using ServiceConnect.Interfaces.Exceptions;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Exceptions;
 
 public class ExceptionShapeTests
 {

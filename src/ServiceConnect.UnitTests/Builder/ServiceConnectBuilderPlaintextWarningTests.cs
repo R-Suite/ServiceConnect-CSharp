@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging.Testing;
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Builder;
 
 /// <summary>
 /// Verifies the adapter-independent plaintext-against-non-loopback-host warning emitted by

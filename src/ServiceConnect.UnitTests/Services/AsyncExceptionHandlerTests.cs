@@ -2,7 +2,7 @@ using ServiceConnect.Interfaces.Configuration;
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Services;
 
 public class AsyncExceptionHandlerTests
 {

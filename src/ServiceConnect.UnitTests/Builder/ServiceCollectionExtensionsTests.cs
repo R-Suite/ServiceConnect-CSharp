@@ -9,7 +9,7 @@ using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Builder;
 
 public class ServiceCollectionExtensionsTests
 {

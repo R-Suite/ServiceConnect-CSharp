@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Configuration;
 
 public class QueueConfigurationTests
 {

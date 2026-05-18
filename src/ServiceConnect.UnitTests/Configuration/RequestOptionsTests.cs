@@ -1,7 +1,7 @@
 using ServiceConnect.Interfaces.Options;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Configuration;
 
 public class RequestOptionsTests
 {

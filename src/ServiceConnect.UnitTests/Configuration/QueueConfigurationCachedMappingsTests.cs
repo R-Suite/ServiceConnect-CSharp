@@ -1,7 +1,7 @@
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Configuration;
 
 public sealed class QueueConfigurationCachedMappingsTests
 {

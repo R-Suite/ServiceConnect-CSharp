@@ -9,7 +9,7 @@ using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Handlers;
 
 // Test types defined here for scanning
 public class TestScannerMessage(Guid correlationId) : Message(correlationId)

@@ -3,7 +3,7 @@ using Moq;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Configuration;
 
 public class ConfigurationCleanupTests
 {

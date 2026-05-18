@@ -190,3 +190,7 @@ website/.astro/
 
 # Brainstorming companion artifacts
 .superpowers/
+
+# Test runner output
+**/TestResults/
+*.trx

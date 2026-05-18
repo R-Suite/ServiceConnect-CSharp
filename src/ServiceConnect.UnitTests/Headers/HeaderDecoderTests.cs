@@ -2,7 +2,7 @@ using System.Text;
 using ServiceConnect.Interfaces;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Headers;
 
 public class HeaderDecoderTests
 {

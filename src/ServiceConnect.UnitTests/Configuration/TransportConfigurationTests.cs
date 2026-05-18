@@ -3,7 +3,7 @@ using System.Security.Authentication;
 using ServiceConnect.Configuration;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Configuration;
 
 public class TransportConfigurationTests
 {

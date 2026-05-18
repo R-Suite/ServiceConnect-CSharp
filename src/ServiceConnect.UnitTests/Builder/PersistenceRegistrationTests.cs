@@ -5,7 +5,7 @@ using ServiceConnect.Persistence.InMemory;
 using ServiceConnect.Persistence.MongoDb;
 using Xunit;
 
-namespace ServiceConnect.UnitTests;
+namespace ServiceConnect.UnitTests.Builder;
 
 [Collection("Mongo Bson serial")]
 public class PersistenceRegistrationTests
