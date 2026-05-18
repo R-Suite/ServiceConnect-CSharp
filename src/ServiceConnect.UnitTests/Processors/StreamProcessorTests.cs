@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
@@ -36,7 +37,8 @@ public class StreamProcessorTests
             new MessageTypeRegistry(),
             new StreamHandlerRegistry([], NullLogger<StreamHandlerRegistry>.Instance),
             Mock.Of<IMessageSerializer>(),
-            TimeProvider.System);
+            TimeProvider.System,
+            new BusConfiguration());
     }
 
     [Fact]
@@ -311,7 +313,8 @@ public class StreamProcessorTests
             typeRegistry,
             streamHandlerRegistry,
             serializerMock.Object,
-            TimeProvider.System);
+            TimeProvider.System,
+            new BusConfiguration());
 
         // Build a single-packet complete stream.
         var payload = new byte[] { 0x01 };
@@ -377,7 +380,8 @@ public class StreamProcessorTests
             typeRegistry,
             streamHandlerRegistry,
             serializerMock.Object,
-            TimeProvider.System);
+            TimeProvider.System,
+            new BusConfiguration());
 
         var payload = new byte[] { 0x01 };
         var headers = new Dictionary<string, object>
@@ -447,7 +451,8 @@ public class StreamProcessorTests
             typeRegistry,
             streamHandlerRegistry,
             serializerMock.Object,
-            TimeProvider.System);
+            TimeProvider.System,
+            new BusConfiguration());
 
         var payload = new byte[] { 0x01 };
         var headers = new Dictionary<string, object>
@@ -584,7 +589,8 @@ public class StreamProcessorTests
             typeRegistry,
             streamHandlerRegistry,
             serializerMock.Object,
-            clock);
+            clock,
+            new BusConfiguration());
 
         var payload = new byte[] { 0x01 };
 
@@ -646,7 +652,8 @@ public class StreamProcessorTests
             new MessageTypeRegistry(),
             new StreamHandlerRegistry([], NullLogger<StreamHandlerRegistry>.Instance),
             Mock.Of<IMessageSerializer>(),
-            fakeTime);
+            fakeTime,
+            new BusConfiguration());
 
         var sequenceId = Guid.NewGuid().ToString();
         var headers0 = new Dictionary<string, object>
@@ -767,7 +774,8 @@ public class StreamProcessorTests
             typeRegistry,
             streamRegistry,
             serializer,
-            TimeProvider.System);
+            TimeProvider.System,
+            new BusConfiguration());
 
         // Push the root provider as an outer (mismatched) scope first. If the processor
         // were ever to fall back to a captured-at-ctor reference, rootHandlerProbe would

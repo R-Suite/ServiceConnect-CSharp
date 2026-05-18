@@ -10,9 +10,16 @@ namespace ServiceConnect.Services;
 /// Creates a read stream for the supplied sequence identifier.
 /// </remarks>
 /// <param name="sequenceId">The identifier shared by all packets in the stream.</param>
-internal sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadStream
+/// <param name="maxTotalStreamSize">
+/// Upper bound on the cumulative byte count <see cref="Write"/> will admit before throwing
+/// <see cref="InvalidOperationException"/>. Defaults to 100 MB; the default preserves
+/// historical behaviour for callers that construct the stream directly (tests). Production
+/// construction routes through <c>StreamProcessor</c>, which threads the value configured on
+/// <c>IBusConfiguration.MaxStreamSizeBytes</c>.
+/// </param>
+internal sealed class MessageBusReadStream(string sequenceId, long maxTotalStreamSize = 100L * 1024 * 1024) : IMessageBusReadStream
 {
-    private const long MaxTotalStreamSize = 100 * 1024 * 1024;
+    private readonly long _maxTotalStreamSize = maxTotalStreamSize;
     private readonly ConcurrentDictionary<long, byte[]> _packets = new();
     private long _totalBytesWritten;
     // Track received packet count with an atomic counter so IsComplete() is O(1).
@@ -102,10 +109,10 @@ internal sealed class MessageBusReadStream(string sequenceId) : IMessageBusReadS
         // roll it back before any concurrent writer can observe the inflated total
         // and before we insert into the packet dictionary.
         long newTotal = Interlocked.Add(ref _totalBytesWritten, data.Length);
-        if (newTotal > MaxTotalStreamSize)
+        if (newTotal > _maxTotalStreamSize)
         {
             Interlocked.Add(ref _totalBytesWritten, -data.Length);
-            throw new InvalidOperationException($"Stream exceeds maximum size of {MaxTotalStreamSize / (1024 * 1024)} MB.");
+            throw new InvalidOperationException($"Stream exceeds maximum size of {_maxTotalStreamSize} bytes.");
         }
 
         if (!_packets.TryAdd(packetNumber, stored))

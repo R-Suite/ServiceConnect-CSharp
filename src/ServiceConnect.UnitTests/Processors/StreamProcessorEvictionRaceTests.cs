@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using Moq;
+using ServiceConnect.Configuration;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Services;
 using ServiceConnect.Services.Processors;
@@ -24,7 +25,8 @@ public class StreamProcessorEvictionRaceTests
             new MessageTypeRegistry(),
             new StreamHandlerRegistry([], NullLogger<StreamHandlerRegistry>.Instance),
             Mock.Of<IMessageSerializer>(),
-            timeProvider ?? TimeProvider.System);
+            timeProvider ?? TimeProvider.System,
+            new BusConfiguration());
     }
 
     [Fact]

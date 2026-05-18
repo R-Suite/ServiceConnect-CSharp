@@ -316,6 +316,17 @@ public sealed class ServiceConnectBuilder
                 "The in-flight request cap defends against unbounded memory growth from Timeout.Infinite callers; " +
                 "zero or negative values would block all SendRequestAsync calls.");
         }
+
+        // MaxStreamSizeBytes gates every MessageBusReadStream.Write. A zero or negative
+        // cap would reject every packet at the > check, leaving the bus able to admit
+        // stream sequences but unable to commit any bytes. Reject at startup.
+        if (bus.MaxStreamSizeBytes <= 0)
+        {
+            throw new InvalidOperationException(
+                $"BusConfiguration.MaxStreamSizeBytes must be positive (got {bus.MaxStreamSizeBytes}). " +
+                "The stream-reassembly cap defends against unbounded memory growth from hostile producers; " +
+                "zero or negative values would reject every stream write.");
+        }
     }
 
     /// <summary>

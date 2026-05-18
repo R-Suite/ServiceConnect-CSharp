@@ -3,6 +3,7 @@ using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
 
 namespace ServiceConnect.Services.Processors;
 
@@ -14,6 +15,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
     private readonly StreamHandlerRegistry _streamHandlerRegistry;
     private readonly IMessageSerializer _serializer;
     private readonly TimeProvider _timeProvider;
+    private readonly long _maxStreamSizeBytes;
     private readonly ConcurrentDictionary<string, ActiveStreamState> _activeStreams = new(StringComparer.Ordinal);
     // Tracks admitted stream count separately so admission can be gated with Interlocked
     // without relying on ConcurrentDictionary.Count (which is accurate but does not compose
@@ -53,7 +55,8 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         IMessageTypeRegistry typeRegistry,
         StreamHandlerRegistry streamHandlerRegistry,
         IMessageSerializer serializer,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        IBusConfiguration busConfig)
     {
         _scopeAccessor = scopeAccessor ?? throw new ArgumentNullException(nameof(scopeAccessor));
         _logger = logger;
@@ -61,6 +64,11 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
         _streamHandlerRegistry = streamHandlerRegistry ?? throw new ArgumentNullException(nameof(streamHandlerRegistry));
         _serializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+        // Snapshot the per-stream byte cap at construction time so each fresh
+        // MessageBusReadStream carries the configured ceiling without re-reading
+        // IBusConfiguration on every admission. The configuration is frozen by the
+        // time the processor is resolved from DI, so the snapshot is final.
+        _maxStreamSizeBytes = (busConfig ?? throw new ArgumentNullException(nameof(busConfig))).MaxStreamSizeBytes;
         _cleanupTimer = _timeProvider.CreateTimer(_ => EvictStaleStreams(), null, StreamCleanupInterval, StreamCleanupInterval);
     }
 
@@ -150,7 +158,7 @@ internal sealed class StreamProcessor : IMessageProcessor, IAsyncDisposable
                 return NotHandledTask;
             }
 
-            var fresh = new ActiveStreamState(new MessageBusReadStream(sequenceId), _timeProvider.GetUtcNow());
+            var fresh = new ActiveStreamState(new MessageBusReadStream(sequenceId, _maxStreamSizeBytes), _timeProvider.GetUtcNow());
             var actual = _activeStreams.GetOrAdd(sequenceId, fresh);
             if (!ReferenceEquals(actual, fresh))
             {

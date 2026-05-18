@@ -106,6 +106,8 @@ Streaming is not free. Each packet is a transport message — RabbitMQ allocates
 
 The receiver reassembles in memory. A 5 GB payload will hold 5 GB in the receiver's heap until `ExecuteAsync` returns. If that is not acceptable, chunking the *semantics* (many small `DocumentChunkUploaded` messages with sequence numbers) is the right move, not streaming.
 
+The receiver caps the cumulative byte count per stream to defend against hostile or buggy producers that never close their stream. The ceiling is configurable via `BusConfiguration.MaxStreamSizeBytes` and defaults to **100 MB**; a stream that exceeds it terminates with `InvalidOperationException` on the offending `Write`. Raise this for legitimate large-artefact workloads (file uploads, ML model weights); lower it to harden memory-constrained hosts. [`IBusConfiguration` reference](/ServiceConnect-CSharp/reference/bus/ibusconfiguration/#maxstreamsizebytes).
+
 ## Reference
 
 - [`IStreamHandler`](/ServiceConnect-CSharp/reference/handlers/istreamhandler/) — streaming consumer contract

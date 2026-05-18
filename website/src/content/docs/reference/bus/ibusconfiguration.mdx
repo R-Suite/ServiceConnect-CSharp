@@ -195,6 +195,18 @@ Caps the number of concurrent request-reply exchanges the `RequestReplyManager` 
 
 **Remarks.** Each in-flight request pins a `Timer`, a `CancellationTokenSource`, a `TaskCompletionSource`, and a cancellation registration closure. The cap defends against unbounded memory growth from `Timeout.Infinite` callers that never wake up and from hot loops of unawaited requests. Raise for genuine high-concurrency request-fan workloads (parallel saga calls, fan-out aggregations); lower to harden against caller bugs in tight-budget hosts. Startup throws if a non-positive value is configured.
 
+---
+
+### `MaxStreamSizeBytes`
+
+```csharp
+long MaxStreamSizeBytes { get; set; }
+```
+
+Caps the cumulative byte count a single inbound stream may reassemble before `MessageBusReadStream.Write` throws `InvalidOperationException`. Defaults to **100 MB** (104,857,600 bytes).
+
+**Remarks.** Every admitted stream pins a `ConcurrentDictionary<long, byte[]>` and a running total — without a ceiling, a hostile or buggy producer that never closes its stream would drive unbounded heap growth on the receiver. Raise for deployments that legitimately stream large artefacts (file uploads, ML model weights, image batches); lower to harden memory-constrained hosts where 100 MB per concurrent stream is too generous. Startup throws if a non-positive value is configured.
+
 ## Usage
 
 ### Configuring a RabbitMQ bus with a named queue

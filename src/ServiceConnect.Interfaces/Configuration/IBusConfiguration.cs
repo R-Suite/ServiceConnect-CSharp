@@ -163,4 +163,14 @@ public interface IBusConfiguration
     /// Must be positive.
     /// </summary>
     int MaxInflightRequests { get; set; }
+
+    /// <summary>
+    /// Gets or sets the maximum total bytes a single inbound stream may reassemble
+    /// before <c>MessageBusReadStream.Write</c> throws <see cref="InvalidOperationException"/>.
+    /// Defaults to 100 MB (104,857,600 bytes). Defends against unbounded memory growth
+    /// from hostile or buggy producers that never close their stream. Raise for
+    /// deployments that stream legitimately large artefacts (file uploads, ML models);
+    /// lower to harden memory-constrained hosts. Must be positive.
+    /// </summary>
+    long MaxStreamSizeBytes { get; set; }
 }
