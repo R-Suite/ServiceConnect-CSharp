@@ -32,6 +32,7 @@ try
     var sagaObservations = new SagaObservations();
     var aggregatorObservations = new AggregatorObservations();
     var slipTrail = new SlipTrail();
+    var streamObservations = new StreamObservations();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
@@ -46,6 +47,7 @@ try
         new AggregatorDriver(accounting, aggregatorObservations),
         new ScatterGatherDriver(accounting, signals),
         new RoutingSlipDriver(accounting, signals, slipTrail),
+        new StreamingDriver(accounting, streamObservations),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -79,6 +81,7 @@ try
         new() { MessageType = typeof(TelemetrySlice), HandlerType = typeof(StressTelemetrySliceAggregator) },
         new() { MessageType = typeof(SearchRequest), HandlerType = typeof(SearchRequestHandler) },
         new() { MessageType = typeof(SlipOrder), HandlerType = typeof(SlipOrderHandler) },
+        new() { MessageType = typeof(DocumentUploaded), HandlerType = typeof(DocumentUploadedHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -111,6 +114,7 @@ try
                 services.TryAddSingleton(sagaObservations);
                 services.TryAddSingleton(aggregatorObservations);
                 services.TryAddSingleton(slipTrail);
+                services.TryAddSingleton(streamObservations);
 
                 // Filter is resolved per dispatch via GetRequiredService; transient
                 // lifetime matches its observational role (no state held on the filter
@@ -234,6 +238,19 @@ try
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
                     sp.GetRequiredService<SlipTrail>()));
+
+                // Stream handler runs once per reassembled stream. The framework
+                // resolves IStreamHandler<DocumentUploaded> via GetService when the
+                // close packet arrives — distinct from the IMessageHandler<T>
+                // resolution path used by every regular consumer — so the factory
+                // registers against the stream-handler interface explicitly. Only
+                // one stream-handler registration per message type is permitted by
+                // StreamHandlerRegistry; the per-bus factory closes over busTag so
+                // each bus dispatches with its own identity baked in.
+                services.AddTransient<IStreamHandler<DocumentUploaded>>(sp => new DocumentUploadedHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<StreamObservations>()));
             });
         },
         loggerFactory,
