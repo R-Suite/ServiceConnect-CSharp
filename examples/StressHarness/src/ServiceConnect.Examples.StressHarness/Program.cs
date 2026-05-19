@@ -28,6 +28,7 @@ try
     var signals = new PerHandlerSignal();
     var workItemCounters = new WorkItemCounters();
     var filterTrail = new FilterTrail();
+    var sagaObservations = new SagaObservations();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
@@ -38,6 +39,7 @@ try
         new ContentBasedRoutingDriver(accounting, signals),
         new PolymorphicMessagesDriver(accounting, signals),
         new FiltersDriver(accounting, signals, filterTrail),
+        new ProcessManagerDriver(accounting, signals, sagaObservations),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -65,6 +67,9 @@ try
         new() { MessageType = typeof(OrderPlacedEvent), HandlerType = typeof(DomainEventHandler) },
         new() { MessageType = typeof(OrderShippedEvent), HandlerType = typeof(DomainEventHandler) },
         new() { MessageType = typeof(FilteredMessage), HandlerType = typeof(FilteredMessageHandler) },
+        new() { MessageType = typeof(SagaStarted), HandlerType = typeof(SagaHandler) },
+        new() { MessageType = typeof(SagaIntermediate), HandlerType = typeof(SagaHandler) },
+        new() { MessageType = typeof(SagaCompleted), HandlerType = typeof(SagaHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -94,6 +99,7 @@ try
                 services.TryAddSingleton(signals);
                 services.TryAddSingleton(workItemCounters);
                 services.TryAddSingleton(filterTrail);
+                services.TryAddSingleton(sagaObservations);
 
                 // Filter is resolved per dispatch via GetRequiredService; transient
                 // lifetime matches its observational role (no state held on the filter
@@ -163,6 +169,28 @@ try
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
                     sp.GetRequiredService<FilterTrail>()));
+
+                // SagaHandler implements three IProcessHandler<SagaData, *> interfaces; each
+                // must be registered separately so the framework's per-message-type resolution
+                // (GetRequiredService<IProcessHandler<SagaData, SagaStarted>>) finds the
+                // matching instance. All three registrations resolve to fresh handler
+                // instances that close over the same shared singletons — the per-call
+                // factory makes the busTag visible to the handler without inspecting headers.
+                services.AddTransient<IProcessHandler<SagaData, SagaStarted>>(sp => new SagaHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<SagaObservations>()));
+                services.AddTransient<IProcessHandler<SagaData, SagaIntermediate>>(sp => new SagaHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<SagaObservations>()));
+                services.AddTransient<IProcessHandler<SagaData, SagaCompleted>>(sp => new SagaHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<SagaObservations>()));
             });
         },
         loggerFactory,
