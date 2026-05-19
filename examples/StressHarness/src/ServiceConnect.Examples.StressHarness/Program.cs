@@ -6,6 +6,7 @@ using ServiceConnect.Examples.StressHarness.Cli;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Examples.StressHarness.Orchestrator;
 using ServiceConnect.Examples.StressHarness.Patterns;
+using ServiceConnect.Examples.StressHarness.Patterns.Filters;
 using ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 using ServiceConnect.Examples.StressHarness.Reporting;
 using ServiceConnect.Interfaces;
@@ -26,6 +27,7 @@ try
     var accounting = new FlowAccounting();
     var signals = new PerHandlerSignal();
     var workItemCounters = new WorkItemCounters();
+    var filterTrail = new FilterTrail();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
@@ -35,6 +37,7 @@ try
         new CompetingConsumersDriver(accounting, signals, workItemCounters),
         new ContentBasedRoutingDriver(accounting, signals),
         new PolymorphicMessagesDriver(accounting, signals),
+        new FiltersDriver(accounting, signals, filterTrail),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -61,12 +64,21 @@ try
         new() { MessageType = typeof(DomainEvent), HandlerType = typeof(DomainEventHandler) },
         new() { MessageType = typeof(OrderPlacedEvent), HandlerType = typeof(DomainEventHandler) },
         new() { MessageType = typeof(OrderShippedEvent), HandlerType = typeof(DomainEventHandler) },
+        new() { MessageType = typeof(FilteredMessage), HandlerType = typeof(FilteredMessageHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
         harnessOptions,
         registerPerBus: (builder, busTag) =>
         {
+            // Filter registration must be on the builder (it appends to the bus's
+            // pipeline configuration), not inside AddRegistration. The DI factory for
+            // the filter itself lives below alongside the handler registrations so
+            // the framework's IServiceProvider.GetRequiredService<StressTrailFilter>
+            // call at dispatch time resolves to an instance closing over the shared
+            // FilterTrail singleton.
+            builder.AddBeforeConsumingFilter<StressTrailFilter>();
+
             builder.AddRegistration(services =>
             {
                 // Replace the HarnessHost-supplied empty handler-reference list with
@@ -81,6 +93,13 @@ try
                 services.TryAddSingleton(accounting);
                 services.TryAddSingleton(signals);
                 services.TryAddSingleton(workItemCounters);
+                services.TryAddSingleton(filterTrail);
+
+                // Filter is resolved per dispatch via GetRequiredService; transient
+                // lifetime matches its observational role (no state held on the filter
+                // itself, all state lives on the shared FilterTrail singleton).
+                services.AddTransient<StressTrailFilter>(sp => new StressTrailFilter(
+                    sp.GetRequiredService<FilterTrail>()));
 
                 // Factory captures busTag from the registerPerBus closure so the same
                 // handler class produces an alpha-tagged instance on the alpha bus and
@@ -138,6 +157,12 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>()));
+
+                services.AddTransient<IMessageHandler<FilteredMessage>>(sp => new FilteredMessageHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<FilterTrail>()));
             });
         },
         loggerFactory,
