@@ -10,8 +10,10 @@ using ServiceConnect.Examples.StressHarness.Patterns.Aggregators;
 using ServiceConnect.Examples.StressHarness.Patterns.Filters;
 using ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 using ServiceConnect.Examples.StressHarness.Patterns.Middleware;
+using ServiceConnect.Examples.StressHarness.Patterns.Telemetry;
 using ServiceConnect.Examples.StressHarness.Reporting;
 using ServiceConnect.Interfaces;
+using ServiceConnect.Telemetry;
 
 try
 {
@@ -35,6 +37,12 @@ try
     var slipTrail = new SlipTrail();
     var streamObservations = new StreamObservations();
     var middlewareTrail = new MiddlewareTrail();
+    // Construct the telemetry observations singleton BEFORE the bus pair is
+    // started so the process-global ActivityListener is subscribed in time to
+    // observe the buses' first telemetry spans. The observations instance is
+    // shared across both buses; the same listener picks up activities emitted
+    // by either bus because the framework's ActivitySource is process-global.
+    using var telemetryObservations = new TelemetryObservations();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
@@ -51,6 +59,7 @@ try
         new RoutingSlipDriver(accounting, signals, slipTrail),
         new StreamingDriver(accounting, streamObservations),
         new CustomFilterAndMiddlewareDriver(accounting, signals, middlewareTrail),
+        new TelemetryDriver(accounting, signals, telemetryObservations),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -86,6 +95,7 @@ try
         new() { MessageType = typeof(SlipOrder), HandlerType = typeof(SlipOrderHandler) },
         new() { MessageType = typeof(DocumentUploaded), HandlerType = typeof(DocumentUploadedHandler) },
         new() { MessageType = typeof(DedupedMessage), HandlerType = typeof(DedupedMessageHandler) },
+        new() { MessageType = typeof(TracedEvent), HandlerType = typeof(TracedEventHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -109,6 +119,14 @@ try
             builder.AddMessageProcessingMiddleware<StressProcessingMiddleware>();
             builder.AddOnConsumedSuccessfullyFilter<StressOnSuccessFilter>();
 
+            // Telemetry driver wires the framework's built-in telemetry
+            // middleware onto both buses. The process-global
+            // TelemetryObservations singleton (constructed above) holds the
+            // ActivityListener that captures every Producer / Consumer span
+            // the framework emits; the driver inspects that bag after the
+            // handler signal fires.
+            builder.AddTelemetry();
+
             builder.AddRegistration(services =>
             {
                 // Replace the HarnessHost-supplied empty handler-reference list with
@@ -129,6 +147,7 @@ try
                 services.TryAddSingleton(slipTrail);
                 services.TryAddSingleton(streamObservations);
                 services.TryAddSingleton(middlewareTrail);
+                services.TryAddSingleton(telemetryObservations);
 
                 // Filter is resolved per dispatch via GetRequiredService; transient
                 // lifetime matches its observational role (no state held on the filter
@@ -286,6 +305,17 @@ try
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
                     sp.GetRequiredService<MiddlewareTrail>()));
+
+                // TracedEvent handler — its only job is to fire the rendezvous.
+                // The telemetry assertion lives in TelemetryObservations, which
+                // the framework's built-in TelemetryProcessingMiddleware populates
+                // around dispatch without any handler co-operation. The factory
+                // closes over busTag so the pub/sub echo-suppression check works
+                // identically to PubSubHandler.
+                services.AddTransient<IMessageHandler<TracedEvent>>(sp => new TracedEventHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>()));
             });
         },
         loggerFactory,
