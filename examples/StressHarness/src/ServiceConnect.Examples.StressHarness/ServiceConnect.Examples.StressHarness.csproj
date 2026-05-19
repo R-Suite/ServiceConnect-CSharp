@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>ServiceConnect.Examples.StressHarness</RootNamespace>
+    <AssemblyName>ServiceConnect.Examples.StressHarness</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ServiceConnect.Examples.StressHarness.Contracts\ServiceConnect.Examples.StressHarness.Contracts.csproj" />
+    <ProjectReference Include="..\ServiceConnect.Examples.StressHarness.Chaos\ServiceConnect.Examples.StressHarness.Chaos.csproj" />
+    <ProjectReference Include="..\..\..\..\src\ServiceConnect\ServiceConnect.csproj" />
+    <ProjectReference Include="..\..\..\..\src\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj" />
+    <ProjectReference Include="..\..\..\..\src\ServiceConnect.Persistence.InMemory\ServiceConnect.Persistence.InMemory.csproj" />
+    <ProjectReference Include="..\..\..\..\src\ServiceConnect.Persistence.MongoDb\ServiceConnect.Persistence.MongoDb.csproj" />
+    <ProjectReference Include="..\..\..\..\src\ServiceConnect.Telemetry\ServiceConnect.Telemetry.csproj" />
+    <ProjectReference Include="..\..\..\ExampleSupport\ServiceConnect.Examples.Support.csproj" />
+    <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="9.0.0" />
+  </ItemGroup>
+</Project>

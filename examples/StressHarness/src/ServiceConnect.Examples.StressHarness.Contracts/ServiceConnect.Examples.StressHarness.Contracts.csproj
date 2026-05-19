@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>ServiceConnect.Examples.StressHarness.Contracts</RootNamespace>
+    <AssemblyName>ServiceConnect.Examples.StressHarness.Contracts</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\..\src\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
+  </ItemGroup>
+</Project>
