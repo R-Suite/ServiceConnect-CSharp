@@ -31,6 +31,7 @@ try
     var filterTrail = new FilterTrail();
     var sagaObservations = new SagaObservations();
     var aggregatorObservations = new AggregatorObservations();
+    var slipTrail = new SlipTrail();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
@@ -44,6 +45,7 @@ try
         new ProcessManagerDriver(accounting, signals, sagaObservations),
         new AggregatorDriver(accounting, aggregatorObservations),
         new ScatterGatherDriver(accounting, signals),
+        new RoutingSlipDriver(accounting, signals, slipTrail),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -76,6 +78,7 @@ try
         new() { MessageType = typeof(SagaCompleted), HandlerType = typeof(SagaHandler) },
         new() { MessageType = typeof(TelemetrySlice), HandlerType = typeof(StressTelemetrySliceAggregator) },
         new() { MessageType = typeof(SearchRequest), HandlerType = typeof(SearchRequestHandler) },
+        new() { MessageType = typeof(SlipOrder), HandlerType = typeof(SlipOrderHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -107,6 +110,7 @@ try
                 services.TryAddSingleton(filterTrail);
                 services.TryAddSingleton(sagaObservations);
                 services.TryAddSingleton(aggregatorObservations);
+                services.TryAddSingleton(slipTrail);
 
                 // Filter is resolved per dispatch via GetRequiredService; transient
                 // lifetime matches its observational role (no state held on the filter
@@ -218,6 +222,18 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>()));
+
+                // SlipOrder handler runs once per hop on the routing-slip's current
+                // queue. The factory closes over busTag so the per-flow trail
+                // records which bus serviced each hop without inspecting envelope
+                // headers (RouteAsync exposes no header pathway). Both buses
+                // register the handler so the slip can hop in either direction
+                // depending on the issuing bus's destination ordering.
+                services.AddTransient<IMessageHandler<SlipOrder>>(sp => new SlipOrderHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<SlipTrail>()));
             });
         },
         loggerFactory,
