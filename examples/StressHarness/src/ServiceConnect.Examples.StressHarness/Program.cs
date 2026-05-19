@@ -6,6 +6,7 @@ using ServiceConnect.Examples.StressHarness.Cli;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Examples.StressHarness.Orchestrator;
 using ServiceConnect.Examples.StressHarness.Patterns;
+using ServiceConnect.Examples.StressHarness.Patterns.Aggregators;
 using ServiceConnect.Examples.StressHarness.Patterns.Filters;
 using ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 using ServiceConnect.Examples.StressHarness.Reporting;
@@ -29,6 +30,7 @@ try
     var workItemCounters = new WorkItemCounters();
     var filterTrail = new FilterTrail();
     var sagaObservations = new SagaObservations();
+    var aggregatorObservations = new AggregatorObservations();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
@@ -40,6 +42,7 @@ try
         new PolymorphicMessagesDriver(accounting, signals),
         new FiltersDriver(accounting, signals, filterTrail),
         new ProcessManagerDriver(accounting, signals, sagaObservations),
+        new AggregatorDriver(accounting, aggregatorObservations),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -70,6 +73,7 @@ try
         new() { MessageType = typeof(SagaStarted), HandlerType = typeof(SagaHandler) },
         new() { MessageType = typeof(SagaIntermediate), HandlerType = typeof(SagaHandler) },
         new() { MessageType = typeof(SagaCompleted), HandlerType = typeof(SagaHandler) },
+        new() { MessageType = typeof(TelemetrySlice), HandlerType = typeof(StressTelemetrySliceAggregator) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -100,6 +104,7 @@ try
                 services.TryAddSingleton(workItemCounters);
                 services.TryAddSingleton(filterTrail);
                 services.TryAddSingleton(sagaObservations);
+                services.TryAddSingleton(aggregatorObservations);
 
                 // Filter is resolved per dispatch via GetRequiredService; transient
                 // lifetime matches its observational role (no state held on the filter
@@ -191,6 +196,15 @@ try
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
                     sp.GetRequiredService<SagaObservations>()));
+
+                // Aggregator is resolved by the framework via GetRequiredService<Aggregator<T>>
+                // for each batch flush — not IMessageHandler<T>. The per-bus factory closes
+                // over the bus tag so the observation record identifies which bus dispatched
+                // the batch, matching the cross-tenant assertion shape used by the other
+                // pattern drivers.
+                services.AddTransient<Aggregator<TelemetrySlice>>(sp => new StressTelemetrySliceAggregator(
+                    busTag,
+                    sp.GetRequiredService<AggregatorObservations>()));
             });
         },
         loggerFactory,
