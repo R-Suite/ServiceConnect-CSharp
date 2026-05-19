@@ -118,6 +118,12 @@ one TraceId; each subscriber's span is a direct child of the publisher's.
 - Tracing reference: [Observability — Tracing](/ServiceConnect-CSharp/learn/operations/observability/#tracing-opentelemetry)
 - Source: [`examples/Telemetry`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Telemetry)
 
+### StressHarness
+
+Concurrency / soak / throughput harness over every pattern. Surfaces cross-tenant routing leaks, deadlocks, memory growth, and lifecycle races against two `Bus` instances.
+
+- Source: [`examples/StressHarness`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/StressHarness)
+
 ## Reading the output
 
 Each sample's processes print status lines in a uniform shape:
