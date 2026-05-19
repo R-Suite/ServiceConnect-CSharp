@@ -1,0 +1,22 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: stress-harness-rabbit
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  mongo:
+    image: mongo:7
+    container_name: stress-harness-mongo
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

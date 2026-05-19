@@ -13,6 +13,46 @@ start_dependencies() {
 # parallel-compile pattern previously hit the dotnet-build.slice cgroup's
 # 200-task / 8 G ceiling (MSBuild Copy task OOM, MA0049-style cascade).
 # Single argument: absolute path to the .sln (or .slnx).
+# Polls until RabbitMQ accepts a TCP connection on the given host/port.
+# Usage: wait_for_rabbit <host> <port>
+wait_for_rabbit() {
+  local host="$1"
+  local port="$2"
+  local max_attempts=60
+  local attempt=0
+  echo "Waiting for RabbitMQ at $host:$port..."
+  while [ $attempt -lt $max_attempts ]; do
+    if nc -z "$host" "$port" 2>/dev/null; then
+      echo "RabbitMQ is ready."
+      return 0
+    fi
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+  echo "ERROR: RabbitMQ at $host:$port did not become ready within $((max_attempts * 2)) seconds." >&2
+  return 1
+}
+
+# Polls until MongoDB responds to an admin ping on the given host/port.
+# Usage: wait_for_mongo <host> <port>
+wait_for_mongo() {
+  local host="$1"
+  local port="$2"
+  local max_attempts=60
+  local attempt=0
+  echo "Waiting for MongoDB at $host:$port..."
+  while [ $attempt -lt $max_attempts ]; do
+    if mongosh --host "$host" --port "$port" --quiet --eval "db.adminCommand('ping')" >/dev/null 2>&1; then
+      echo "MongoDB is ready."
+      return 0
+    fi
+    sleep 2
+    attempt=$((attempt + 1))
+  done
+  echo "ERROR: MongoDB at $host:$port did not become ready within $((max_attempts * 2)) seconds." >&2
+  return 1
+}
+
 prebuild_solution() {
     local solution_path="$1"
     if [ ! -f "$solution_path" ]; then
