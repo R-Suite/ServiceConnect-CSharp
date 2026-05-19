@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Cli;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Examples.StressHarness.Orchestrator;
@@ -134,6 +135,13 @@ try
                 // at dispatch (otherwise the dispatcher rejects the inbound message
                 // as Unregistered and routes it as not-handled).
                 services.Replace(ServiceDescriptor.Singleton<IReadOnlyList<HandlerReference>>(handlerReferences));
+
+                // Default broker-chaos implementation: NoopBrokerChaos completes
+                // every operation immediately. Wired in even though the CLI only
+                // accepts --chaos none today so the contract is observable from
+                // DI and the follow-up failover harness can swap the implementation
+                // without touching Program.cs.
+                services.TryAddSingleton<IBrokerChaos, NoopBrokerChaos>();
 
                 // Process-wide singletons for the harness orchestration. Both buses
                 // share the same instances so the driver's await and the receiving
