@@ -55,7 +55,7 @@ public sealed class TelemetrySliceAggregator : Aggregator<TelemetrySlice>
 Three things to notice:
 
 - **`ExecuteAsync` is async-first.** It runs on a background flush and returns a batch outcome, not a handler result. The supplied `CancellationToken` flows through from the dispatcher — honour it for long-running I/O. Await async work directly; no sync-over-async bridges are needed.
-- **Both size and time are optional knobs.** Return `0` from `BatchSize()` to disable size-based flushing; leave the default `Timeout.InfiniteTimeSpan` from `Timeout()` to disable time-based flushing. Whichever you override with a positive value is the flush trigger. Setting both — as above — flushes on whichever happens first.
+- **Both flush paths are mandatory.** `BatchSize()` must return a positive int; `Timeout()` must return a positive `TimeSpan` (neither `TimeSpan.Zero` nor `Timeout.InfiniteTimeSpan`). The registry rejects subclasses that violate either at startup with `InvalidOperationException` — the framework needs both paths to guarantee buffered messages always have a route to dispatch. The batch flushes on whichever trigger fires first.
 - **There is no correlation key.** One aggregator instance buffers every message of its type that arrives on its queue. If you need per-group batching ("aggregate *per order*"), use a [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) keyed on the group id; aggregator is the right shape only when one big pool is what you want.
 
 ## Generic subclasses are not supported

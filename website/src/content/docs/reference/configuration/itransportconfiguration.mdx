@@ -264,7 +264,7 @@ transport.SetClientSetting(RabbitMQSettingKeys.MaxOutstandingPublishConfirms, 25
 
 Caps the number of outstanding publisher confirms RabbitMQ.Client will track for one channel. Accepts a positive `int`; defaults to **256** when unset. Only has an effect when [`PublisherAcknowledgements`](#publisheracknowledgements-rabbitmq-client-setting) is enabled.
 
-**Remarks.** RabbitMQ.Client v7's outstanding-confirm tracker is unbounded by default; a stalled broker can let it grow until memory pressure or [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting) trips a channel reset. The cap installs a `ConcurrencyLimiter` that **back-pressures** the publisher when reached (the publish call awaits a permit; it does *not* throw). For the current single-threaded `Producer` design, the cap is defence-in-depth — `_publishLock` already serialises publishes — but raising or lowering it gives operators a tuning point if the publisher ever gains concurrent-publish capability.
+**Remarks.** RabbitMQ.Client's outstanding-confirm tracker is unbounded by default; a stalled broker can let it grow until memory pressure or [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting) trips a channel reset. The cap installs a `ConcurrencyLimiter` that **back-pressures** the publisher when reached (the publish call awaits a permit; it does *not* throw). For the current single-threaded `Producer` design, the cap is defence-in-depth — `_publishLock` already serialises publishes — but raising or lowering it gives operators a tuning point if the publisher ever gains concurrent-publish capability.
 
 Misconfiguration throws `InvalidOperationException` at first publish: non-`int` types and zero/negative values surface loudly rather than silently falling back to the default.
 

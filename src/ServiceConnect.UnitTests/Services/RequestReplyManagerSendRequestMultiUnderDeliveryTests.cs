@@ -15,14 +15,14 @@ using Xunit;
 namespace ServiceConnect.UnitTests.Services;
 
 /// <summary>
-/// Regression-guards for the v8 under-delivery contract on
+/// Regression-guards for the under-delivery contract on
 /// <see cref="RequestReplyManager.SendRequestMultiAsync"/>: a positive
 /// <see cref="RequestOptions.ExpectedReplyCount"/> must throw
 /// <see cref="RequestTimeoutException"/> when fewer replies than requested arrive
 /// before the timeout, with the partials surfaced on
-/// <see cref="RequestTimeoutException.PartialReplies"/>. Pre-v8 this path silently
-/// returned the partial list with no signal of under-delivery — asymmetric with
-/// <c>PublishRequestAsync</c>.
+/// <see cref="RequestTimeoutException.PartialReplies"/>. The alternative — silently
+/// returning a partial list with no signal of under-delivery — would be asymmetric
+/// with <c>PublishRequestAsync</c>'s callback-driven shape.
 /// </summary>
 public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
 {
@@ -154,8 +154,8 @@ public sealed class RequestReplyManagerSendRequestMultiUnderDeliveryTests
     public async Task SendRequestMultiAsync_NoExpectedReplyCount_ReturnsEmptyOnTimeoutWithoutException()
     {
         // ExpectedReplyCount unset → "fire and collect whatever shows up" — under-delivery
-        // does not apply. Pre- and post-v8 the call must return cleanly with whatever
-        // arrived (nothing, in this case) rather than throwing.
+        // does not apply. The call must return cleanly with whatever arrived (nothing, in
+        // this case) rather than throwing.
         var request = new FakeMessage1(Guid.NewGuid());
         var messageBytes = new byte[] { 1, 2, 3 };
         _mockSerializer.SetupSerializeAny<FakeMessage1>(messageBytes);

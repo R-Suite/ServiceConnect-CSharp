@@ -55,12 +55,11 @@ dotnet run --project src/ServiceConnect.Examples.Streaming.Uploader/ServiceConne
 
 The receiver handler gets the fully reassembled payload after the final close packet arrives. Even though the uploader writes three chunks, the handler runs once with the original `DocumentUploaded` message restored from the streamed bytes. The reported byte count is the serialized message payload size for that streamed contract.
 
-## v8 Stream Lifecycle
+## Stream Lifecycle
 
-**v8 handler signature.** `IStreamHandler<T>.ExecuteAsync` now takes the `IMessageBusReadStream` as a parameter rather than exposing it as a `Stream` property. Pre-v8 the framework set a `Stream` property before each call, which was unsafe for singleton-registered handlers. Migration is mechanical: append `IMessageBusReadStream stream` to the method signature; replace `this.Stream` reads with `stream`.
+**Handler signature.** `IStreamHandler<T>.ExecuteAsync` receives the `IMessageBusReadStream` as a parameter rather than via an ambient property — safe under singleton-registered handlers because nothing about the stream is shared via instance state.
 
 ```csharp
-// v8
 public Task ExecuteAsync(DocumentUploaded message, IMessageBusReadStream stream, CancellationToken cancellationToken = default)
 {
     var bytes = stream.Read();

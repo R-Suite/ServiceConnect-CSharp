@@ -9,8 +9,8 @@ namespace ServiceConnect.Services;
 
 /// <summary>
 /// System.Text.Json implementation of <see cref="IMessageSerializer"/>. Wire format
-/// is JSON-equivalent to the v7 Newtonsoft implementation under the matching settings
-/// (relaxed Unicode escaping, ISO 8601 round-trip dates, MaxDepth = 32). Cross-version
+/// is JSON-equivalent to the Newtonsoft.Json implementation under the matching settings
+/// (relaxed Unicode escaping, ISO 8601 round-trip dates, MaxDepth = 32). Cross-serializer
 /// behaviour is enforced by the SerializationCompatTests corpus.
 /// </summary>
 internal sealed class SystemTextJsonMessageSerializer : IMessageSerializer
@@ -43,7 +43,7 @@ internal sealed class SystemTextJsonMessageSerializer : IMessageSerializer
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 
             // Newtonsoft.Json tolerates string-encoded numbers ("3" → int) by default.
-            // Match that behaviour so a v7 producer's payload deserialises here.
+            // Match that behaviour so a Newtonsoft producer's payload deserialises here.
             NumberHandling = JsonNumberHandling.AllowReadingFromString,
 
             // Newtonsoft default is case-sensitive matching; preserve.
@@ -105,7 +105,8 @@ internal sealed class SystemTextJsonMessageSerializer : IMessageSerializer
     /// <remarks>
     /// Overrides the interface default to read across segments via Utf8JsonReader without
     /// flattening into a byte[] first — the streaming path delivers messages as multi-segment
-    /// sequences and the per-message copy was a real regression vs. v7's Newtonsoft impl.
+    /// sequences and a per-message copy would be a measurable regression versus the
+    /// Newtonsoft implementation.
     /// </remarks>
     public object Deserialize(in ReadOnlySequence<byte> data, Type type)
     {

@@ -278,7 +278,7 @@ services.AddServiceConnect(builder =>
 | `ServerAddress` | `server.address` | Broker host name or IP address. Emitted only when the value is non-empty. |
 | `ServerPort` | `server.port` | Broker TCP port. Emitted only when the value is greater than zero. |
 
-The legacy pre-1.x `messaging.operation` attribute is intentionally NOT emitted — v7 emits the `operation.type` + `operation.name` split prescribed by semconv 1.x. Dashboards that filtered on the legacy attribute should switch to `messaging.operation.type`.
+The pre-1.x `messaging.operation` attribute is intentionally NOT emitted; ServiceConnect emits the `operation.type` + `operation.name` split prescribed by semconv 1.x. Dashboards that filtered on the older attribute should switch to `messaging.operation.type`.
 
 ## Metrics
 

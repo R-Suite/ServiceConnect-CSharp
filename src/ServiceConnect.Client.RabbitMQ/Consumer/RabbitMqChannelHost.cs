@@ -11,7 +11,7 @@ namespace ServiceConnect.Client.RabbitMQ;
 /// </summary>
 /// <remarks>
 /// Channel-shutdown events from the broker (queue deleted, policy expired, peer protocol
-/// error) are NOT auto-recovered by RabbitMQ.Client v7. When a non-Application initiator
+/// error) are NOT auto-recovered by RabbitMQ.Client. When a non-Application initiator
 /// closes the channel, this class flips the broker-cancelled flag so the consumer host's
 /// IsCancelledByBroker accessor and BusConsumingHealthCheck report Unhealthy. Application-
 /// initiated shutdown (host DisposeAsync / StopAsync) does NOT flip the flag.
@@ -103,7 +103,7 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
         _publishChannel = await _connection.CreateChannelAsync(publishChannelOptions, cancellationToken).ConfigureAwait(false);
 
         _model.ChannelShutdownAsync += OnChannelShutdownAsync;
-        // Publish channel needs an independent shutdown subscriber: RabbitMQ.Client v7 does
+        // Publish channel needs an independent shutdown subscriber: RabbitMQ.Client does
         // NOT auto-recreate channels closed by a broker protocol error (404 NOT_FOUND on a
         // deleted retry/error exchange, 406 PRECONDITION_FAILED on topology drift). Without
         // this hook a dead publish channel goes unobserved, retry/audit/terminal-failure
@@ -115,7 +115,7 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
     private Task OnChannelShutdownAsync(object? sender, ShutdownEventArgs args)
     {
         // Broker- or peer-initiated channel close (e.g. queue deleted via management UI;
-        // 404/406 against the consumer channel) is NOT auto-recovered by RabbitMQ.Client v7
+        // 404/406 against the consumer channel) is NOT auto-recovered by RabbitMQ.Client
         // and consumption stops silently otherwise. Flip the broker-cancelled flag so
         // BusConsumingHealthCheck and ConsumerConnectionHealthCheck flip Unhealthy and
         // operators see the failure rather than green-dashboarding a stalled consumer.

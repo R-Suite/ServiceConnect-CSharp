@@ -179,7 +179,7 @@ builder.InsertSendMessageMiddlewareOutermost<TelemetrySendMiddleware>();
 builder.InsertMessageProcessingMiddlewareOutermost<TelemetryProcessingMiddleware>();
 ```
 
-There is no public `ConfigurePipeline` callback; the typed builder methods are the supported v7 surface. Each `Add*` call appends to its stage's middleware/filter list; each `Insert*Outermost` call prepends with type-dedup. Order matters within a stage — the first `Add*` call runs first.
+There is no public `ConfigurePipeline` callback; the typed builder methods are the supported surface. Each `Add*` call appends to its stage's middleware/filter list; each `Insert*Outermost` call prepends with type-dedup. Order matters within a stage — the first `Add*` call runs first.
 
 The full shape of filters, what they can do, and when to prefer middleware is [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/).
 

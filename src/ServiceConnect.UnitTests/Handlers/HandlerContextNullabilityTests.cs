@@ -6,9 +6,10 @@ namespace ServiceConnect.UnitTests.Handlers;
 
 public class HandlerContextNullabilityTests
 {
-    // v8: Context moved from property to parameter on HandleAsync / ExecuteAsync.
-    // These tests pin that the interfaces no longer expose a Context property (which
-    // would silently reintroduce the thread-safety issue on singleton handlers).
+    // The handler interfaces receive the per-message IConsumeContext as a parameter on
+    // HandleAsync / ExecuteAsync, not as an ambient property. These tests pin that no
+    // Context property is reintroduced — a property would silently break thread-safety
+    // on singleton-registered handlers.
 
     [Fact]
     public void IMessageHandler_DoesNotExposeContextProperty()
@@ -50,7 +51,7 @@ public class HandlerContextNullabilityTests
     [Fact]
     public void IProcessHandler_HandleAsync_HasIConsumeContextParameter()
     {
-        // v8 contract guard: HandleAsync must accept (TMessage, TData, IConsumeContext, CancellationToken).
+        // Contract guard: HandleAsync must accept (TMessage, TData, IConsumeContext, CancellationToken).
         // Open generic so the assertion is structural rather than tied to a specific concrete TData/TMessage.
         var method = typeof(IProcessHandler<,>).GetMethod(nameof(IProcessHandler<DummyData, Message>.HandleAsync));
         Assert.NotNull(method);

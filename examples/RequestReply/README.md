@@ -47,12 +47,11 @@ Run the responder first, then the requester.
 
 The requester sends a `QuoteRequest` and waits up to 30 seconds for a `QuoteResponse`. The responder receives the request and uses `context.ReplyAsync` to send the reply back, which the request/reply manager correlates to the original request.
 
-## v8 Contracts
+## Contracts
 
-**v8 handler signature.** Handlers now take the per-message `IConsumeContext` as a parameter to `HandleAsync`. Pre-v8 the framework set a `Context` property before each call, which was unsafe for singleton-registered handlers. Migration is mechanical: append `IConsumeContext context` to the method signature; replace `this.Context` reads with `context`.
+**Handler signature.** Handlers receive the per-message `IConsumeContext` as a parameter to `HandleAsync` — safe under singleton-registered handlers because nothing about the dispatch is shared via instance state.
 
 ```csharp
-// v8
 public async Task HandleAsync(QuoteRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
 {
     await context.ReplyAsync(new QuoteResponse(message.CorrelationId) { Price = 42.50m });

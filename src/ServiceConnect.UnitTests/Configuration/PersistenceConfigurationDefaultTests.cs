@@ -15,8 +15,8 @@ public class PersistenceConfigurationDefaultTests
     [Fact]
     public void ConnectionString_NoLongerDefaultsToLocalhost()
     {
-        // Pin: this asserts the v8 contract change. A regression that re-introduces the
-        // localhost default surfaces immediately rather than as a silent production accident.
+        // Pin: a regression that re-introduces a localhost default for ConnectionString
+        // surfaces immediately rather than as a silent production accident.
         var config = new PersistenceConfiguration();
         Assert.NotEqual("mongodb://localhost/", config.ConnectionString);
     }

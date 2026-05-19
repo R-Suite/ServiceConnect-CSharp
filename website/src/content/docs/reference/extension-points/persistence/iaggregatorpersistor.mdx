@@ -25,11 +25,7 @@ Persists a single message payload for the named aggregator instance, idempotent 
 
 **Parameters**
 - `data` — the message payload to store. Must implement `IHasCorrelationId` (the `Message` base class does, so any concrete `Message` works).
-- `name` — the logical aggregator name (for example, `"ShippingAggregator"`). Used as a partition key — all operations for one aggregator are scoped to this value. The framework derives this value from `handlerType.FullName` (the concrete user subclass), not from the closed-generic base type.
-
-<Aside type="caution" title="Aggregator name shape changed in v8">
-  The `name` partition value changed in v8. Previously the framework used `aggregatorBaseType.FullName` (the closed generic with assembly-qualified type arguments embedded), which produced values like `ServiceConnect.Aggregator\`1[[MyMessage, MyAssembly, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]`. The framework now uses `handlerType.FullName` (the concrete user subclass, e.g. `"MyNamespace.TelemetrySliceAggregator"`). Operators upgrading deployments with existing MongoDB-persisted aggregator state must rename the `Name` field in each document to the new value, or the buffered rows are orphaned and never flushed. See [Migration — rename existing aggregator state](/ServiceConnect-CSharp/releases/#migration--rename-existing-aggregator-state) for a copy-pasteable MongoDB shell script.
-</Aside>
+- `name` — the logical aggregator name (for example, `"ShippingAggregator"`). Used as a partition key — all operations for one aggregator are scoped to this value. The framework derives this value from `handlerType.FullName` (the concrete user subclass, e.g. `"MyNamespace.TelemetrySliceAggregator"`), not from the closed-generic base type.
 - `idempotencyKey` — a stable per-message identifier (typically the broker-side `MessageId`) used to reject re-inserts of the same delivery. A retry-queue redelivery between Insert and the dispatcher's broker ack will re-enter `InsertDataAsync` with the same key while the prior insert's row is still buffered; the persistor must skip the second write so the aggregator's `Execute` sees each delivery exactly once. Once the row has been removed (snapshot dispatched), the key is no longer tracked.
 - `cancellationToken` — cancels the storage operation.
 
@@ -204,7 +200,7 @@ Returns the number of buffered records currently held for the named aggregator.
 Task<int> CountResolvedAsync(string name, CancellationToken cancellationToken = default);
 ```
 
-Default-interface method (added in v7) that counts persisted messages whose CLR type is currently resolvable. Drives the batch-size flush gate so unresolved-only batches do not trigger flushes that would produce no work.
+Default-interface method that counts persisted messages whose CLR type is currently resolvable. Drives the batch-size flush gate so unresolved-only batches do not trigger flushes that would produce no work.
 
 **Parameters**
 - `name` — the logical aggregator name.

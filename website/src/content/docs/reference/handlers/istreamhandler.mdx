@@ -35,7 +35,7 @@ Invoked once the full stream has arrived and been reassembled. The reassembled s
 **Remarks.** `ExecuteAsync` is async-first on this interface — await downstream I/O directly and pass the supplied `CancellationToken` through so long-running work can be cancelled. The stream is not `IDisposable` — the framework owns its lifetime via `StreamProcessor`. Handlers must not attempt to dispose it. Reading the stream to completion is the only handler-side action available. The handler still occupies a consumer slot while it runs, so offload heavy work appropriately if the consumer concurrency budget is tight.
 
 <Aside type="note" title="No ambient Stream property">
-  Stream handlers receive the read stream as an explicit `IMessageBusReadStream stream` parameter on `HandleAsync`. There is no property setter the framework writes between dispatches.
+  Stream handlers receive the read stream as an explicit `IMessageBusReadStream stream` parameter on `ExecuteAsync`. There is no property setter the framework writes between dispatches.
 </Aside>
 
 ## Usage
@@ -66,7 +66,7 @@ public sealed class FileUploadStreamHandler : IStreamHandler<FileUpload>
         finally
         {
             destination.Dispose();
-            // IMessageBusReadStream is not IDisposable in v7 — the handler does not own
+            // IMessageBusReadStream is not IDisposable — the handler does not own
             // the stream's lifetime. Broker resources are released when the dispatch
             // completes and the StreamProcessor evicts the per-sequence entry.
         }

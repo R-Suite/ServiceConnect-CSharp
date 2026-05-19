@@ -5,10 +5,10 @@ using ServiceConnect.Interfaces;
 namespace ServiceConnect.SerializationCompatTests.Fixtures;
 
 /// <summary>
-/// Reference v7 wire-format serializer — Newtonsoft.Json with the exact settings the
-/// production NewtonsoftJsonMessageSerializer uses. Decoupled from
+/// Reference Newtonsoft wire-format serializer — Newtonsoft.Json with the exact settings
+/// the production NewtonsoftJsonMessageSerializer uses. Decoupled from
 /// <see cref="IMessageSerializer"/> by design: the production interface exposes an
-/// IBufferWriter-based API, and this fixture keeps representing v7 wire behaviour
+/// IBufferWriter-based API, and this fixture represents the Newtonsoft wire format
 /// independently so the compat tests remain valid regardless of interface changes.
 /// </summary>
 internal static class NewtonsoftReferenceSerializer

@@ -155,12 +155,12 @@ public class SystemTextJsonMessageSerializerTests
     [Fact]
     public void Deserialize_ReadOnlySequence_EnforcesDepthCapAtBoundary()
     {
-        // The serializer pins MaxDepth=32 in its ctor for wire-compat with v7's Newtonsoft
-        // behaviour. Pre-fix, the sequence overload silently used JsonReaderState's hidden
-        // default of 64 — payloads at depth 33–64 were accepted on the streaming hot path
-        // but rejected on the byte-span path. Pin the boundary precisely: depth 33 must be
-        // rejected by the sequence overload now that it threads _options.MaxDepth through
-        // the JsonReaderState.
+        // The serializer pins MaxDepth=32 in its ctor for wire-compat with Newtonsoft.
+        // Pin the boundary precisely: depth 33 must be rejected by the sequence overload,
+        // which threads _options.MaxDepth through the JsonReaderState rather than letting
+        // it fall back to JsonReaderState's hidden default of 64 (which would silently
+        // accept depth 33–64 payloads on the streaming hot path while the byte-span path
+        // rejected the same bytes).
         var depth33 = BuildDeepObject(33);
         var bytes = Encoding.UTF8.GetBytes(depth33);
         var sequence = new ReadOnlySequence<byte>(bytes);

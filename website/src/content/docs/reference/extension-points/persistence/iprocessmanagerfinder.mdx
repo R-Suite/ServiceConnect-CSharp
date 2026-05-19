@@ -36,7 +36,7 @@ Locates the persisted state record that correlates with `message` according to t
 
 **Remarks.** The returned `IPersistenceData<T>` wrapper is passed back verbatim to `UpdateDataAsync<T>` or `DeleteDataAsync<T>`. Implementations can carry concurrency metadata (a `version` column value, an ETag, a row lock handle) on the concrete type that implements `IPersistenceData<T>` — the interface only exposes `Data`, so any extra fields are invisible to the framework but available to the implementation when the wrapper comes back.
 
-#### Fresh-copy contract (v8)
+#### Fresh-copy contract
 
 Every call to `FindDataAsync<T>` **must** return a fresh `IPersistenceData<T>.Data` object. Two successive calls for the same correlation id must produce two independent references — mutations made to the `Data` of the first call's return value must not propagate to the second call's return value. Both built-in providers (InMemory and MongoDB) comply: `InMemoryProcessManagerFinder` performs a deep clone on every read; `MongoDbProcessManagerFinder` deserialises a new object from the wire.
 
@@ -128,7 +128,7 @@ Both `MemoryData<T>` (the InMemory provider's wrapper) and `MongoDbData<T>` (the
 
 ---
 
-## IIdentified (v8)
+## IIdentified
 
 `ServiceConnect.Interfaces.Persistence.IIdentified` exposes a stable storage Id from a wrapper without requiring a concrete-type cast:
 
@@ -145,19 +145,11 @@ Both `MemoryData<T>` and `MongoDbData<T>` implement `IIdentified`. The Id is a s
 
 ---
 
-## InMemory saga store isolation (v8)
+## InMemory saga store isolation
 
 `InMemoryProcessManagerFinder` uses a private `SagaProvider` instance, separate from the public `ICacheProvider` / `IKeyValueStore` registered for general cache use by application code. User code consuming `IKeyValueStore` cannot read, modify, or delete saga state through that interface. This isolation matches the MongoDB persistor's behaviour, where saga state lives in dedicated collections that the user-facing API does not expose.
 
 **Multi-saga limitation.** `FindMatchingItem<T>` iterates every entry in the partitioned saga provider and the keys are bare correlation-id strings (no type prefix). A caller that runs multiple saga types through a single finder instance will see `InvalidOperationException` from `FindData` as soon as the iterator visits a row whose wrapper type does not match `T`. For multi-saga topologies, run one finder instance per saga type or use the MongoDB persistor.
-
----
-
-## Removed constructor (v8 breaking)
-
-The `InMemoryProcessManagerFinder(string connectionString, string databaseName)` constructor was removed in v8. It accepted the same connection-string / database-name pair as the MongoDB finder but was meaningless for an in-process store — the arguments were silently ignored.
-
-Production callers register through DI (via `services.AddServiceConnect(builder => builder.UseInMemoryPersistence(...))`). Test code that previously called `new InMemoryProcessManagerFinder("conn", "db")` should use the DI registration or the internal `(ProcessManagerPredicateCache, InMemoryPersistenceState)` constructor instead.
 
 ---
 
@@ -381,7 +373,7 @@ A startup `IHostedService` pre-creates a unique index on `CorrelationId` for eac
 
 Mongo collection names are derived from `typeof(T).FullName`. For generic saga types, `FullName` contains characters (`+`, backticks, `[`, `]`, `,`) that are illegal in mongosh autocomplete and many Mongo tooling contexts. The MongoDB provider sanitizes all of these characters to `_`.
 
-**Migration required for existing deployments with generic saga types.** If your saga data type is generic (for example, `OrderSagaData<OrderState>`), the collection name used by v7 and earlier contained these illegal characters. After upgrading, rename the existing collection to the sanitized form before the new version starts consuming:
+**Migration required for existing deployments with generic saga types.** If your saga data type is generic (for example, `OrderSagaData<OrderState>`), the unsanitised collection name used by earlier releases contained these illegal characters. After upgrading, rename the existing collection to the sanitized form before the new version starts consuming:
 
 ```javascript
 db.runCommand({ renameCollection: "mydb.OrderSagaData`1[[OrderState, MyAssembly]]",

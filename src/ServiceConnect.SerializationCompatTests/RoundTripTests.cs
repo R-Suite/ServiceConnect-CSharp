@@ -13,8 +13,8 @@ namespace ServiceConnect.SerializationCompatTests;
 /// Cross-impl wire-compat assertions. Each corpus item is round-tripped through four
 /// channels:
 ///   1. STJ serialize → STJ deserialize: structural equality (control).
-///   2. Newtonsoft serialize → STJ deserialize: v7 producer to v8 consumer.
-///   3. STJ serialize → Newtonsoft deserialize: v8 producer to v7 consumer.
+///   2. Newtonsoft serialize → STJ deserialize: Newtonsoft producer to STJ consumer.
+///   3. STJ serialize → Newtonsoft deserialize: STJ producer to Newtonsoft consumer.
 ///   4. Wire-byte JSON-DOM equivalence: STJ output and Newtonsoft output parse to the
 ///      same JSON document. (Bytes may differ in escape sequences; meaning is identical.)
 /// </summary>

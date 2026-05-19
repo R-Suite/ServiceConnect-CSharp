@@ -80,7 +80,7 @@ With this on, retries still happen, but exhausted messages are dropped silently 
 
 ServiceConnect publishes retry and error-queue messages with `mandatory: true`. If the target queue/exchange is missing (e.g. the retry queue was deleted out-of-band), the broker returns the message and `BasicPublishAsync` raises `PublishException`. ServiceConnect logs this at `Error` level and acknowledges the original delivery to break the redelivery loop. **The message is lost in this scenario** — operator action is required to restore the topology before the next failure can be retried.
 
-Pre-v7.x ServiceConnect used `mandatory: false`, which silently dropped these messages with no log signal. The change in v7.x makes the failure visible.
+Publishing with `mandatory: true` is what makes this failure mode visible — the broker returns the unroutable message rather than silently dropping it. Operators monitoring `PublishException` logs see the topology issue immediately instead of discovering it later when messages are missing from the error queue.
 
 ## Terminal failures
 
@@ -95,7 +95,7 @@ When a message arrives with a type that isn't in the dispatch registry, ServiceC
 - If `DeadLetterUnhandledMessages` is enabled, the message goes directly to the error queue.
 - Otherwise the message is acked and dropped.
 
-Pre-v7.x ServiceConnect returned `Success=false` from the dispatcher, causing the consumer host to nack-with-requeue and burn the full retry budget before landing the message in the error queue. The new behaviour is faster and more accurate.
+The not-handled path short-circuits the retry budget: there is no point retrying a message whose type isn't registered, because the registry won't change between deliveries. Bypassing nack-with-requeue means unhandled messages clear the inbound queue immediately rather than re-circulating through retries that can't resolve the type.
 
 ## Observing failures in code
 

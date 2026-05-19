@@ -192,10 +192,10 @@ internal sealed class HandlerProcessor(
     /// carry the slip and can resume the chain after the failure is resolved.
     /// </para>
     /// <para>
-    /// <b>Cross-service destinations.</b> v8 removed the <c>IsKnownQueue</c> check;
-    /// destinations that are not in the local <see cref="IQueueConfiguration"/> are
-    /// allowed as long as they pass <see cref="IsValidRoutingSlipDestination"/> (format,
-    /// length, no AMQP control characters). RabbitMQ routes via the alternate-exchange /
+    /// <b>Cross-service destinations.</b> Destinations are not required to appear in
+    /// the local <see cref="IQueueConfiguration"/>; any name that passes
+    /// <see cref="IsValidRoutingSlipDestination"/> (format, length, no AMQP control
+    /// characters) is accepted. RabbitMQ routes via the alternate-exchange /
     /// mandatory-return path if the queue does not exist downstream.
     /// </para>
     /// </remarks>

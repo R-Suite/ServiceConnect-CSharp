@@ -3,8 +3,6 @@ title: Request/Reply
 description: Send a message and await a response — point-to-point, asynchronous on the wire, synchronous at the call site.
 ---
 
-import { Aside } from '@astrojs/starlight/components';
-
 **Request/Reply** is the pattern for "I need an answer." You send a message, another service handles it and replies, and your `await` returns the response when it arrives. Asynchronous over the network, synchronous in your code.
 
 It is still point-to-point — one request, one responder — but unlike plain [Send](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/), the caller blocks on the reply rather than walking away.
@@ -119,9 +117,7 @@ Request/reply has **timeout semantics**, not retry semantics. If the responder i
 
 If you need resilient at-least-once delivery with background retries, a plain `SendAsync` + an event-based reply path is the right shape, not a blocking request/reply.
 
-<Aside type="note" title="What changed in v7">
-  v7 introduces `RequestSendCancelledException` (inheriting from `OperationCanceledException`) thrown by `SendRequestAsync` / `SendRequestMultiAsync` / `PublishRequestAsync` when the outbound send pipeline cancels before the request reaches the broker. Distinct from a timeout (`RequestTimeoutException`) and from caller-token cancellation (`OperationCanceledException`).
-</Aside>
+The request methods raise `RequestSendCancelledException` (inheriting from `OperationCanceledException`) when the outbound send pipeline cancels before the request reaches the broker — distinct from a timeout (`RequestTimeoutException`) and from caller-token cancellation (`OperationCanceledException`). It applies to `SendRequestAsync`, `SendRequestMultiAsync`, and `PublishRequestAsync` alike.
 
 ## Correlation-id flow
 

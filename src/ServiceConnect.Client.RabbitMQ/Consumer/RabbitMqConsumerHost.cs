@@ -48,7 +48,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     // process and route it" operation.
     private InboundMessageProcessor? _messageProcessor;
     private AsyncEventingBasicConsumer? _consumer;
-    // RabbitMQ.Client v7 auto-recovery may re-issue BasicConsumeAsync on reconnect with a
+    // RabbitMQ.Client auto-recovery may re-issue BasicConsumeAsync on reconnect with a
     // different consumer tag. We subscribe to IConnection.ConsumerTagChangeAfterRecoveryAsync
     // to keep _consumerTag current, so a later BasicCancelAsync during DisposeAsync targets
     // the live consumer rather than a stale tag that no longer exists on the broker.

@@ -37,33 +37,6 @@ Invoked once the framework has correlated `message` to the `data` record. The pe
 - `context` — the per-message consume context (bus handle, correlation id, reply helper); guaranteed non-null when invoked by the dispatcher.
 - `cancellationToken` — sourced from the transport consume context; signals cooperative shutdown. Pass it through to downstream awaits so long-running steps unwind cleanly when the bus stops consuming.
 
-<Aside type="note" title="v8 migration — Context property removed">
-  In v7 the pipeline set an ambient `Context { get; set; }` property on the handler before calling `HandleAsync`. v8 passes the context as a parameter instead.
-
-  ```csharp
-  // before (v7)
-  public class ShippingSaga : IProcessHandler<ShippingSagaData, OrderPlaced>
-  {
-      public IConsumeContext Context { get; set; } = null!;
-      public Task HandleAsync(OrderPlaced message, ShippingSagaData data, CancellationToken ct = default)
-      {
-          var bus = Context.Bus;
-          // ...
-      }
-  }
-
-  // after (v8)
-  public class ShippingSaga : IProcessHandler<ShippingSagaData, OrderPlaced>
-  {
-      public Task HandleAsync(OrderPlaced message, ShippingSagaData data, IConsumeContext context, CancellationToken ct = default)
-      {
-          var bus = context.Bus;
-          // ...
-      }
-  }
-  ```
-</Aside>
-
 ---
 
 ### `ConfigureMapper`

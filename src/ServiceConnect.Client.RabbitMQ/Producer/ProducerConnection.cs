@@ -419,7 +419,7 @@ internal sealed class ProducerConnection
                 // _confirmsTaskCompletionSources dictionary never holds more than one entry at a
                 // time even though the upstream library leaves it unbounded by default.
                 //
-                // The ConcurrencyLimiter installed here is defence-in-depth: RabbitMQ.Client v7.2.1
+                // The ConcurrencyLimiter installed here is defence-in-depth: RabbitMQ.Client
                 // releases the rate-limiter lease BEFORE awaiting the broker confirm
                 // (MaybeReleasePublisherConfirmationLock fires before MaybeEndPublisherConfirmationTrackingAsync),
                 // so the limiter caps concurrent wire sends, not outstanding-but-unacked confirms.

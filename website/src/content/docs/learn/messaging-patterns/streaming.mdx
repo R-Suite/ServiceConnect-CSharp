@@ -73,7 +73,7 @@ public sealed class DocumentUploadedHandler : IStreamHandler<DocumentUploaded>
 }
 ```
 
-- **`stream` is a parameter, not a property.** The dispatcher hands the reassembled stream to `ExecuteAsync` directly. (Pre-v7 used an ambient `Stream { get; set; }` property — that shape is gone.)
+- **`stream` is a parameter, not a property.** The dispatcher hands the reassembled stream to `ExecuteAsync` directly — there is no ambient property the framework writes between dispatches, so singleton-registered handlers stay thread-safe.
 - **`ExecuteAsync` lets you await the full reassembled stream.** By the time it is called, every packet has arrived and been reassembled in memory; the I/O-bound wait for the wire is over. The supplied `CancellationToken` flows through from the dispatcher, so long writes to disk or downstream services can be cancelled — but *don't* make that work slow, because it serialises against the next stream's reassembly.
 - **`stream.Read()` returns the whole byte array.** The reassembly is complete by the time the handler fires; no packet-by-packet processing is expected. `stream.Read()` throws `InvalidOperationException` if the assembled stream has a missing packet — a gap in the sequence indicates incomplete delivery and the handler should not silently process truncated output. For very large payloads where holding everything in memory is painful, `stream.ReadSequence()` returns a `ReadOnlySequence<byte>` you can stream through.
 

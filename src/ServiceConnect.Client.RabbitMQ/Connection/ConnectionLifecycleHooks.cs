@@ -76,7 +76,7 @@ internal sealed class ConnectionLifecycleHooks
 
     /// <summary>
     /// Reads <see cref="IConnection.Endpoint"/> with a guard for the transient null cases:
-    /// RabbitMQ.Client v7 can surface a null Endpoint mid-shutdown (the field is torn down
+    /// RabbitMQ.Client can surface a null Endpoint mid-shutdown (the field is torn down
     /// before the IConnection itself observably disposes), and Moq <see cref="IConnection"/>
     /// proxies leave it null on the Loose default. Returns <c>("&lt;unknown&gt;", 0)</c> so
     /// the lifecycle log emits searchably rather than NREing or printing <c>:0</c>-noise.

@@ -175,11 +175,11 @@ internal sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinde
         }
         catch (BsonException ex)
         {
-            // Schema drift: a stored saga document cannot be materialised into the v7 CLR type
-            // (e.g. a property's stored BSON type is incompatible with the declared property
-            // type, or a missing required field). Wrap as PersistenceException so the caller's
-            // catch surface is consistent; the dispatcher will surface this as a permanent
-            // dispatch failure rather than NACK-looping the broker.
+            // Schema drift: a stored saga document cannot be materialised into the current
+            // CLR type (e.g. a property's stored BSON type is incompatible with the declared
+            // property type, or a missing required field). Wrap as PersistenceException so
+            // the caller's catch surface is consistent; the dispatcher will surface this as
+            // a permanent dispatch failure rather than NACK-looping the broker.
             throw new PersistenceException(
                 $"Schema drift: failed to deserialise saga document for message type '{message.GetType().Name}'. A stored document is incompatible with the current CLR shape.", ex);
         }
@@ -515,9 +515,7 @@ internal sealed partial class MongoDbProcessManagerFinder : IProcessManagerFinde
 
     // Mongo collection names containing +`[], from generic type names break tooling
     // (mongosh autocomplete, mongo-express, etc.). Replace those characters with '_'
-    // so the collection name is portable. Existing v7 deployments with non-generic
-    // saga types are unaffected; v8 deployments with generic saga types must rename
-    // their existing collection (see release notes).
+    // so the collection name is portable.
     // MA0009: regex is a pure character class — O(n), no backtracking, no ReDoS risk.
 #pragma warning disable MA0009
     [GeneratedRegex(@"[+`\[\],]", RegexOptions.None)]

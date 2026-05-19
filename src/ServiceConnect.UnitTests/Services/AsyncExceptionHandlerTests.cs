@@ -30,8 +30,9 @@ public class AsyncExceptionHandlerTests
     [Fact]
     public async Task ExceptionHandler_SyncShim_RunsAndReturnsCompletedValueTask()
     {
-        // Compile-time and runtime regression guard for the v7→v8 sync-shim
-        // migration pattern documented on IBusConfiguration.ExceptionHandler.
+        // Compile-time and runtime regression guard for the sync-shim pattern
+        // documented on IBusConfiguration.ExceptionHandler: a synchronous body can be
+        // wrapped to satisfy the (Exception, CancellationToken) → ValueTask signature.
         var cfg = new BusConfiguration();
         var ran = false;
         cfg.ExceptionHandler = (ex, _) =>

@@ -127,7 +127,7 @@ public sealed class QuoteShippingHandler : IMessageHandler<QuoteShipping>
 
 A request handler typically reads a pinch of metadata from `Headers`, does the work, and replies through `ctx.ReplyAsync`. Because `ReplyAsync` reads the incoming message id out of `Headers`, the requesting `SendRequestAsync<QuoteShipping, ShippingQuote>` call resumes with the correct reply automatically — no manual correlation required.
 
-## Per-instance scope isolation (v8)
+## Per-instance scope isolation
 
 The internal `ConsumeScopeAccessor` that tracks the current message scope is **per-`Bus`-instance** — it is not a process-wide static. Two `Bus` instances running in the same AppDomain do not share scope state; each consumer loop writes only to its own accessor. This means:
 

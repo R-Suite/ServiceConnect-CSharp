@@ -67,8 +67,8 @@ dotnet run --project src/ServiceConnect.Examples.Aggregator.ProducerB/ServiceCon
 
 The consumer never handles a single slice immediately. Instead, the aggregator groups slices by `CorrelationId`, persists them in MongoDB, and flushes when the batch reaches 2 messages or the 10 second timeout elapses.
 
-## v8 Contracts
+## Contracts
 
-**Timer and snapshot safety.** The timeout timer is single-tracked under a per-aggregator lock (Phase 9), preventing double-fire when a flush and a timer expiry race. `GetSnapshotAsync` releases the lock during the clone step (Phase 10), so concurrent inserts can proceed during long snapshot operations without blocking on the aggregator mutex.
+**Timer and snapshot safety.** The timeout timer is single-tracked under a per-aggregator lock, preventing double-fire when a flush and a timer expiry race. `GetSnapshotAsync` releases the lock during the clone step, so concurrent inserts can proceed during long snapshot operations without blocking on the aggregator mutex.
 
-**v8 timeout sentinel.** `Aggregator<T>.Timeout()` default now returns `Timeout.InfiniteTimeSpan` (was `TimeSpan.Zero`). Override the method to return a positive `TimeSpan` to enable timeout-based flush. The default disables it. This example overrides `Timeout()` to return `TimeSpan.FromSeconds(10)` so a partial batch is flushed after 10 seconds if `BatchSize` is not yet met.
+**Flush policy is mandatory.** `Aggregator<T>.BatchSize()` and `Aggregator<T>.Timeout()` are abstract — every concrete aggregator must declare both. `BatchSize()` must return a positive integer; `Timeout()` must return a positive `TimeSpan` (not `TimeSpan.Zero`, not `Timeout.InfiniteTimeSpan`). The registry rejects out-of-range overrides at startup with `InvalidOperationException`. This example overrides `BatchSize()` to `2` and `Timeout()` to `TimeSpan.FromSeconds(10)`, so a partial batch flushes after 10 seconds when fewer than 2 slices have arrived.

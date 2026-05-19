@@ -89,12 +89,11 @@ dotnet run --project src/ServiceConnect.Examples.ProcessManager.Starter/ServiceC
 
 The workers do not persist workflow state and do not decide the next step. They only report completion events back to the orchestrator queue. The orchestrator is the single place that correlates messages, mutates `FulfillmentState`, and makes the next routing decision.
 
-## v8 Contracts
+## Contracts
 
-**v8 handler signature.** `IProcessHandler<TData, TMessage>.HandleAsync` now takes the per-message `IConsumeContext` as a parameter. Pre-v8 the framework set a `Context` property before each call, which was unsafe for singleton-registered handlers. Migration is mechanical: append `IConsumeContext context` to the method signature; replace `this.Context` reads with `context`.
+**Handler signature.** `IProcessHandler<TData, TMessage>.HandleAsync` receives the per-message `IConsumeContext` as a parameter — safe under singleton-registered handlers because nothing about the dispatch is shared via instance state.
 
 ```csharp
-// v8
 public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
 {
     await context.Bus.SendAsync(new OrderSubmitted(message.CorrelationId) { ... }, options, context.CancellationToken);

@@ -51,18 +51,11 @@ Gets or sets the collection or container name used for aggregator state.
 
 `UseInMemoryPersistence()` also registers two secondary interfaces for application code that wants an in-process cache: `ICacheProvider` (full-featured, with expiry, sliding TTL, and priority) and `IKeyValueStore` (simpler, offset-expiry add/get/remove). Both resolve to the same underlying `CacheProvider` singleton wired to `InMemoryPersistenceState.Provider`.
 
-### `TryGet<TKey,TValue>` (v8 breaking)
+### `TryGet<TKey,TValue>`
 
-Pre-v8, both interfaces exposed `Get<TKey,TValue>(key)` which returned `default!` on a cache miss. Callers could not distinguish "key absent" from "key present with a null value."
-
-v8 replaces `Get` with `TryGet<TKey,TValue>(key, out value)`:
+Both interfaces expose `TryGet<TKey,TValue>(key, out value)` for cache reads — the `bool` return distinguishes "key present" from "key absent", which a `Get` overload returning `default!` could not.
 
 ```csharp
-// Before (v7)
-var value = cache.Get<string, MyType>(key);
-if (value is null) { /* could be "absent" or "stored null" */ }
-
-// After (v8)
 if (cache.TryGet<string, MyType>(key, out var value))
 {
     // key was present; value may still be null for reference-type TValue
@@ -74,8 +67,6 @@ else
 ```
 
 For value-type `TValue` (for example `int`), the out-parameter receives `default(T)` on miss (for example `0`); only the `bool` return distinguishes presence from absence.
-
-External consumers using `Get<>` must migrate to `TryGet<>`.
 
 ---
 

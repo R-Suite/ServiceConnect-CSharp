@@ -187,8 +187,8 @@ public class HandlerProcessorTests
     [Fact]
     public async Task ProcessAsync_RoutingSlipToQueueNotInLocalConfig_ForwardsSuccessfully()
     {
-        // v8 removed the IsKnownQueue gate. A well-formed destination that is not
-        // registered in queueConfig is now allowed — only format validation applies.
+        // Routing-slip destinations are not required to appear in the local queueConfig —
+        // only format validation gates the forward, not membership in IsKnownQueue.
         var handler = new TestHpHandler();
         var mockBus = new Mock<IBus>();
         mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))

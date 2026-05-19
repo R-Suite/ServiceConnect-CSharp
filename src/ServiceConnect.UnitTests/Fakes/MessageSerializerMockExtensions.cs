@@ -7,11 +7,11 @@ using ServiceConnect.Interfaces;
 namespace ServiceConnect.UnitTests.Fakes;
 
 /// <summary>
-/// Test helpers that re-create the v7 byte[]-returning Serialize<T>(T) shape on top of
-/// the v8 IBufferWriter-based interface. IMessageSerializer exposes three methods; many
-/// unit tests only care that Serialize was invoked with a given message and that a known
-/// body propagates onward. These helpers preserve those semantics without re-writing
-/// each test individually.
+/// Test helpers that re-create a byte[]-returning Serialize&lt;T&gt;(T) shape on top of the
+/// IBufferWriter-based IMessageSerializer interface. IMessageSerializer exposes three
+/// methods; many unit tests only care that Serialize was invoked with a given message and
+/// that a known body propagates onward. These helpers preserve those semantics without
+/// re-writing each test individually.
 /// </summary>
 internal static class MessageSerializerMockExtensions
 {
@@ -40,7 +40,7 @@ internal static class MessageSerializerMockExtensions
 
     /// <summary>
     /// Verifies that Serialize&lt;T&gt; was called for the given <paramref name="message"/>
-    /// at least once (legacy v7 verification shape).
+    /// the expected number of times.
     /// </summary>
     public static void VerifySerialize<T>(this Mock<IMessageSerializer> mock, T message, Times times)
         where T : Message

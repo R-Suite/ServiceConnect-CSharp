@@ -101,7 +101,7 @@ internal sealed class MessageBusReadStream(string sequenceId, long maxTotalStrea
                 $"Packet number {packetNumber} exceeds LastPacketNumber {preLast} for stream {SequenceId}.");
         }
 
-        // RabbitMQ.Client v7 does not extend the consumer-callback buffer lifetime past
+        // RabbitMQ.Client does not extend the consumer-callback buffer lifetime past
         // the callback return, so we must copy before storing. ToArray() is the copy.
         var stored = data.ToArray();
 
