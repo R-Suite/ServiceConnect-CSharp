@@ -41,11 +41,11 @@ public class HarnessCliOptionsTests
     }
 
     [Fact]
-    public void Parse_ChaosDocker_ThrowsInPhase1()
+    public void Parse_ChaosDocker_ThrowsNotSupported()
     {
         var ex = Assert.Throws<NotSupportedException>(() =>
             HarnessCliParser.Parse(["--chaos", "docker"]));
-        Assert.Contains("Phase 2", ex.Message);
+        Assert.Contains("not yet implemented", ex.Message);
     }
 
     [Fact]

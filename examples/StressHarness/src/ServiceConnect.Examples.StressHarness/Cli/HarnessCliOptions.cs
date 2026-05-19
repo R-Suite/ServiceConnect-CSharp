@@ -6,7 +6,7 @@ public sealed record HarnessCliOptions(
     int Rate,
     IReadOnlyList<string>? Patterns,                                   // null = all
     string Persistence,                                                // inmemory | mongo
-    string Chaos,                                                      // none (Phase 2: docker)
+    string Chaos,                                                      // "none"
     string BrokerUri,
     TimeSpan FlowTimeout,
     long MemoryBudgetBytes,

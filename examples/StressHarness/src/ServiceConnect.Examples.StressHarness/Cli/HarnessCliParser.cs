@@ -6,7 +6,7 @@ public static class HarnessCliParser
 {
     private static readonly string[] ValidModes = ["smoke", "soak", "throughput"];
     private static readonly string[] ValidPersistence = ["inmemory", "mongo"];
-    private static readonly string[] ValidChaos = ["none"]; // Phase 2 adds "docker"
+    private static readonly string[] ValidChaos = ["none"];
 
     public static HarnessCliOptions Parse(IReadOnlyList<string> args)
     {
@@ -47,7 +47,7 @@ public static class HarnessCliParser
                     if (chaos == "docker")
                     {
                         throw new NotSupportedException(
-                            "--chaos docker is a Phase 2 feature and is not yet implemented; pass --chaos none.");
+                            "--chaos docker is not yet implemented; pass --chaos none.");
                     }
 
                     opts = opts with { Chaos = Validate(chaos, ValidChaos, flag) };
