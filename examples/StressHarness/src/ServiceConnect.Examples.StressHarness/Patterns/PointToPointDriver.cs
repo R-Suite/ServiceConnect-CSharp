@@ -64,7 +64,7 @@ public sealed class PointToPointDriver(FlowAccounting accounting, PerHandlerSign
         try
         {
             var invocation = await signals.AwaitAsync(context.FlowId, cancellationToken).ConfigureAwait(false);
-            var crossCheck = CrossTenantAssertions.Check(invocation.Context, context.ExpectedReceiver, invocation.BusTag);
+            var crossCheck = CrossTenantAssertions.Check(invocation.Headers, context.ExpectedReceiver, invocation.BusTag);
             if (!crossCheck.Ok)
             {
                 failures.Add(crossCheck.Failure);

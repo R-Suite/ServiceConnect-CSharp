@@ -1,5 +1,4 @@
 using ServiceConnect.Examples.StressHarness.Patterns;
-using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Examples.StressHarness.Assertions;
 
@@ -11,9 +10,18 @@ public readonly record struct AssertionOutcome(bool Ok, string Failure)
 
 public static class CrossTenantAssertions
 {
-    public static AssertionOutcome Check(IConsumeContext context, BusIdentity expectedReceiver, string actualBusTag)
+    /// <summary>
+    /// Verifies that the handler captured by <paramref name="headers"/> ran on the bus
+    /// identified by <paramref name="actualBusTag"/>, matching the driver's
+    /// <paramref name="expectedReceiver"/>. Operates on a header snapshot — taken by
+    /// <see cref="PerHandlerSignal.Signal"/> while the consume context was still active —
+    /// rather than a live <c>IConsumeContext</c>, because the framework's pooled context
+    /// is invalidated the moment the handler returns and the driver's continuation routinely
+    /// fires after that point.
+    /// </summary>
+    public static AssertionOutcome Check(IReadOnlyDictionary<string, object> headers, BusIdentity expectedReceiver, string actualBusTag)
     {
-        if (!context.Headers.ContainsKey(StressHeaders.OriginBus))
+        if (!headers.ContainsKey(StressHeaders.OriginBus))
         {
             return AssertionOutcome.Fail($"flow missing '{StressHeaders.OriginBus}' header");
         }

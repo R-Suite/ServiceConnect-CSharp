@@ -19,6 +19,15 @@ namespace ServiceConnect.Examples.StressHarness.Patterns;
 /// path on the driver side never holds the consumer pump.
 /// </para>
 /// <para>
+/// Headers are snapshot eagerly inside <see cref="Signal"/> rather than held as a live
+/// <see cref="IConsumeContext"/> reference. The framework pools consume contexts and
+/// invalidates the rental token the moment the handler returns; with
+/// <see cref="TaskCreationOptions.RunContinuationsAsynchronously"/> the driver's
+/// continuation routinely lands after the handler thread has unwound and the context has
+/// been released, at which point any header access throws. Copying the dictionary here
+/// once is a few microseconds and decouples the driver entirely from pool lifetime.
+/// </para>
+/// <para>
 /// Entries are never reclaimed for the lifetime of the harness process — flow ids are
 /// cryptographic GUIDs, so memory growth is bounded by the test run's total flow count.
 /// A soak run that wants to drop completed entries should swap this for a sliding-window
@@ -47,22 +56,29 @@ public sealed class PerHandlerSignal
 
     /// <summary>
     /// Records that the handler for <paramref name="flowId"/> ran on the bus identified by
-    /// <paramref name="busTag"/>, completing any pending await with the
-    /// <see cref="IConsumeContext"/> the handler saw.
+    /// <paramref name="busTag"/>, completing any pending await with a snapshot of the
+    /// inbound headers the handler saw. The snapshot is taken eagerly here so the driver's
+    /// continuation can inspect headers after the framework has released the underlying
+    /// pooled <see cref="IConsumeContext"/>.
     /// </summary>
     public void Signal(Guid flowId, string busTag, IConsumeContext context)
     {
+        // Shallow copy of the header dictionary while the context is still active. The
+        // values are either string or byte[] — both reference-immutable — so passing the
+        // copy across the rendezvous is safe even after the context is released.
+        var snapshot = new Dictionary<string, object>(context.Headers, StringComparer.Ordinal);
         var tcs = _waiters.GetOrAdd(flowId, _ => new TaskCompletionSource<HandlerInvocation>(TaskCreationOptions.RunContinuationsAsynchronously));
         // TrySetResult: a redelivered message (at-least-once delivery) would re-enter the
         // handler and call Signal again; the second invocation is a no-op rather than an
         // InvalidOperationException because the task is already completed.
-        tcs.TrySetResult(new HandlerInvocation(busTag, context));
+        tcs.TrySetResult(new HandlerInvocation(busTag, snapshot));
     }
 }
 
 /// <summary>
 /// The single observation a driver collects per flow: which bus the handler ran on
-/// (<see cref="BusTag"/>) and the consume context the handler saw, so the driver can
-/// run cross-tenant header assertions against it.
+/// (<see cref="BusTag"/>) and the header snapshot copied from the consume context at
+/// signal time, so the driver can run cross-tenant header assertions independently of
+/// the framework's per-message context pool lifetime.
 /// </summary>
-public sealed record HandlerInvocation(string BusTag, IConsumeContext Context);
+public sealed record HandlerInvocation(string BusTag, IReadOnlyDictionary<string, object> Headers);
