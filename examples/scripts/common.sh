@@ -7,12 +7,6 @@ start_dependencies() {
   docker compose -f "$EXAMPLES_ROOT/docker-compose.yml" up -d rabbitmq mongodb
 }
 
-# Sequentially builds the example's solution under -m:1 so subsequent
-# `dotnet run --no-build` calls become lightweight process-spawn + JIT
-# rather than each one triggering its own analyzer-heavy compile. The
-# parallel-compile pattern previously hit the dotnet-build.slice cgroup's
-# 200-task / 8 G ceiling (MSBuild Copy task OOM, MA0049-style cascade).
-# Single argument: absolute path to the .sln (or .slnx).
 # Polls until RabbitMQ accepts a TCP connection on the given host/port.
 # Usage: wait_for_rabbit <host> <port>
 wait_for_rabbit() {
@@ -53,6 +47,12 @@ wait_for_mongo() {
   return 1
 }
 
+# Sequentially builds the example's solution under -m:1 so subsequent
+# `dotnet run --no-build` calls become lightweight process-spawn + JIT
+# rather than each one triggering its own analyzer-heavy compile. The
+# parallel-compile pattern previously hit the dotnet-build.slice cgroup's
+# 200-task / 8 G ceiling (MSBuild Copy task OOM, MA0049-style cascade).
+# Single argument: absolute path to the .sln (or .slnx).
 prebuild_solution() {
     local solution_path="$1"
     if [ ! -f "$solution_path" ]; then
