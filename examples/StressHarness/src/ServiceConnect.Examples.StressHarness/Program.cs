@@ -34,6 +34,7 @@ try
         new RequestReplyDriver(accounting, signals),
         new CompetingConsumersDriver(accounting, signals, workItemCounters),
         new ContentBasedRoutingDriver(accounting, signals),
+        new PolymorphicMessagesDriver(accounting, signals),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -50,6 +51,16 @@ try
         new() { MessageType = typeof(WorkItem), HandlerType = typeof(WorkItemHandler) },
         new() { MessageType = typeof(PremiumOrder), HandlerType = typeof(PremiumOrderHandler) },
         new() { MessageType = typeof(StandardOrder), HandlerType = typeof(StandardOrderHandler) },
+        // DomainEvent ref drives dispatch — the base-type entry instructs the registry
+        // to build a descriptor for IMessageHandler<DomainEvent>, which the hierarchy
+        // walk in HandlerProcessor reaches when a concrete derived event arrives. The
+        // two concrete entries (OrderPlacedEvent / OrderShippedEvent) exist so the
+        // bus binds the receiver queue to each concrete type's fanout exchange; without
+        // them the published deliveries would never reach the queue, because the
+        // DomainEvent exchange is never published to (the type is abstract).
+        new() { MessageType = typeof(DomainEvent), HandlerType = typeof(DomainEventHandler) },
+        new() { MessageType = typeof(OrderPlacedEvent), HandlerType = typeof(DomainEventHandler) },
+        new() { MessageType = typeof(OrderShippedEvent), HandlerType = typeof(DomainEventHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -119,6 +130,11 @@ try
                     sp.GetRequiredService<PerHandlerSignal>()));
 
                 services.AddTransient<IMessageHandler<StandardOrder>>(sp => new StandardOrderHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>()));
+
+                services.AddTransient<IMessageHandler<DomainEvent>>(sp => new DomainEventHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>()));
