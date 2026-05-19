@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/ServiceConnect.Examples.StressHarness.Chaos/ServiceConnect.Examples.StressHarness.Chaos.csproj" />
     <Project Path="src/ServiceConnect.Examples.StressHarness.Contracts/ServiceConnect.Examples.StressHarness.Contracts.csproj" />
+    <Project Path="src/ServiceConnect.Examples.StressHarness.Tests/ServiceConnect.Examples.StressHarness.Tests.csproj" />
     <Project Path="src/ServiceConnect.Examples.StressHarness/ServiceConnect.Examples.StressHarness.csproj" />
   </Folder>
   <Project Path="../../src/ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.csproj" />
