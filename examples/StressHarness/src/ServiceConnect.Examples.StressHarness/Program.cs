@@ -29,6 +29,7 @@ try
     IReadOnlyList<IPatternDriver> drivers =
     [
         new PointToPointDriver(accounting, signals),
+        new PublishSubscribeDriver(accounting, signals),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -40,6 +41,7 @@ try
     var handlerReferences = new List<HandlerReference>
     {
         new() { MessageType = typeof(P2pPing), HandlerType = typeof(P2pHandler) },
+        new() { MessageType = typeof(PubSubEvent), HandlerType = typeof(PubSubHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -67,6 +69,11 @@ try
                 // contract (handlers may not be singletons — HandlerProcessor resolves
                 // them per dispatched message via GetServices).
                 services.AddTransient<IMessageHandler<P2pPing>>(sp => new P2pHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>()));
+
+                services.AddTransient<IMessageHandler<PubSubEvent>>(sp => new PubSubHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>()));
