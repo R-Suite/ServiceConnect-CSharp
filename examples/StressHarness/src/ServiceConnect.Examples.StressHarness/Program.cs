@@ -18,13 +18,13 @@ try
         MemoryBudgetBytes: opts.MemoryBudgetBytes,
         ReportDir: opts.ReportDir);
 
-    IReadOnlyList<IPatternDriver> drivers = [];     // pattern drivers wired starting Task 14
+    IReadOnlyList<IPatternDriver> drivers = [];     // driver registrations are added by pattern-driver wire-up code below
 
     var accounting = new FlowAccounting();
 
     await using var host = await HarnessHost.StartAsync(
         harnessOptions,
-        registerPerBus: (_, _) => { },               // per-driver registrations land starting Task 14
+        registerPerBus: (_, _) => { },               // per-driver registrations attached when drivers are added
         loggerFactory,
         CancellationToken.None);
 
