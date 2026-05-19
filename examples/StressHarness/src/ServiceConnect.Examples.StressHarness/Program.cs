@@ -25,12 +25,14 @@ try
 
     var accounting = new FlowAccounting();
     var signals = new PerHandlerSignal();
+    var workItemCounters = new WorkItemCounters();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
         new PointToPointDriver(accounting, signals),
         new PublishSubscribeDriver(accounting, signals),
         new RequestReplyDriver(accounting, signals),
+        new CompetingConsumersDriver(accounting, signals, workItemCounters),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -44,6 +46,7 @@ try
         new() { MessageType = typeof(P2pPing), HandlerType = typeof(P2pHandler) },
         new() { MessageType = typeof(PubSubEvent), HandlerType = typeof(PubSubHandler) },
         new() { MessageType = typeof(QuoteRequest), HandlerType = typeof(QuoteRequestHandler) },
+        new() { MessageType = typeof(WorkItem), HandlerType = typeof(WorkItemHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -63,6 +66,7 @@ try
                 // bus's signal land on the same accounting and rendezvous registry.
                 services.TryAddSingleton(accounting);
                 services.TryAddSingleton(signals);
+                services.TryAddSingleton(workItemCounters);
 
                 // Factory captures busTag from the registerPerBus closure so the same
                 // handler class produces an alpha-tagged instance on the alpha bus and
@@ -84,6 +88,27 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>()));
+
+                // Two WorkItemHandler registrations per bus, distinguished by their
+                // handler tag. GetServices(IMessageHandler<WorkItem>) returns both, so
+                // each delivery fans out across the pair; the competing-consumers driver
+                // asserts that more than one handler bumped its counter. The handler tags
+                // are closure-captured constants rather than configuration so the count of
+                // distinct workers per bus stays at exactly two — the assertion's lower
+                // bound is meaningful only when the registration count is known.
+                services.AddTransient<IMessageHandler<WorkItem>>(sp => new WorkItemHandler(
+                    handlerTag: "h1",
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<WorkItemCounters>()));
+
+                services.AddTransient<IMessageHandler<WorkItem>>(sp => new WorkItemHandler(
+                    handlerTag: "h2",
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<WorkItemCounters>()));
             });
         },
         loggerFactory,
