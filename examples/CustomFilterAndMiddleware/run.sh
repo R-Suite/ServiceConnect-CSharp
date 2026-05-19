@@ -15,35 +15,9 @@ cleanup() {
   for pid in "${PIDS[@]:-}"; do
     wait "$pid" 2>/dev/null || true
   done
-
-  docker rm -f custom-filter-rabbit 2>/dev/null || true
 }
 
 trap cleanup EXIT
-
-wait_for_rabbitmq() {
-  local max_attempts=60
-  local attempt=0
-
-  while [ $attempt -lt $max_attempts ]; do
-    # Use a TCP connection check rather than docker-exec + rabbitmq-diagnostics.
-    # rabbitmq-diagnostics spawns an Erlang node on every call; doing that
-    # rapidly during broker startup destabilises the EPMD and causes the
-    # container to crash before the broker is ready.
-    if nc -z localhost 5672 2>/dev/null; then
-      # RabbitMQ binds the TCP socket before the AMQP layer is fully ready.
-      # Give the broker a short grace period to finish startup so the first
-      # connection.start does not race the broker into a timeout.
-      sleep 3
-      return 0
-    fi
-    sleep 1
-    attempt=$((attempt + 1))
-  done
-
-  echo "ERROR: RabbitMQ did not become ready within 60 seconds"
-  return 1
-}
 
 wait_for_ready() {
   local max_attempts=60
@@ -61,9 +35,7 @@ wait_for_ready() {
   return 1
 }
 
-docker run -d --rm --name custom-filter-rabbit -p 5672:5672 rabbitmq:3.13-management
-wait_for_rabbitmq
-
+start_dependencies
 prebuild_solution "$SCRIPT_DIR/CustomFilterAndMiddleware.slnx"
 > "$OUTPUT_LOG"
 
