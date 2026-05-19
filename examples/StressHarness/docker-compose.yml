@@ -1,6 +1,13 @@
 services:
   rabbitmq:
     image: rabbitmq:3.13-management
+    # Pin the hostname so Erlang's net_distribution layer has a stable, valid
+    # node name. Without this, Docker assigns the container's hash as hostname;
+    # on some host configurations the resulting node name fails the prelaunch
+    # auth-cookie check with EACCES because the synthetic hostname isn't
+    # resolvable in the container's /etc/hosts. The explicit hostname bypasses
+    # that whole class of startup failures.
+    hostname: rabbitmq
     container_name: stress-harness-rabbit
     ports:
       - "5672:5672"
