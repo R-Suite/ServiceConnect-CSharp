@@ -9,6 +9,7 @@ using ServiceConnect.Examples.StressHarness.Patterns;
 using ServiceConnect.Examples.StressHarness.Patterns.Aggregators;
 using ServiceConnect.Examples.StressHarness.Patterns.Filters;
 using ServiceConnect.Examples.StressHarness.Patterns.Handlers;
+using ServiceConnect.Examples.StressHarness.Patterns.Middleware;
 using ServiceConnect.Examples.StressHarness.Reporting;
 using ServiceConnect.Interfaces;
 
@@ -33,6 +34,7 @@ try
     var aggregatorObservations = new AggregatorObservations();
     var slipTrail = new SlipTrail();
     var streamObservations = new StreamObservations();
+    var middlewareTrail = new MiddlewareTrail();
 
     IReadOnlyList<IPatternDriver> drivers =
     [
@@ -48,6 +50,7 @@ try
         new ScatterGatherDriver(accounting, signals),
         new RoutingSlipDriver(accounting, signals, slipTrail),
         new StreamingDriver(accounting, streamObservations),
+        new CustomFilterAndMiddlewareDriver(accounting, signals, middlewareTrail),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -82,6 +85,7 @@ try
         new() { MessageType = typeof(SearchRequest), HandlerType = typeof(SearchRequestHandler) },
         new() { MessageType = typeof(SlipOrder), HandlerType = typeof(SlipOrderHandler) },
         new() { MessageType = typeof(DocumentUploaded), HandlerType = typeof(DocumentUploadedHandler) },
+        new() { MessageType = typeof(DedupedMessage), HandlerType = typeof(DedupedMessageHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -95,6 +99,15 @@ try
             // call at dispatch time resolves to an instance closing over the shared
             // FilterTrail singleton.
             builder.AddBeforeConsumingFilter<StressTrailFilter>();
+
+            // Custom-filter-and-middleware driver wires every stage of the inbound
+            // pipeline: a BeforeConsuming filter, a MessageProcessing middleware
+            // around the dispatch, and an OnConsumedSuccessfully filter after the
+            // handler completes. Each stage records into the shared MiddlewareTrail
+            // so the driver can assert the full five-element order.
+            builder.AddBeforeConsumingFilter<StressBeforeFilter>();
+            builder.AddMessageProcessingMiddleware<StressProcessingMiddleware>();
+            builder.AddOnConsumedSuccessfullyFilter<StressOnSuccessFilter>();
 
             builder.AddRegistration(services =>
             {
@@ -115,12 +128,24 @@ try
                 services.TryAddSingleton(aggregatorObservations);
                 services.TryAddSingleton(slipTrail);
                 services.TryAddSingleton(streamObservations);
+                services.TryAddSingleton(middlewareTrail);
 
                 // Filter is resolved per dispatch via GetRequiredService; transient
                 // lifetime matches its observational role (no state held on the filter
                 // itself, all state lives on the shared FilterTrail singleton).
                 services.AddTransient<StressTrailFilter>(sp => new StressTrailFilter(
                     sp.GetRequiredService<FilterTrail>()));
+
+                // BeforeConsuming, MessageProcessing, and OnConsumedSuccessfully
+                // stages for the pipeline-ordering driver. All three close over the
+                // same shared MiddlewareTrail singleton; transient lifetime matches
+                // the observational role (no per-instance state).
+                services.AddTransient<StressBeforeFilter>(sp => new StressBeforeFilter(
+                    sp.GetRequiredService<MiddlewareTrail>()));
+                services.AddTransient<StressOnSuccessFilter>(sp => new StressOnSuccessFilter(
+                    sp.GetRequiredService<MiddlewareTrail>()));
+                services.AddTransient<StressProcessingMiddleware>(sp => new StressProcessingMiddleware(
+                    sp.GetRequiredService<MiddlewareTrail>()));
 
                 // Factory captures busTag from the registerPerBus closure so the same
                 // handler class produces an alpha-tagged instance on the alpha bus and
@@ -251,6 +276,16 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<StreamObservations>()));
+
+                // DedupedMessage handler — sits between the BeforeConsuming filter,
+                // the MessageProcessing middleware enter/exit pair, and the
+                // OnConsumedSuccessfully filter. The factory closes over busTag so
+                // the per-flow trail records which bus serviced each delivery.
+                services.AddTransient<IMessageHandler<DedupedMessage>>(sp => new DedupedMessageHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MiddlewareTrail>()));
             });
         },
         loggerFactory,
