@@ -33,6 +33,7 @@ try
         new PublishSubscribeDriver(accounting, signals),
         new RequestReplyDriver(accounting, signals),
         new CompetingConsumersDriver(accounting, signals, workItemCounters),
+        new ContentBasedRoutingDriver(accounting, signals),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -47,6 +48,8 @@ try
         new() { MessageType = typeof(PubSubEvent), HandlerType = typeof(PubSubHandler) },
         new() { MessageType = typeof(QuoteRequest), HandlerType = typeof(QuoteRequestHandler) },
         new() { MessageType = typeof(WorkItem), HandlerType = typeof(WorkItemHandler) },
+        new() { MessageType = typeof(PremiumOrder), HandlerType = typeof(PremiumOrderHandler) },
+        new() { MessageType = typeof(StandardOrder), HandlerType = typeof(StandardOrderHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -109,6 +112,16 @@ try
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
                     sp.GetRequiredService<WorkItemCounters>()));
+
+                services.AddTransient<IMessageHandler<PremiumOrder>>(sp => new PremiumOrderHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>()));
+
+                services.AddTransient<IMessageHandler<StandardOrder>>(sp => new StandardOrderHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>()));
             });
         },
         loggerFactory,
