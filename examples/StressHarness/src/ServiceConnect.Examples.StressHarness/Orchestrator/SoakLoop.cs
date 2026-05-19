@@ -71,6 +71,12 @@ public static class SoakLoop
                     result.Elapsed,
                     result.AssertionFailures.Count > 0 ? string.Join("; ", result.AssertionFailures) : null);
             }
+
+            // Drop accounting entries for flows that have already reached their expected
+            // handler count so the per-flow dictionaries stay bounded by the in-flight set.
+            // The end-of-run Reconcile() still sees any under-handled flows because
+            // TryRemoveCompleted only evicts rows where observed >= expected.
+            accounting.TryRemoveCompleted();
         }
 
         var final = MemoryAssertions.SnapshotTotalMemory();

@@ -23,6 +23,26 @@ public sealed class FlowAccounting
         _observed.AddOrUpdate(flowId, 1, (_, n) => n + 1);
     }
 
+    /// <summary>
+    /// Drops the bookkeeping for every flow whose observed handler invocations have caught
+    /// up with the expected count. Long-running loops call this once per tick so the two
+    /// dictionaries stay bounded by the in-flight set rather than the lifetime-cumulative
+    /// set. Flows still short of their expected fan-out are left in place so the next
+    /// <see cref="Reconcile"/> still reports them as missing.
+    /// </summary>
+    public void TryRemoveCompleted()
+    {
+        foreach (var kv in _expected)
+        {
+            var observed = _observed.GetValueOrDefault(kv.Key, 0);
+            if (observed >= kv.Value)
+            {
+                _expected.TryRemove(kv.Key, out _);
+                _observed.TryRemove(kv.Key, out _);
+            }
+        }
+    }
+
     public AccountingSummary Reconcile()
     {
         var missing = new List<Guid>();

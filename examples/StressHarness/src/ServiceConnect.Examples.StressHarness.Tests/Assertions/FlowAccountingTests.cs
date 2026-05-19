@@ -61,4 +61,25 @@ public class FlowAccountingTests
         summary = acct.Reconcile();
         Assert.Empty(summary.MissingFlows);
     }
+
+    [Fact]
+    public void TryRemoveCompleted_RemovesFullyHandledFlows_LeavesMissingIntact()
+    {
+        var acct = new FlowAccounting();
+        var completed = Guid.NewGuid();
+        var missing = Guid.NewGuid();
+
+        acct.RecordSend(completed, expectedHandlerInvocations: 1);
+        acct.RecordHandled(completed);
+        acct.RecordSend(missing, expectedHandlerInvocations: 2);
+        acct.RecordHandled(missing);     // only 1 of 2
+
+        acct.TryRemoveCompleted();
+
+        var summary = acct.Reconcile();
+        Assert.Equal(2, summary.SentCount);          // 'missing' still tracked (expected=2)
+        Assert.Equal(1, summary.HandledCount);       // only 'missing's 1 handle still tracked
+        Assert.Single(summary.MissingFlows, missing);
+        Assert.Empty(summary.UnexpectedFlows);
+    }
 }

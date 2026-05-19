@@ -28,10 +28,12 @@ namespace ServiceConnect.Examples.StressHarness.Patterns;
 /// once is a few microseconds and decouples the driver entirely from pool lifetime.
 /// </para>
 /// <para>
-/// Entries are never reclaimed for the lifetime of the harness process — flow ids are
-/// cryptographic GUIDs, so memory growth is bounded by the test run's total flow count.
-/// A soak run that wants to drop completed entries should swap this for a sliding-window
-/// implementation, but the smoke and throughput modes don't need it.
+/// The <c>_waiters</c> entry for each flow id is reclaimed as soon as the TCS resolves
+/// (signalled by the handler, cancelled by the supplied token, or faulted) via a
+/// <see cref="Task.ContinueWith(Action{Task}, TaskScheduler)"/> continuation that calls
+/// <see cref="ConcurrentDictionary{TKey,TValue}.TryRemove(TKey, out TValue)"/>. This bounds
+/// dictionary residency to the in-flight set rather than the cumulative flow count, so a
+/// long-running soak doesn't accumulate per-flow state in this hot rendezvous map.
 /// </para>
 /// </remarks>
 public sealed class PerHandlerSignal
@@ -47,6 +49,22 @@ public sealed class PerHandlerSignal
     public Task<HandlerInvocation> AwaitAsync(Guid flowId, CancellationToken cancellationToken)
     {
         var tcs = _waiters.GetOrAdd(flowId, _ => new TaskCompletionSource<HandlerInvocation>(TaskCreationOptions.RunContinuationsAsynchronously));
+        // Reclaim the dictionary slot once the TCS resolves (success, cancellation, or
+        // fault) so per-flow state doesn't accumulate over long runs. ExecuteSynchronously
+        // is safe because the cleanup is a single TryRemove and the TCS uses
+        // RunContinuationsAsynchronously, which already hops continuations off the
+        // signalling handler thread before this one runs.
+        _ = tcs.Task.ContinueWith(
+            static (completed, state) =>
+            {
+                _ = completed;
+                var (waiters, id) = ((ConcurrentDictionary<Guid, TaskCompletionSource<HandlerInvocation>>, Guid))state!;
+                waiters.TryRemove(id, out _);
+            },
+            (_waiters, flowId),
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
         // Register fires once; CTS disposal at flow scope drops the registration. The
         // closure captures the same TCS the GetOrAdd produced so a late signal arrives
         // at a cancelled TCS (TrySetResult returns false) without faulting the awaiter.

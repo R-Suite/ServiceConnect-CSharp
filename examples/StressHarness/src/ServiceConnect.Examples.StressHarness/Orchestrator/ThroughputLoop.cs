@@ -72,6 +72,12 @@ public static class ThroughputLoop
                 }
             }
 
+            // Drop accounting entries for flows that have already reached their expected
+            // handler count so the per-flow dictionaries stay bounded by the in-flight set.
+            // The end-of-run Reconcile() still sees any under-handled flows because
+            // TryRemoveCompleted only evicts rows where observed >= expected.
+            accounting.TryRemoveCompleted();
+
             var tickElapsed = sw.Elapsed - tickStart;
             var sleep = interval - tickElapsed;
             if (sleep > TimeSpan.Zero)
