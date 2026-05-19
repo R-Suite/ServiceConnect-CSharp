@@ -39,7 +39,7 @@ public sealed class ModeDispatcher(
     {
         "smoke" => RunSmokeAsync(cancellationToken),
         "soak" => SoakLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, cancellationToken),
-        "throughput" => throw new NotImplementedException("throughput wired in Task 29"),
+        "throughput" => ThroughputLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, cancellationToken),
         _ => throw new InvalidOperationException(
             string.Create(CultureInfo.InvariantCulture, $"unknown mode {_opts.Mode}")),
     };
