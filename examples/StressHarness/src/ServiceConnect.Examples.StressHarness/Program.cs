@@ -43,6 +43,7 @@ try
         new FiltersDriver(accounting, signals, filterTrail),
         new ProcessManagerDriver(accounting, signals, sagaObservations),
         new AggregatorDriver(accounting, aggregatorObservations),
+        new ScatterGatherDriver(accounting, signals),
     ];
 
     // Composite handler-reference list spans every pattern driver wired up below.
@@ -74,6 +75,7 @@ try
         new() { MessageType = typeof(SagaIntermediate), HandlerType = typeof(SagaHandler) },
         new() { MessageType = typeof(SagaCompleted), HandlerType = typeof(SagaHandler) },
         new() { MessageType = typeof(TelemetrySlice), HandlerType = typeof(StressTelemetrySliceAggregator) },
+        new() { MessageType = typeof(SearchRequest), HandlerType = typeof(SearchRequestHandler) },
     };
 
     await using var host = await HarnessHost.StartAsync(
@@ -205,6 +207,17 @@ try
                 services.AddTransient<Aggregator<TelemetrySlice>>(sp => new StressTelemetrySliceAggregator(
                     busTag,
                     sp.GetRequiredService<AggregatorObservations>()));
+
+                // One SearchRequest handler per bus. PublishRequestAsync fans out across the
+                // SearchRequest type exchange, so a publish from either bus reaches both
+                // alpha's and beta's queues; each handler replies with its bus tag in
+                // SearchResponse.CatalogName so the driver can prove the fanout reached both
+                // subscribers. A single registration per bus keeps the reply count at the
+                // ExpectedReplyCount = 2 the driver asserts against.
+                services.AddTransient<IMessageHandler<SearchRequest>>(sp => new SearchRequestHandler(
+                    busTag,
+                    sp.GetRequiredService<FlowAccounting>(),
+                    sp.GetRequiredService<PerHandlerSignal>()));
             });
         },
         loggerFactory,
