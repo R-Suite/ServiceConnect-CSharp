@@ -13,7 +13,7 @@ public static class CrossTenantAssertions
 {
     public static AssertionOutcome Check(IConsumeContext context, BusIdentity expectedReceiver, string actualBusTag)
     {
-        if (!context.Headers.TryGetValue(StressHeaders.OriginBus, out var originRaw) || originRaw is null)
+        if (!context.Headers.ContainsKey(StressHeaders.OriginBus))
         {
             return AssertionOutcome.Fail($"flow missing '{StressHeaders.OriginBus}' header");
         }
