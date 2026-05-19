@@ -84,6 +84,18 @@ public sealed class ModeDispatcher(
                 $"flow accounting: {acct.UnexpectedFlows.Count} flow(s) handled without record of send"));
         }
 
+        // Lifecycle assertion runs last because it disposes the alpha bus — no further
+        // driver work can be issued through it afterwards. The host's own DisposeAsync
+        // (fired by Program.cs's `await using`) tolerates a pre-disposed bus, so a second
+        // dispose on the same instance is a no-op rather than a fault.
+        var lifecycleCheck = await LifecycleAssertions.DisposeDuringFlowAsync(
+            _host.Alpha, _host.Beta, TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+        if (!lifecycleCheck.Ok)
+        {
+            processFailures.Add(string.Create(CultureInfo.InvariantCulture,
+                $"lifecycle: {lifecycleCheck.Failure}"));
+        }
+
         var final = MemoryAssertions.SnapshotTotalMemory();
         var completedAt = DateTimeOffset.UtcNow;
 
