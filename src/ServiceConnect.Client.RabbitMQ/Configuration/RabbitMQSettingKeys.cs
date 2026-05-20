@@ -97,4 +97,14 @@ public static class RabbitMQSettingKeys
     /// defence on hostile inputs.
     /// </summary>
     public const string MaxHeaderValueBytes = nameof(MaxHeaderValueBytes);
+
+    /// <summary>
+    /// Wall-clock cap on the publisher's retry loop in <c>Producer.ExecuteRetryingPublishAsync</c>.
+    /// Accepts a <see cref="System.TimeSpan"/>; defaults to 120 seconds when unset.
+    /// Set to <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to disable the cap
+    /// and rely solely on <see cref="RetryCount"/> × <see cref="RetrySeconds"/>.
+    /// Distinct from <see cref="PublishTimeout"/>, which bounds a single confirm-ack
+    /// wait inside one attempt; this cap bounds the total retry budget across attempts.
+    /// </summary>
+    public const string MaxPublishWaitTime = nameof(MaxPublishWaitTime);
 }
