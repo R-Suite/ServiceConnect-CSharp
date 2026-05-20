@@ -91,11 +91,29 @@ This exercises the framework's auto-recovery code paths (connection auto-recover
 | `--chaos-downtime` | `20s` | How long the broker stays down before restart. |
 | `--chaos-recovery-budget` | `60s` | Wait after the soak's `--duration` ends before the recovery assertion fires. |
 
+### Durability contract under chaos
+
+The harness wires the transport for at-least-once delivery across a broker
+restart by explicitly setting two flags on its `UseRabbitMQ` configuration:
+
+- `Durable = true` — queue declarations survive broker restart (the broker
+  reloads queue + binding metadata from disk on boot).
+- `PublisherAcknowledgements = true` — `Bus.SendAsync` / `PublishAsync`
+  awaits the broker's confirm before completing, so a publish in flight
+  when the broker is killed surfaces as an exception to the caller rather
+  than a silent drop.
+
+Both values match the framework defaults; declaring them in the harness is
+belt-and-braces against a future default change rotating chaos runs back
+into silent-loss territory. Delivery-mode 2 (broker fsyncs each message
+before ack'ing) is set unconditionally by the framework's
+`OutboundHeaderBuilder` and needs no opt-in.
+
 ### Assertion model
 
 **Hard (exit 1 if failed):** after the recovery budget elapses, both `Bus α` and `Bus β` report `IsConsuming == true`. If either remains unhealthy, the run fails.
 
-**Soft (reported, never fails the run):** per-pattern flow counts broken down by chaos window (`pre-chaos`, `during-chaos`, `in-recovery`, `post-chaos`), kill-event timeline in `out/report.md`.
+**Soft (reported, never fails the run):** per-pattern flow counts broken down by chaos window (`pre-chaos`, `during-chaos`, `in-recovery`, `post-chaos`), kill-event timeline in `out/report.md`. The "under-handled flow count" (flows the driver sent that hadn't completed by end-of-soak) measures in-flight loss at broker death — messages whose `SendAsync` returned before the broker accepted them, or whose handler was mid-dispatch when the broker died. A non-zero count is a measurement, not a recovery failure; the hard `IsConsuming` assertion is the recovery-success signal.
 
 ### Scope
 

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.Client.RabbitMQ.Configuration;
 using ServiceConnect.DependencyInjection;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
@@ -142,6 +143,12 @@ public sealed class HarnessHost : IAsyncDisposable
 
         services.AddServiceConnect(builder =>
         {
+            // Host + SSL go through the raw transport overload because RabbitMqOptions
+            // doesn't expose those properties (Host is on ITransportConfiguration directly,
+            // SslEnabled lives on the same surface). Durability + acks go through the
+            // typed RabbitMqOptions overload immediately after so the intent is
+            // declarative and a future framework-default flip can't silently downgrade
+            // chaos runs that depend on these flags.
             builder.UseRabbitMQ(transport =>
             {
                 transport.Host = ExtractHost(options.BrokerUri);
@@ -149,6 +156,24 @@ public sealed class HarnessHost : IAsyncDisposable
                 // and configure credentials. Suppress the framework's non-loopback plaintext
                 // warning when the broker URI points off-host so harness logs aren't spammed.
                 transport.SslEnabled = false;
+            });
+
+            // Durability contract for the chaos soak:
+            //   Durable=true             — broker keeps queue + bindings across restarts.
+            //   PublisherAcknowledgements=true — SendAsync/PublishAsync awaits broker ack
+            //                              before completing, so a kill mid-publish
+            //                              surfaces as a failed flow rather than a
+            //                              silent loss.
+            // Delivery-mode=2 (persistent on-disk) is set unconditionally by the
+            // producer's BasicProperties builder (OutboundHeaderBuilder), so the
+            // broker fsyncs each message; no opt-in is required for that leg. Both
+            // values match the framework defaults — declaring them explicitly is
+            // belt-and-braces against a future default change rotating chaos runs
+            // back into silent-loss territory.
+            builder.UseRabbitMQ((RabbitMqOptions rabbit) =>
+            {
+                rabbit.Durable = true;
+                rabbit.PublisherAcknowledgements = true;
             });
 
             builder.ConfigureQueues(queues =>
