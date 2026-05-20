@@ -14,9 +14,12 @@ namespace ServiceConnect.Examples.StressHarness.Patterns;
 /// persisted <see cref="SagaData"/> instance under one
 /// <see cref="Message.CorrelationId"/> and surfaces the post-mutation stage on
 /// every invocation. The assertion is that the receiver's observation log
-/// records <c>[1, 2, 3]</c> as a leading subsequence — exact equality would
-/// over-constrain the harness because redelivery (legitimately) re-runs a
-/// handler, and the observation list is post-condition not pre-condition.
+/// contains <c>[1, 2, 3]</c> as an ordered subsequence — exact equality would
+/// over-constrain the harness because publisher retry or broker redelivery
+/// (both at-least-once-compatible) can re-run a handler. The saga's data layer
+/// guards against double-advance via the <c>data.Stage &lt; N</c> check, but the
+/// observation list captures every handler invocation regardless, so a duplicate
+/// arrives as a repeated entry (e.g. <c>[1, 2, 2, 3]</c>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -78,15 +81,15 @@ public sealed class ProcessManagerDriver(FlowAccounting accounting, PerHandlerSi
                 failures.Add(crossCheck.Failure);
             }
 
-            // Leading-subsequence check: the saga must have passed through stages 1, 2, 3
-            // in that order at least once. Redelivery may insert extra records (e.g. a
-            // stage-3 replay would also add a 3 to the tail) — those tail entries do not
-            // invalidate the progression, so the assertion checks the prefix rather than
-            // the full list.
+            // Ordered-subsequence check: the saga must have passed through stages 1, 2, 3
+            // in that order at least once. Publisher retry and broker redelivery (both
+            // at-least-once-compatible) can re-fire any handler, producing repeated entries
+            // such as [1, 2, 2, 3] or [1, 1, 2, 3, 3]. The progression is preserved as long
+            // as 1, 2, 3 appear in order somewhere in the list.
             var observed = observations.Snapshot(sagaId);
-            if (observed.Count < 3 || observed[0] != 1 || observed[1] != 2 || observed[2] != 3)
+            if (!ContainsOrderedSubsequence(observed, [1, 2, 3]))
             {
-                failures.Add($"process-manager {context.Origin.ToHeaderValue()}->{context.ExpectedReceiver.ToHeaderValue()}: expected stage progression [1, 2, 3] but observed [{string.Join(", ", observed)}]");
+                failures.Add($"process-manager {context.Origin.ToHeaderValue()}->{context.ExpectedReceiver.ToHeaderValue()}: expected stage progression [1, 2, 3] as ordered subsequence but observed [{string.Join(", ", observed)}]");
             }
         }
         catch (OperationCanceledException)
@@ -98,6 +101,23 @@ public sealed class ProcessManagerDriver(FlowAccounting accounting, PerHandlerSi
         return failures.Count == 0
             ? FlowResult.Pass(sw.Elapsed, sent: 3, handled: 3)
             : FlowResult.Fail(sw.Elapsed, sent: 3, handled: 0, [.. failures]);
+    }
+
+    private static bool ContainsOrderedSubsequence(IReadOnlyList<int> observed, ReadOnlySpan<int> expected)
+    {
+        var idx = 0;
+        foreach (var stage in observed)
+        {
+            if (idx < expected.Length && stage == expected[idx])
+            {
+                idx++;
+                if (idx == expected.Length)
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private static Task SendStageAsync<TMessage>(

@@ -79,31 +79,28 @@ public sealed class RoutingSlipDriver(FlowAccounting accounting, PerHandlerSigna
         {
             await sender.RouteAsync(message, [senderQueue, otherQueue], cancellationToken).ConfigureAwait(false);
 
-            // Poll the trail until both hops have recorded their bus tag, or the
-            // flow timeout fires. The trail mutation is serialised inside SlipTrail
-            // so a snapshot of length 2 reflects a true two-hop completion.
+            // Poll the trail until [senderTag, otherTag] appears as an ordered
+            // subsequence (both hops fired in order at least once). Publisher retry
+            // or broker redelivery can re-fire hop 1 before hop 2 completes,
+            // producing trails like [alpha, alpha, beta] or [alpha, alpha] mid-flight.
+            // Breaking on length-only would observe a transient [alpha, alpha] and
+            // assert against the duplicated hop instead of the legitimate progression.
             var pollInterval = TimeSpan.FromMilliseconds(25);
             IReadOnlyList<string> observed = [];
             while (!cancellationToken.IsCancellationRequested)
             {
                 observed = trail.Snapshot(context.FlowId);
-                if (observed.Count >= 2)
+                if (ContainsOrderedSubsequence(observed, senderTag, otherTag))
                 {
                     break;
                 }
                 await Task.Delay(pollInterval, cancellationToken).ConfigureAwait(false);
             }
 
-            if (observed.Count < 2)
+            if (!ContainsOrderedSubsequence(observed, senderTag, otherTag))
             {
                 failures.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"routing-slip {senderTag}->{otherTag}: expected 2-hop trail but observed [{string.Join(", ", observed)}] within {context.FlowTimeout}"));
-            }
-            else if (!string.Equals(observed[0], senderTag, StringComparison.Ordinal) ||
-                     !string.Equals(observed[1], otherTag, StringComparison.Ordinal))
-            {
-                failures.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"routing-slip {senderTag}->{otherTag}: expected hop order [{senderTag}, {otherTag}] but observed [{string.Join(", ", observed)}]"));
+                    $"routing-slip {senderTag}->{otherTag}: expected hop order [{senderTag}, {otherTag}] as ordered subsequence but observed [{string.Join(", ", observed)}]"));
             }
         }
         catch (OperationCanceledException)
@@ -116,5 +113,25 @@ public sealed class RoutingSlipDriver(FlowAccounting accounting, PerHandlerSigna
         return failures.Count == 0
             ? FlowResult.Pass(sw.Elapsed, sent: 1, handled: 2)
             : FlowResult.Fail(sw.Elapsed, sent: 1, handled: 0, [.. failures]);
+    }
+
+    private static bool ContainsOrderedSubsequence(IReadOnlyList<string> observed, string first, string second)
+    {
+        var seenFirst = false;
+        foreach (var entry in observed)
+        {
+            if (!seenFirst)
+            {
+                if (string.Equals(entry, first, StringComparison.Ordinal))
+                {
+                    seenFirst = true;
+                }
+            }
+            else if (string.Equals(entry, second, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }
