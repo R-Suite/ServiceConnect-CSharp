@@ -20,7 +20,8 @@ public sealed record Report(
     IReadOnlyList<PatternStats> Patterns,
     IReadOnlyList<string> ProcessAssertionFailures,
     ReportMetadata Metadata,
-    ChaosWindowStats? Chaos);
+    ChaosWindowStats? Chaos,
+    Assertions.MessageLedgerAnalysis? MessageLedger);
 
 public sealed record FailedFlowDetail(
     Guid FlowId,

@@ -26,7 +26,8 @@ public class JsonReportWriterTests
             ],
             ProcessAssertionFailures: [],
             Metadata: new ReportMetadata("test-host", "net10.0", "amqp://localhost", "inmemory"),
-            Chaos: null);
+            Chaos: null,
+            MessageLedger: null);
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stress-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);

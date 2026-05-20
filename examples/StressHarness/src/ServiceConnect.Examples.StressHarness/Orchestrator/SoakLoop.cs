@@ -282,7 +282,8 @@ public static class SoakLoop
             Patterns: stats,
             ProcessAssertionFailures: processFailures,
             Metadata: metadata,
-            Chaos: chaosStats);
+            Chaos: chaosStats,
+            MessageLedger: null);
     }
 
     // Polls FlowAccounting until either every sent flow has reached its expected

@@ -1,5 +1,7 @@
 using System.Globalization;
+using System.Linq;
 using System.Text;
+using ServiceConnect.Examples.StressHarness.Assertions;
 
 namespace ServiceConnect.Examples.StressHarness.Reporting;
 
@@ -106,6 +108,69 @@ public static class MarkdownReportWriter
             {
                 sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
                     $"| {p.PatternName} | {p.PreChaosCount} | {p.DuringChaosCount} | {p.InRecoveryCount} | {p.PostChaosCount} |"));
+            }
+        }
+
+        if (report.MessageLedger is not null)
+        {
+            var l = report.MessageLedger;
+            sb.AppendLine();
+            sb.AppendLine("## Message ledger");
+            sb.AppendLine();
+            sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"**Publishes:** {l.TotalPublishes} (acked {l.AckedPublishes} / failed {l.FailedPublishes})"));
+            sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"**Consumes:** {l.TotalConsumes}"));
+            sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"**Acked-but-lost:** {l.AckedButLost}"));
+            sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"**Failed-and-lost:** {l.FailedAndLost}"));
+            sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"**Per-message redeliveries:** {l.PerMessageRedeliveries}"));
+            if (l.ConsumesWithoutPublish > 0)
+            {
+                sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                    $"**Consumes without matching publish:** {l.ConsumesWithoutPublish} (instrumentation gap — see spec risks)"));
+            }
+
+            if (l.AckedButLost > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("### Acked-but-lost breakdown by publish window");
+                sb.AppendLine();
+                sb.AppendLine("| Window | Count |");
+                sb.AppendLine("|---|---|");
+                foreach (var kv in l.AckedButLostByWindow.OrderBy(kv => kv.Key))
+                {
+                    sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                        $"| {kv.Key} | {kv.Value} |"));
+                }
+
+                sb.AppendLine();
+                sb.AppendLine("### Acked-but-lost breakdown by pattern");
+                sb.AppendLine();
+                sb.AppendLine("| Pattern | Count |");
+                sb.AppendLine("|---|---|");
+                foreach (var kv in l.AckedButLostByPattern.OrderByDescending(kv => kv.Value))
+                {
+                    sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                        $"| {kv.Key} | {kv.Value} |"));
+                }
+
+                if (l.AckedButLostSample.Count > 0)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                        $"### Acked-but-lost — first {l.AckedButLostSample.Count} forensic rows"));
+                    sb.AppendLine();
+                    sb.AppendLine("| MessageId | FlowId | Pattern | OriginBus | PublishStarted | PublishWindow |");
+                    sb.AppendLine("|---|---|---|---|---|---|");
+                    foreach (var row in l.AckedButLostSample)
+                    {
+                        sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                            $"| {row.MessageId:N} | {row.FlowId:N} | {row.Pattern} | {row.OriginBus} | {row.PublishStarted.ToString("o", CultureInfo.InvariantCulture)} | {row.Window} |"));
+                    }
+                }
             }
         }
 

@@ -162,7 +162,8 @@ public static class ThroughputLoop
             Patterns: stats,
             ProcessAssertionFailures: processFailures,
             Metadata: metadata,
-            Chaos: null);
+            Chaos: null,
+            MessageLedger: null);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

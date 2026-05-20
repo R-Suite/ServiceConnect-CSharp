@@ -187,7 +187,8 @@ public sealed class ModeDispatcher(
             Patterns: patternStats,
             ProcessAssertionFailures: processFailures,
             Metadata: _metadata,
-            Chaos: null);
+            Chaos: null,
+            MessageLedger: null);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

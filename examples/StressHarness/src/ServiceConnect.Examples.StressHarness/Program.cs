@@ -448,6 +448,7 @@ try
         chaosScheduler);
 
     var report = await dispatcher.RunAsync(CancellationToken.None);
+    report = report with { MessageLedger = MessageLedgerAnalyzer.Analyze(messageLedger.Snapshot()) };
 
     Directory.CreateDirectory(opts.ReportDir);
     await JsonReportWriter.WriteAsync(report, Path.Combine(opts.ReportDir, "report.json"), CancellationToken.None);

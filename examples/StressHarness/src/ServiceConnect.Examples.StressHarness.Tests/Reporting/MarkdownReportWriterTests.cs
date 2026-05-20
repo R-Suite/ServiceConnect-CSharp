@@ -31,7 +31,8 @@ public class MarkdownReportWriterTests
             ],
             ProcessAssertionFailures: [],
             Metadata: new ReportMetadata("test-host", "net10.0", "amqp://localhost", "inmemory"),
-            Chaos: null);
+            Chaos: null,
+            MessageLedger: null);
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stress-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -93,7 +94,8 @@ public class MarkdownReportWriterTests
                 [
                     new ChaosPatternBreakdown("p2p", 1, 2, 1, 0),
                 ],
-                DuplicateHandlerInvocations: 5));
+                DuplicateHandlerInvocations: 5),
+            MessageLedger: null);
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stress-chaos-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
