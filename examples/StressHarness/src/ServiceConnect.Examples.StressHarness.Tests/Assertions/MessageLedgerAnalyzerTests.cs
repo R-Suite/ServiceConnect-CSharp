@@ -22,6 +22,8 @@ public sealed class MessageLedgerAnalyzerTests
         Assert.Equal(0, analysis.PerMessageRedeliveries);
         Assert.Empty(analysis.AckedButLostSample);
         Assert.Equal(0, analysis.ConsumesWithoutPublish);
+        Assert.Empty(analysis.AckedButLostByWindow);
+        Assert.Empty(analysis.AckedButLostByPattern);
     }
 
     [Fact]
@@ -142,5 +144,6 @@ public sealed class MessageLedgerAnalyzerTests
 
         Assert.Equal(30, analysis.AckedButLost);
         Assert.Equal(20, analysis.AckedButLostSample.Count);
+        Assert.True(analysis.AckedButLostSample[0].PublishStarted <= analysis.AckedButLostSample[^1].PublishStarted);
     }
 }
