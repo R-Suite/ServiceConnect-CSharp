@@ -31,6 +31,15 @@ public interface IBus : IAsyncDisposable
     /// <summary>
     /// Publishes a message to all subscribers of the message type.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Publish-confirm timeouts (the broker's ack does not arrive within the configured
+    /// publish timeout) are retried by the framework's RabbitMQ producer under the
+    /// at-least-once contract. The same <c>MessageId</c> is reused across attempts, so a
+    /// consumer-side deduplication filter pair (<c>BeforeConsuming</c> +
+    /// <c>OnConsumedSuccessfully</c>) can short-circuit duplicates by message id.
+    /// </para>
+    /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The bus has been disposed.</exception>
     /// <exception cref="Exceptions.OutgoingFiltersBlockedException">An outgoing filter returned <see cref="FilterAction.Stop"/> and blocked the publish.</exception>
@@ -40,6 +49,7 @@ public interface IBus : IAsyncDisposable
     /// Sends a message to a specific endpoint or to the configured queue mapping.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// When the message type maps to multiple queues (queue-mapping fan-out), every endpoint is
     /// attempted; per-endpoint failures are collected and surface as an
     /// <see cref="AggregateException"/>. Cancellation via <paramref name="cancellationToken"/>
@@ -47,6 +57,14 @@ public interface IBus : IAsyncDisposable
     /// has failed; on multi-endpoint fan-out with prior failures, the OCE is wrapped as the
     /// first inner exception of an <see cref="AggregateException"/> that also carries the prior
     /// endpoint failures (so callers see both the cancellation and the partial-fan-out failures).
+    /// </para>
+    /// <para>
+    /// Publish-confirm timeouts (the broker's ack does not arrive within the configured
+    /// publish timeout) are retried by the framework's RabbitMQ producer under the
+    /// at-least-once contract. The same <c>MessageId</c> is reused across attempts, so a
+    /// consumer-side deduplication filter pair (<c>BeforeConsuming</c> +
+    /// <c>OnConsumedSuccessfully</c>) can short-circuit duplicates by message id.
+    /// </para>
     /// </remarks>
     /// <exception cref="ArgumentNullException"><paramref name="message"/> is <see langword="null"/>.</exception>
     /// <exception cref="ObjectDisposedException">The bus has been disposed.</exception>

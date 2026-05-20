@@ -769,12 +769,28 @@ internal sealed class Producer : IProducer
         => _producerConnection.GetSnapshot();
 
     /// <summary>
-    /// Wraps <c>IChannel.BasicPublishAsync</c> with a configurable timeout.
-    /// If the broker ack does not arrive within <see cref="_publishTimeout"/>, the waiting task
-    /// is cancelled and a <see cref="TimeoutException"/> is thrown.  If the caller's own
-    /// <paramref name="cancellationToken"/> fires first, the normal
-    /// <see cref="OperationCanceledException"/> propagates unchanged.
+    /// Publishes via <c>IChannel.BasicPublishAsync</c> under a linked
+    /// <see cref="CancellationTokenSource"/> that fires after <c>_publishTimeout</c>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// If the caller's <paramref name="cancellationToken"/> fires, an
+    /// <see cref="OperationCanceledException"/> propagates unchanged.
+    /// </para>
+    /// <para>
+    /// If the broker ack does not arrive within <c>_publishTimeout</c>, the linked CTS fires
+    /// and the method throws <see cref="TimeoutException"/>. It also calls
+    /// <see cref="ProducerConnection.MarkResetRequired"/> so the next attempt's
+    /// <c>EnsureConnectedAsync</c> prologue rebuilds the channel before re-publishing.
+    /// The exception flows into <c>ExecuteRetryingPublishAsync</c>'s retriable arm:
+    /// a fresh channel is built and the same <c>BasicProperties</c> (including
+    /// <c>MessageId</c>) is re-published. The framework's at-least-once contract
+    /// (<see cref="ServiceConnect.Interfaces.IBus"/>) permits the broker to deliver both
+    /// the original and the retry — consumers must be idempotent or use a
+    /// <c>BeforeConsuming</c> + <c>OnConsumedSuccessfully</c> dedup filter pair to
+    /// short-circuit duplicates.
+    /// </para>
+    /// </remarks>
     private async ValueTask PublishWithTimeoutAsync(
         IChannel channel,
         string exchange,
