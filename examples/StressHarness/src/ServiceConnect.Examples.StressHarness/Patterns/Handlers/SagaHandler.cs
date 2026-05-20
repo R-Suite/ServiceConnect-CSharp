@@ -53,8 +53,11 @@ public sealed class SagaHandler(
             data.Stage = 1;
         }
         observations.Record(message.CorrelationId, data.Stage);
-        SignalStageArrival(context);
-        RecordSagaConsume(message, context);
+        var subFlowId = SignalStageArrival(context);
+        if (subFlowId is { } id)
+        {
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "process-manager", busTag, id, ledger, chaosClock);
+        }
         return Task.CompletedTask;
     }
 
@@ -65,8 +68,11 @@ public sealed class SagaHandler(
             data.Stage = 2;
         }
         observations.Record(message.CorrelationId, data.Stage);
-        SignalStageArrival(context);
-        RecordSagaConsume(message, context);
+        var subFlowId = SignalStageArrival(context);
+        if (subFlowId is { } id)
+        {
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "process-manager", busTag, id, ledger, chaosClock);
+        }
         return Task.CompletedTask;
     }
 
@@ -77,12 +83,15 @@ public sealed class SagaHandler(
             data.Stage = 3;
         }
         observations.Record(message.CorrelationId, data.Stage);
-        SignalStageArrival(context);
-        RecordSagaConsume(message, context);
+        var subFlowId = SignalStageArrival(context);
+        if (subFlowId is { } id)
+        {
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "process-manager", busTag, id, ledger, chaosClock);
+        }
         return Task.CompletedTask;
     }
 
-    private void SignalStageArrival(IConsumeContext context)
+    private Guid? SignalStageArrival(IConsumeContext context)
     {
         // Sub-flow id (one per stage message) lives on the StressHeaders.FlowId header;
         // the saga's own CorrelationId is on the message body and is what the framework
@@ -94,18 +103,8 @@ public sealed class SagaHandler(
         {
             accounting.RecordHandled(subFlowId);
             signals.Signal(subFlowId, busTag, context);
+            return subFlowId;
         }
-    }
-
-    private void RecordSagaConsume(Message message, IConsumeContext context)
-    {
-        // The sub-flow id on StressHeaders.FlowId is the ledger key for each stage;
-        // re-reads the header so all three overloads share one code path.
-        if (context.Headers.TryGetValue(StressHeaders.FlowId, out var raw)
-            && HeaderDecoder.Decode(raw) is { } flowIdStr
-            && Guid.TryParseExact(flowIdStr, "N", out var subFlowId))
-        {
-            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "process-manager", busTag, subFlowId, ledger, chaosClock);
-        }
+        return null;
     }
 }

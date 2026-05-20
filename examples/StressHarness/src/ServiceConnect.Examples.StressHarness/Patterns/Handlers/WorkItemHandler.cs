@@ -48,6 +48,10 @@ public sealed class WorkItemHandler(
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
             counters.Hits.AddOrUpdate($"{busTag}:{handlerTag}", 1, (_, n) => n + 1);
+            // WorkItemHandler is registered twice per bus (h1 + h2 tags) so the framework
+            // dispatches every WorkItem to both instances; each instance records its own
+            // consume row. The analyzer's PerMessageRedeliveries counter will reflect this
+            // fan-out — not real broker redelivery — during competing-consumers runs.
             LedgerHandlerHelpers.RecordLedgerConsume(message, context, "competing-consumers", busTag, flowId, ledger, chaosClock);
         }
         return Task.CompletedTask;
