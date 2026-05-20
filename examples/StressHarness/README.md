@@ -47,9 +47,11 @@ dotnet run --project src/ServiceConnect.Examples.StressHarness -- \
   [--chaos none]                      # only 'none' accepted today
   [--broker amqp://localhost]
   [--flow-timeout HH:MM:SS]
-  [--memory-budget-mb <int>]          # soak budget (default 50 MB)
+  [--memory-budget-mb <int>]          # soak budget (default 256 MB)
   [--report-dir out/]
 ```
+
+The default budget is calibrated for the standard 5-minute soak across all 14 patterns. A 5-minute run processes roughly 100 k flows; per-pattern result history, framework state, and RabbitMQ.Client buffers contribute around 133 MB of expected steady-state heap (~1.3 KB per flow). 256 MB gives that baseline comfortable headroom while still catching gross regressions. Longer soaks or higher-rate throughput runs will accumulate more in-flight state; raise the budget via `--memory-budget-mb` if the soak's flow assertions are green but the process-level memory check trips.
 
 ## Output
 

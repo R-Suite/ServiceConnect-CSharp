@@ -21,6 +21,6 @@ public sealed record HarnessCliOptions(
         Chaos: "none",
         BrokerUri: "amqp://localhost",
         FlowTimeout: TimeSpan.FromSeconds(10),
-        MemoryBudgetBytes: 50L * 1024 * 1024,
+        MemoryBudgetBytes: 256L * 1024 * 1024,
         ReportDir: "out");
 }
