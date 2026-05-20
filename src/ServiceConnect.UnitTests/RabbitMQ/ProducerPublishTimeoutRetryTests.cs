@@ -50,6 +50,7 @@ public class ProducerPublishTimeoutRetryTests
 
         var producer = new Producer(transport.Object, queue.Object, bus.Object, NullLogger<Producer>.Instance)
         {
+            // Bypass Task.Delay in the inter-attempt path so retry tests are not wall-clock bound.
             RetryDelayForTests = (_, _) => Task.CompletedTask,
         };
         return producer;
@@ -218,7 +219,7 @@ public class ProducerPublishTimeoutRetryTests
 
         Assert.Contains("wall-clock budget", ex.Message, StringComparison.Ordinal);
         // RetryCount=60, PublishTimeout=100ms — without the cap the test would burn 6+ seconds.
-        // The cap is 200ms; allow generous overhead (one more attempt's worth) before failing.
+        // The cap is 200ms; 1s allows ~800ms of CI overhead on top of the cap.
         Assert.True(sw.Elapsed < TimeSpan.FromSeconds(1),
             $"Test took {sw.Elapsed.TotalSeconds:F2}s but the cap was 200ms.");
     }
@@ -230,18 +231,35 @@ public class ProducerPublishTimeoutRetryTests
             publishTimeout: TimeSpan.FromMilliseconds(50),
             maxPublishWaitTime: Timeout.InfiniteTimeSpan,
             retryCount: 2);
-        producer.CreateConnectionForTests = MakeHangingConnectionFactory();
         var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = 0L;
 
         var channel = new Mock<IChannel>();
         channel.SetupGet(c => c.IsOpen).Returns(true);
+
+        var callCount = 0;
         channel.Setup(c => c.BasicPublishAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
                 It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
                 It.IsAny<CancellationToken>()))
             .Returns((string _, string _, bool _, BasicProperties _, ReadOnlyMemory<byte> _, CancellationToken ct) =>
-                new ValueTask(Task.Delay(Timeout.Infinite, ct)));
+            {
+                Interlocked.Increment(ref callCount);
+                return new ValueTask(Task.Delay(Timeout.Infinite, ct));
+            });
+
+        // Share the same channel mock between the initial _model and the reconnect factory so
+        // all 3 attempts (attempt 0 via _model, attempts 1 and 2 via factory) feed the same counter.
+        producer.CreateConnectionForTests = (_, _, _, _) =>
+        {
+            var conn = new Mock<IConnection>();
+            conn.SetupGet(c => c.IsOpen).Returns(true);
+            conn.Setup(c => c.CreateChannelAsync(
+                    It.IsAny<CreateChannelOptions?>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(channel.Object);
+            return Task.FromResult(conn.Object);
+        };
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
@@ -249,6 +267,10 @@ public class ProducerPublishTimeoutRetryTests
         var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
             producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
         Assert.DoesNotContain("wall-clock budget", ex.Message, StringComparison.Ordinal);
+        // retryCount=2 means 3 total attempts (0, 1, 2). With InfiniteTimeSpan the cap is
+        // disabled, so the loop runs all 3 before throwing. This complements the
+        // CapsRetryLoopWallClock test by verifying the loop did NOT short-circuit.
+        Assert.Equal(3, callCount);
     }
 
     [Fact]
