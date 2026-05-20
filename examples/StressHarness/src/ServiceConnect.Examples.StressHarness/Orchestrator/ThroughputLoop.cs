@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Cli;
 using ServiceConnect.Examples.StressHarness.Patterns;
 using ServiceConnect.Examples.StressHarness.Reporting;
@@ -30,6 +31,7 @@ public static class ThroughputLoop
         ConsoleReporter console,
         ReportMetadata metadata,
         IReadOnlyList<IFlowKeyedSingleton> flowKeyedSingletons,
+        ChaosClock chaosClock,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(opts);
@@ -40,13 +42,14 @@ public static class ThroughputLoop
         ArgumentNullException.ThrowIfNull(console);
         ArgumentNullException.ThrowIfNull(metadata);
         ArgumentNullException.ThrowIfNull(flowKeyedSingletons);
+        ArgumentNullException.ThrowIfNull(chaosClock);
         _ = console;     // ConsoleReporter is reserved for future progress lines; the rate
                          // loop intentionally stays silent per flow to avoid distorting the
                          // measured latency with synchronous console I/O.
 
         var startedAt = DateTimeOffset.UtcNow;
         var baseline = MemoryAssertions.SnapshotTotalMemory();
-        var runner = new FlowRunner(opts.FlowTimeout);
+        var runner = new FlowRunner(opts.FlowTimeout, chaosClock);
         var perPatternResults = drivers.ToDictionary(d => d.Name, _ => new List<DirectionResult>(), StringComparer.Ordinal);
 
         // Rate is flows per second per pattern slot, so the inter-tick period is the

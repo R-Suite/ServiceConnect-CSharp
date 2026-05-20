@@ -25,7 +25,7 @@ public sealed class ModeDispatcher(
     ReportMetadata metadata,
     IReadOnlyList<IFlowKeyedSingleton> flowKeyedSingletons,
     ILogger<ModeDispatcher> logger,
-    ChaosClock? chaosClock = null,
+    ChaosClock chaosClock,
     ChaosScheduler? chaosScheduler = null)
 {
     private readonly HarnessCliOptions _opts = opts;
@@ -42,20 +42,20 @@ public sealed class ModeDispatcher(
     [SuppressMessage("CodeQuality", "IDE0052", Justification = "Reserved for soak/throughput modes.")]
     private readonly ILogger<ModeDispatcher> _logger = logger;
 
-    // Chaos handles are accepted now so Program.cs can construct them at startup
-    // without a downstream consumer. The soak path will read both to drive
-    // window tagging and run the kill / restart loop; smoke and throughput
-    // ignore them.
-    [SuppressMessage("CodeQuality", "IDE0052", Justification = "Reserved for soak chaos wiring.")]
-    private readonly ChaosClock? _chaosClock = chaosClock;
-    [SuppressMessage("CodeQuality", "IDE0052", Justification = "Reserved for soak chaos wiring.")]
+    // ChaosClock is required: every FlowRunner stamps the active window onto each
+    // DirectionResult it produces, so the clock must be present even in modes that
+    // never advance it (smoke, throughput) — those modes simply report every flow
+    // as PreChaos. The scheduler is only meaningful in soak mode; smoke / throughput
+    // ignore it.
+    private readonly ChaosClock _chaosClock = chaosClock;
+    [SuppressMessage("CodeQuality", "IDE0052", Justification = "Soak mode forwards through to SoakLoop; smoke / throughput ignore.")]
     private readonly ChaosScheduler? _chaosScheduler = chaosScheduler;
 
     public Task<Report> RunAsync(CancellationToken cancellationToken) => _opts.Mode switch
     {
         "smoke" => RunSmokeAsync(cancellationToken),
-        "soak" => SoakLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, _flowKeyedSingletons, cancellationToken),
-        "throughput" => ThroughputLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, _flowKeyedSingletons, cancellationToken),
+        "soak" => SoakLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, _flowKeyedSingletons, _chaosClock, _chaosScheduler, _opts.ChaosRecoveryBudget, cancellationToken),
+        "throughput" => ThroughputLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, _flowKeyedSingletons, _chaosClock, cancellationToken),
         _ => throw new InvalidOperationException(
             string.Create(CultureInfo.InvariantCulture, $"unknown mode {_opts.Mode}")),
     };
@@ -64,7 +64,7 @@ public sealed class ModeDispatcher(
     {
         var startedAt = DateTimeOffset.UtcNow;
         var baseline = MemoryAssertions.SnapshotTotalMemory();
-        var runner = new FlowRunner(_opts.FlowTimeout);
+        var runner = new FlowRunner(_opts.FlowTimeout, _chaosClock);
         var perPattern = new Dictionary<string, List<DirectionResult>>(StringComparer.Ordinal);
         var processFailures = new List<string>();
 

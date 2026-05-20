@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Patterns;
 using ServiceConnect.Interfaces;
 
@@ -10,11 +11,18 @@ namespace ServiceConnect.Examples.StressHarness.Orchestrator;
 /// Runs a single <see cref="IPatternDriver"/> in both directions concurrently (α→β and
 /// β→α) under a per-direction wall-clock budget, returning one <see cref="DirectionResult"/>
 /// per leg so downstream aggregators can count successes and failures per bus without
-/// re-deriving the direction from a collapsed result.
+/// re-deriving the direction from a collapsed result. Every result is tagged with the
+/// <see cref="ChaosWindow"/> read from the shared <see cref="ChaosClock"/> at the moment
+/// the result is constructed, so a flow that started under <see cref="ChaosWindow.DuringChaos"/>
+/// but completed under <see cref="ChaosWindow.InRecovery"/> is attributed to the recovery
+/// window. The post-flow window is the meaningful one for soak roll-ups, because that's
+/// the window an operator wants to read against the SLO (did the system recover, not did
+/// it stay up while the killer was idle).
 /// </summary>
-public sealed class FlowRunner(TimeSpan flowTimeout)
+public sealed class FlowRunner(TimeSpan flowTimeout, ChaosClock chaosClock)
 {
     private readonly TimeSpan _flowTimeout = flowTimeout;
+    private readonly ChaosClock _chaosClock = chaosClock;
 
     /// <summary>
     /// Dispatches the driver against the bus pair in both directions in parallel. Each
@@ -75,7 +83,8 @@ public sealed class FlowRunner(TimeSpan flowTimeout)
                 Elapsed: sw.Elapsed,
                 MessagesSent: result.MessagesSent,
                 MessagesHandled: result.MessagesHandled,
-                AssertionFailures: result.AssertionFailures);
+                AssertionFailures: result.AssertionFailures,
+                Window: _chaosClock.CurrentWindow);
         }
         catch (OperationCanceledException)
         {
@@ -88,7 +97,8 @@ public sealed class FlowRunner(TimeSpan flowTimeout)
                 Elapsed: sw.Elapsed,
                 MessagesSent: 0,
                 MessagesHandled: 0,
-                AssertionFailures: [$"{driver.Name} {origin.ToHeaderValue()}→{expectedReceiver.ToHeaderValue()}: timed out after {_flowTimeout}"]);
+                AssertionFailures: [$"{driver.Name} {origin.ToHeaderValue()}→{expectedReceiver.ToHeaderValue()}: timed out after {_flowTimeout}"],
+                Window: _chaosClock.CurrentWindow);
         }
         catch (Exception ex)
         {
@@ -101,7 +111,8 @@ public sealed class FlowRunner(TimeSpan flowTimeout)
                 Elapsed: sw.Elapsed,
                 MessagesSent: 0,
                 MessagesHandled: 0,
-                AssertionFailures: [$"{driver.Name} {origin.ToHeaderValue()}→{expectedReceiver.ToHeaderValue()}: {ex.GetType().Name}: {ex.Message}"]);
+                AssertionFailures: [$"{driver.Name} {origin.ToHeaderValue()}→{expectedReceiver.ToHeaderValue()}: {ex.GetType().Name}: {ex.Message}"],
+                Window: _chaosClock.CurrentWindow);
         }
     }
 }
