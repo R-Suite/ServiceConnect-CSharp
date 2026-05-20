@@ -203,6 +203,102 @@ public sealed class LedgeredSenderTests
         Assert.Equal(PublishOutcome.Acked, row.Outcome);
     }
 
+    [Fact]
+    public async Task SendToManyAsync_stamps_MessageId_and_records_one_row_per_call()
+    {
+        var ledger = new MessageLedger();
+        var clock = new FakeChaosClock(ChaosWindow.PreChaos);
+        var inner = new FakeBus();
+        var wrapped = new LedgeredSender(inner, ledger, clock);
+
+        var flowId = Guid.NewGuid();
+        var opts = new SendOptions
+        {
+            Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [StressHeaders.FlowId] = flowId.ToString("N"),
+                [StressHeaders.OriginBus] = "alpha",
+                [StressHeaders.Pattern] = "p2p",
+            },
+        };
+
+        await wrapped.SendToManyAsync(new P2pPing(flowId), ["stress-a.work", "stress-b.work"], opts);
+
+        Assert.NotNull(inner.LastSendToManyOptions);
+        var stampedHeaders = inner.LastSendToManyOptions!.Value.Headers;
+        Assert.NotNull(stampedHeaders);
+        Assert.True(stampedHeaders!.ContainsKey(StressHeaders.MessageId));
+        Assert.True(Guid.TryParseExact(stampedHeaders[StressHeaders.MessageId], "N", out _));
+
+        var snapshot = ledger.Snapshot();
+        Assert.Single(snapshot.Publishes);
+        Assert.Equal(PublishOutcome.Acked, snapshot.Publishes[0].Outcome);
+    }
+
+    [Fact]
+    public async Task SendRequestMultiAsync_stamps_MessageId_and_records_acked()
+    {
+        var ledger = new MessageLedger();
+        var clock = new FakeChaosClock(ChaosWindow.PreChaos);
+        var inner = new FakeBus();
+        var wrapped = new LedgeredSender(inner, ledger, clock);
+
+        var flowId = Guid.NewGuid();
+        var opts = new RequestOptions
+        {
+            Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [StressHeaders.FlowId] = flowId.ToString("N"),
+                [StressHeaders.OriginBus] = "alpha",
+                [StressHeaders.Pattern] = "request-reply",
+            },
+        };
+
+        _ = await wrapped.SendRequestMultiAsync<P2pPing, P2pPing>(new P2pPing(flowId), opts);
+
+        Assert.NotNull(inner.LastSendRequestMultiOptions);
+        var stampedHeaders = inner.LastSendRequestMultiOptions!.Value.Headers;
+        Assert.NotNull(stampedHeaders);
+        Assert.True(stampedHeaders!.ContainsKey(StressHeaders.MessageId));
+        Assert.True(Guid.TryParseExact(stampedHeaders[StressHeaders.MessageId], "N", out _));
+
+        var snapshot = ledger.Snapshot();
+        Assert.Single(snapshot.Publishes);
+        Assert.Equal(PublishOutcome.Acked, snapshot.Publishes[0].Outcome);
+    }
+
+    [Fact]
+    public async Task PublishRequestAsync_stamps_MessageId_and_records_acked()
+    {
+        var ledger = new MessageLedger();
+        var clock = new FakeChaosClock(ChaosWindow.PreChaos);
+        var inner = new FakeBus();
+        var wrapped = new LedgeredSender(inner, ledger, clock);
+
+        var flowId = Guid.NewGuid();
+        var opts = new RequestOptions
+        {
+            Headers = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                [StressHeaders.FlowId] = flowId.ToString("N"),
+                [StressHeaders.OriginBus] = "alpha",
+                [StressHeaders.Pattern] = "request-reply",
+            },
+        };
+
+        await wrapped.PublishRequestAsync<P2pPing, P2pPing>(new P2pPing(flowId), onReply: _ => { }, opts);
+
+        Assert.NotNull(inner.LastPublishRequestOptions);
+        var stampedHeaders = inner.LastPublishRequestOptions!.Value.Headers;
+        Assert.NotNull(stampedHeaders);
+        Assert.True(stampedHeaders!.ContainsKey(StressHeaders.MessageId));
+        Assert.True(Guid.TryParseExact(stampedHeaders[StressHeaders.MessageId], "N", out _));
+
+        var snapshot = ledger.Snapshot();
+        Assert.Single(snapshot.Publishes);
+        Assert.Equal(PublishOutcome.Acked, snapshot.Publishes[0].Outcome);
+    }
+
     // ---------------------------------------------------------------------------
     // Test helpers
     // ---------------------------------------------------------------------------
@@ -219,6 +315,9 @@ public sealed class LedgeredSenderTests
         public SendOptions? LastSendOptions { get; private set; }
         public PublishOptions? LastPublishOptions { get; private set; }
         public RequestOptions? LastRequestOptions { get; private set; }
+        public SendOptions? LastSendToManyOptions { get; private set; }
+        public RequestOptions? LastSendRequestMultiOptions { get; private set; }
+        public RequestOptions? LastPublishRequestOptions { get; private set; }
 
         public Task SendAsync<T>(T message, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
         {
@@ -232,7 +331,11 @@ public sealed class LedgeredSenderTests
             return PublishAsyncImpl is null ? Task.CompletedTask : PublishAsyncImpl(message!, options, cancellationToken);
         }
 
-        public Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message => Task.CompletedTask;
+        public Task SendToManyAsync<T>(T message, IReadOnlyList<string> endPoints, SendOptions? options = null, CancellationToken cancellationToken = default) where T : Message
+        {
+            LastSendToManyOptions = options;
+            return Task.CompletedTask;
+        }
 
         public Task<TReply> SendRequestAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
             where TRequest : Message where TReply : Message
@@ -242,10 +345,18 @@ public sealed class LedgeredSenderTests
         }
 
         public Task<IList<TReply>> SendRequestMultiAsync<TRequest, TReply>(TRequest message, RequestOptions? options = null, CancellationToken cancellationToken = default)
-            where TRequest : Message where TReply : Message => Task.FromResult<IList<TReply>>([]);
+            where TRequest : Message where TReply : Message
+        {
+            LastSendRequestMultiOptions = options;
+            return Task.FromResult<IList<TReply>>([]);
+        }
 
         public Task PublishRequestAsync<TRequest, TReply>(TRequest message, Action<TReply> onReply, RequestOptions? options = null, CancellationToken cancellationToken = default)
-            where TRequest : Message where TReply : Message => Task.CompletedTask;
+            where TRequest : Message where TReply : Message
+        {
+            LastPublishRequestOptions = options;
+            return Task.CompletedTask;
+        }
 
         public Task RouteAsync<T>(T message, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default) where T : Message => Task.CompletedTask;
 
