@@ -174,7 +174,7 @@ public sealed class ModeDispatcher(
         var failedFlows = patternStats.Sum(p => p.Failed);
 
         return new Report(
-            ReportVersion: 2,
+            ReportVersion: 3,
             Mode: _opts.Mode,
             StartedAtUtc: startedAt,
             CompletedAtUtc: completedAt,
@@ -186,7 +186,8 @@ public sealed class ModeDispatcher(
             FailedFlows: failedFlows,
             Patterns: patternStats,
             ProcessAssertionFailures: processFailures,
-            Metadata: _metadata);
+            Metadata: _metadata,
+            Chaos: null);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

@@ -236,8 +236,38 @@ public static class SoakLoop
                 FailedFlows: failedFlows);
         }).ToList();
 
+        // Chaos roll-up is populated only when the scheduler ran. A non-chaos soak
+        // leaves Chaos null so consumers can tell "chaos disabled" from "chaos
+        // enabled but produced zero kills" (the latter would be a misconfiguration
+        // — interval longer than the soak duration — and is worth surfacing).
+        // Each DirectionResult was stamped with the active window by FlowRunner;
+        // this pass partitions the per-pattern lists by that stamp.
+        ChaosWindowStats? chaosStats = null;
+        if (chaosScheduler is not null)
+        {
+            var perPatternBreakdown = perPatternResults.Select(kv =>
+            {
+                var dirs = kv.Value;
+                return new ChaosPatternBreakdown(
+                    PatternName: kv.Key,
+                    PreChaosCount: dirs.Count(d => d.Window == ChaosWindow.PreChaos),
+                    DuringChaosCount: dirs.Count(d => d.Window == ChaosWindow.DuringChaos),
+                    InRecoveryCount: dirs.Count(d => d.Window == ChaosWindow.InRecovery),
+                    PostChaosCount: dirs.Count(d => d.Window == ChaosWindow.PostChaos));
+            }).ToList();
+
+            var events = chaosScheduler.Events
+                .Select(e => new ChaosEventSummary(e.KilledAt, e.RestartedAt, e.NodeName))
+                .ToList();
+
+            chaosStats = new ChaosWindowStats(
+                KillEventCount: events.Count,
+                Events: events,
+                PerPattern: perPatternBreakdown);
+        }
+
         return new Report(
-            ReportVersion: 2,
+            ReportVersion: 3,
             Mode: "soak",
             StartedAtUtc: startedAt,
             CompletedAtUtc: completedAt,
@@ -249,7 +279,8 @@ public static class SoakLoop
             FailedFlows: stats.Sum(s => s.Failed),
             Patterns: stats,
             ProcessAssertionFailures: processFailures,
-            Metadata: metadata);
+            Metadata: metadata,
+            Chaos: chaosStats);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

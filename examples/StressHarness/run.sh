@@ -11,6 +11,7 @@ MODE="${MODE:-smoke}"
 DURATION="${DURATION:-5m}"
 RATE="${RATE:-100}"
 PERSISTENCE="${PERSISTENCE:-inmemory}"
+CHAOS="${CHAOS:-none}"
 
 trap 'docker compose -p stress-harness down --remove-orphans >/dev/null 2>&1 || true' EXIT
 
@@ -26,4 +27,5 @@ dotnet run \
   --mode "$MODE" \
   --duration "$DURATION" \
   --rate "$RATE" \
-  --persistence "$PERSISTENCE"
+  --persistence "$PERSISTENCE" \
+  --chaos "$CHAOS"

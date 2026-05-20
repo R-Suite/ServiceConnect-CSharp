@@ -75,6 +75,39 @@ public static class MarkdownReportWriter
             }
         }
 
+        // Chaos sections render only when the soak's chaos scheduler was active.
+        // The block contains two tables: the kill-event timeline (one row per
+        // kill / restart pair the scheduler executed) and the per-pattern
+        // breakdown of direction outcomes by ChaosWindow. Both are soft signal —
+        // the hard chaos assertion is the bus-recovery check that already
+        // populates ProcessAssertionFailures earlier in the soak.
+        if (report.Chaos is not null)
+        {
+            var chaos = report.Chaos;
+            sb.AppendLine();
+            sb.AppendLine("## Chaos events");
+            sb.AppendLine();
+            sb.AppendLine($"**Kill events:** {chaos.KillEventCount}");
+            sb.AppendLine();
+            sb.AppendLine("| Killed | Restarted | Node |");
+            sb.AppendLine("|---|---|---|");
+            foreach (var e in chaos.Events)
+            {
+                sb.AppendLine($"| {e.KilledAt.ToString("o", CultureInfo.InvariantCulture)} | {e.RestartedAt.ToString("o", CultureInfo.InvariantCulture)} | {e.NodeName} |");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine("## Per-pattern chaos window breakdown");
+            sb.AppendLine();
+            sb.AppendLine("| Pattern | Pre | During | InRecovery | Post |");
+            sb.AppendLine("|---|---|---|---|---|");
+            foreach (var p in chaos.PerPattern)
+            {
+                sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                    $"| {p.PatternName} | {p.PreChaosCount} | {p.DuringChaosCount} | {p.InRecoveryCount} | {p.PostChaosCount} |"));
+            }
+        }
+
         await File.WriteAllTextAsync(filePath, sb.ToString(), cancellationToken);
     }
 }

@@ -44,7 +44,10 @@ dotnet run --project src/ServiceConnect.Examples.StressHarness -- \
   [--rate <int>]                      # throughput: flows/sec/pattern
   [--patterns p2p,pubsub,...]         # default: every pattern
   [--persistence inmemory|mongo]      # default: inmemory
-  [--chaos none]                      # only 'none' accepted today
+  [--chaos none|docker]               # default: none (docker requires --mode soak)
+  [--chaos-interval HH:MM:SS]         # time between kill events (default 30s)
+  [--chaos-downtime HH:MM:SS]         # time broker stays down (default 20s)
+  [--chaos-recovery-budget HH:MM:SS]  # wait after duration before recovery check (default 60s)
   [--broker amqp://localhost]
   [--flow-timeout HH:MM:SS]
   [--memory-budget-mb <int>]          # soak budget (default 256 MB)
@@ -55,7 +58,7 @@ The default budget is calibrated for the standard 5-minute soak across all 14 pa
 
 ## Output
 
-- `out/report.json` — structured per-pattern stats, per-bus counters, memory baseline/final, assertion outcomes, and latency histograms in throughput mode. Schema version pinned at `reportVersion: 1`.
+- `out/report.json` — structured per-pattern stats, per-bus counters, memory baseline/final, assertion outcomes, latency histograms in throughput mode, and (when `--chaos docker` was set) the chaos kill timeline and per-pattern window breakdown. Schema version pinned at `reportVersion: 3`.
 - `out/report.md` — human-readable summary suitable for paste-into-a-PR.
 - Exit code:
   - `0` — every flow passed and every process-level assertion held.
@@ -71,9 +74,32 @@ The default budget is calibrated for the standard 5-minute soak across all 14 pa
 - **Memory leaks** — soak mode samples `GC.GetTotalMemory` at the start and end and fails if growth exceeds `--memory-budget-mb`.
 - **Idempotency races** — a handler firing more than the expected count for a given flow id surfaces in the per-handler accounting.
 
-## What this harness does NOT catch
+## Chaos mode
 
-Broker-side fault behaviour — node kills, failover correctness, connection auto-recovery, channel restart, message loss under broker chaos — is out of scope for this harness. The `IBrokerChaos` contract is shipped inert (`NoopBrokerChaos`) so a future chaos / failover companion harness can plug in without a contract change. The `docker-compose.cluster.yml` file in this directory is the 3-node RabbitMQ cluster that companion will run against; it is not used by `run.sh` today.
+Pass `--chaos docker` to a soak run to have the harness periodically stop and start the broker container while the soak runs:
+
+```bash
+MODE=soak DURATION=00:05:00 CHAOS=docker ./run.sh
+```
+
+This exercises the framework's auto-recovery code paths (connection auto-recovery, channel restart, consumer-tag-change handling) — code that smoke and non-chaos soak runs can't reach.
+
+| Flag | Default | What it controls |
+|---|---|---|
+| `--chaos docker` | (off — defaults to `none`) | Enable chaos. Only supported with `--mode soak`. |
+| `--chaos-interval` | `30s` | Time between kill events. |
+| `--chaos-downtime` | `20s` | How long the broker stays down before restart. |
+| `--chaos-recovery-budget` | `60s` | Wait after the soak's `--duration` ends before the recovery assertion fires. |
+
+### Assertion model
+
+**Hard (exit 1 if failed):** after the recovery budget elapses, both `Bus α` and `Bus β` report `IsConsuming == true`. If either remains unhealthy, the run fails.
+
+**Soft (reported, never fails the run):** per-pattern flow counts broken down by chaos window (`pre-chaos`, `during-chaos`, `in-recovery`, `post-chaos`), kill-event timeline in `out/report.md`.
+
+### Scope
+
+This mode exercises single-broker restart only. Multi-node cluster failover (where the AMQP client transparently re-targets a surviving node) is a deferred follow-up — `docker-compose.cluster.yml` ships in the repo for that work but isn't used by this mode.
 
 ## Pattern coverage
 

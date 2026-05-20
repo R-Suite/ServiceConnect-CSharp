@@ -149,7 +149,7 @@ public static class ThroughputLoop
 
         var completedAt = DateTimeOffset.UtcNow;
         return new Report(
-            ReportVersion: 2,
+            ReportVersion: 3,
             Mode: "throughput",
             StartedAtUtc: startedAt,
             CompletedAtUtc: completedAt,
@@ -161,7 +161,8 @@ public static class ThroughputLoop
             FailedFlows: stats.Sum(s => s.Failed),
             Patterns: stats,
             ProcessAssertionFailures: processFailures,
-            Metadata: metadata);
+            Metadata: metadata,
+            Chaos: null);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list
