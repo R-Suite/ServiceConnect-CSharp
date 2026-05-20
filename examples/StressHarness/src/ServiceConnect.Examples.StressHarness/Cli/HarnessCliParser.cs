@@ -6,7 +6,7 @@ public static class HarnessCliParser
 {
     private static readonly string[] ValidModes = ["smoke", "soak", "throughput"];
     private static readonly string[] ValidPersistence = ["inmemory", "mongo"];
-    private static readonly string[] ValidChaos = ["none"];
+    private static readonly string[] ValidChaos = ["none", "docker"];
 
     public static HarnessCliOptions Parse(IReadOnlyList<string> args)
     {
@@ -25,48 +25,23 @@ public static class HarnessCliParser
                 return args[i];
             }
 
-            switch (flag)
+            opts = flag switch
             {
-                case "--mode":
-                    opts = opts with { Mode = Validate(Next(), ValidModes, flag) };
-                    break;
-                case "--duration":
-                    opts = opts with { Duration = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) };
-                    break;
-                case "--rate":
-                    opts = opts with { Rate = int.Parse(Next(), CultureInfo.InvariantCulture) };
-                    break;
-                case "--patterns":
-                    opts = opts with { Patterns = Next().Split(',', StringSplitOptions.RemoveEmptyEntries) };
-                    break;
-                case "--persistence":
-                    opts = opts with { Persistence = Validate(Next(), ValidPersistence, flag) };
-                    break;
-                case "--chaos":
-                    var chaos = Next();
-                    if (chaos == "docker")
-                    {
-                        throw new NotSupportedException(
-                            "--chaos docker is not yet implemented; pass --chaos none.");
-                    }
-
-                    opts = opts with { Chaos = Validate(chaos, ValidChaos, flag) };
-                    break;
-                case "--broker":
-                    opts = opts with { BrokerUri = Next() };
-                    break;
-                case "--flow-timeout":
-                    opts = opts with { FlowTimeout = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) };
-                    break;
-                case "--memory-budget-mb":
-                    opts = opts with { MemoryBudgetBytes = long.Parse(Next(), CultureInfo.InvariantCulture) * 1024 * 1024 };
-                    break;
-                case "--report-dir":
-                    opts = opts with { ReportDir = Next() };
-                    break;
-                default:
-                    throw new ArgumentException($"unknown flag {flag}");
-            }
+                "--mode" => opts with { Mode = Validate(Next(), ValidModes, flag) },
+                "--duration" => opts with { Duration = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
+                "--rate" => opts with { Rate = int.Parse(Next(), CultureInfo.InvariantCulture) },
+                "--patterns" => opts with { Patterns = Next().Split(',', StringSplitOptions.RemoveEmptyEntries) },
+                "--persistence" => opts with { Persistence = Validate(Next(), ValidPersistence, flag) },
+                "--chaos" => opts with { Chaos = Validate(Next(), ValidChaos, flag) },
+                "--broker" => opts with { BrokerUri = Next() },
+                "--flow-timeout" => opts with { FlowTimeout = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
+                "--memory-budget-mb" => opts with { MemoryBudgetBytes = long.Parse(Next(), CultureInfo.InvariantCulture) * 1024 * 1024 },
+                "--report-dir" => opts with { ReportDir = Next() },
+                "--chaos-interval" => opts with { ChaosInterval = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
+                "--chaos-downtime" => opts with { ChaosDowntime = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
+                "--chaos-recovery-budget" => opts with { ChaosRecoveryBudget = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
+                _ => throw new ArgumentException($"unknown flag {flag}"),
+            };
         }
 
         return opts;

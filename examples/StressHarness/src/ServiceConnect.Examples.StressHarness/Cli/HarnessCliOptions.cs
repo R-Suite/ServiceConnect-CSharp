@@ -6,11 +6,14 @@ public sealed record HarnessCliOptions(
     int Rate,
     IReadOnlyList<string>? Patterns,                                   // null = all
     string Persistence,                                                // inmemory | mongo
-    string Chaos,                                                      // "none"
+    string Chaos,                                                      // none | docker
     string BrokerUri,
     TimeSpan FlowTimeout,
     long MemoryBudgetBytes,
-    string ReportDir)
+    string ReportDir,
+    TimeSpan ChaosInterval,
+    TimeSpan ChaosDowntime,
+    TimeSpan ChaosRecoveryBudget)
 {
     public static HarnessCliOptions Defaults() => new(
         Mode: "smoke",
@@ -22,5 +25,8 @@ public sealed record HarnessCliOptions(
         BrokerUri: "amqp://localhost",
         FlowTimeout: TimeSpan.FromSeconds(10),
         MemoryBudgetBytes: 256L * 1024 * 1024,
-        ReportDir: "out");
+        ReportDir: "out",
+        ChaosInterval: TimeSpan.FromSeconds(30),
+        ChaosDowntime: TimeSpan.FromSeconds(20),
+        ChaosRecoveryBudget: TimeSpan.FromSeconds(60));
 }

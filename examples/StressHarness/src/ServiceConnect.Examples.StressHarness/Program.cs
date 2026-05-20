@@ -21,6 +21,19 @@ using ServiceConnect.Telemetry;
 try
 {
     var opts = HarnessCliParser.Parse(args);
+
+    // --chaos docker drives the kill / restart loop that only makes sense
+    // when the run is long enough for the kill→downtime→restart cadence to
+    // execute more than once. Smoke and throughput runs complete inside a
+    // single kill-interval, so the chaos scheduler would never fire and the
+    // chaos report rows would be empty noise; fail fast at parse time
+    // rather than surface an empty kill log to the operator.
+    if (opts.Chaos == "docker" && opts.Mode != "soak")
+    {
+        Console.Error.WriteLine("error: --chaos docker is only supported with --mode soak");
+        return 2;
+    }
+
     using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
 
     // Snapshot the runtime environment once at startup. Host name is captured via DNS

@@ -41,11 +41,29 @@ public class HarnessCliOptionsTests
     }
 
     [Fact]
-    public void Parse_ChaosDocker_ThrowsNotSupported()
+    public void Parse_NoArgs_ReturnsChaosDefaults()
     {
-        var ex = Assert.Throws<NotSupportedException>(() =>
-            HarnessCliParser.Parse(["--chaos", "docker"]));
-        Assert.Contains("not yet implemented", ex.Message);
+        var opts = HarnessCliParser.Parse([]);
+        Assert.Equal(TimeSpan.FromSeconds(30), opts.ChaosInterval);
+        Assert.Equal(TimeSpan.FromSeconds(20), opts.ChaosDowntime);
+        Assert.Equal(TimeSpan.FromSeconds(60), opts.ChaosRecoveryBudget);
+    }
+
+    [Fact]
+    public void Parse_ChaosDocker_AcceptedWithCustomTimings()
+    {
+        var opts = HarnessCliParser.Parse(
+        [
+            "--chaos", "docker",
+            "--chaos-interval", "00:00:15",
+            "--chaos-downtime", "00:00:10",
+            "--chaos-recovery-budget", "00:01:30",
+        ]);
+
+        Assert.Equal("docker", opts.Chaos);
+        Assert.Equal(TimeSpan.FromSeconds(15), opts.ChaosInterval);
+        Assert.Equal(TimeSpan.FromSeconds(10), opts.ChaosDowntime);
+        Assert.Equal(TimeSpan.FromSeconds(90), opts.ChaosRecoveryBudget);
     }
 
     [Fact]
