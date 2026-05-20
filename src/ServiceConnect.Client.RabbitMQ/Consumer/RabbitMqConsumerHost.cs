@@ -260,6 +260,11 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // changes are observed live by the handler. The handler matches on TagBefore == _consumerTag,
         // so the very-first invocation (where _consumerTag is still null) is a safe no-op.
         SubscribeToConsumerTagRecovery();
+        // Subscribe to the connection-level recovery event so the channel host's broker-cancelled
+        // flag is cleared when auto-recovery restores the consumer. Without this the flag latches
+        // forever on a transient broker outage and BusConsumingHealthCheck reports Unhealthy
+        // even though deliveries have resumed.
+        SubscribeToRecoveryReset();
 
         // Volatile.Write so a later acquire-fenced read in Stop/Dispose (or in the recovery
         // handler) observes the initial tag without depending on the ambient ordering of the
@@ -474,6 +479,32 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         }
     }
 
+    private void SubscribeToRecoveryReset()
+    {
+        // RecoverySucceededAsync fires after RabbitMQ.Client's auto-recovery has reconnected
+        // the connection AND topology recovery has re-declared the consumer (queue + bindings
+        // + BasicConsumeAsync). On a transient broker outage the earlier channel shutdown set
+        // _channelHost.IsCancelledByBroker; without this reset the flag latches forever and
+        // IBus.IsConsuming / BusConsumingHealthCheck stay Unhealthy even though delivery has
+        // resumed. Permanent rejections (queue truly deleted) won't fire this event because
+        // topology recovery fails, so the flag remains latched for that case — preserving
+        // the original "operator alerts on real broker-side cancellation" semantics.
+        //
+        // ConsumerTagChangeAfterRecoveryAsync fires only when the tag actually changes, which
+        // is too narrow for the reset: we want to clear the flag on EVERY successful recovery,
+        // not just those where the broker happened to reassign the tag.
+        if (_subscribedUnderlyingConnection is not null)
+        {
+            _subscribedUnderlyingConnection.RecoverySucceededAsync += OnConnectionRecoverySucceededAsync;
+        }
+    }
+
+    private Task OnConnectionRecoverySucceededAsync(object? sender, AsyncEventArgs args)
+    {
+        _channelHost.NotifyRecoverySucceeded();
+        return Task.CompletedTask;
+    }
+
     private Task OnConsumerTagChangedAfterRecoveryAsync(object? sender, ConsumerTagChangedAfterRecoveryEventArgs args)
     {
         // After auto-recovery the broker may assign a new tag for our consumer. Update
@@ -528,9 +559,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // Unsubscribe the consumer-tag recovery handler BEFORE BasicCancelAsync so a
         // concurrent recovery event cannot swap _consumerTag while BasicCancelAsync is
         // using it. DisposeAsync re-runs this unsubscribe; it's null-safe and idempotent.
+        // The recovery-reset handler is unsubscribed alongside it so a late recovery event
+        // fired during shutdown cannot flip the cancelled flag back to healthy on a host
+        // that is intentionally tearing down.
         if (_subscribedUnderlyingConnection is not null)
         {
             _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
+            _subscribedUnderlyingConnection.RecoverySucceededAsync -= OnConnectionRecoverySucceededAsync;
         }
 
         // Unsubscribe channel-shutdown handlers BEFORE BasicCancelAsync. Sending BasicCancel
@@ -615,10 +650,13 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // event firing concurrently with the cancel could otherwise swap _consumerTag while
         // BasicCancelAsync is using it, targeting a stale tag. The remaining connection-level
         // unsubscribes (channel/connection shutdown, blocked/unblocked) stay near the end of
-        // dispose where they were — those don't read host state during teardown.
+        // dispose where they were — those don't read host state during teardown. The
+        // recovery-reset handler is unsubscribed alongside the tag-change handler so a late
+        // recovery event cannot clear the cancelled flag on a host that is tearing down.
         if (_subscribedUnderlyingConnection is not null)
         {
             _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync -= OnConsumerTagChangedAfterRecoveryAsync;
+            _subscribedUnderlyingConnection.RecoverySucceededAsync -= OnConnectionRecoverySucceededAsync;
         }
 
         // Volatile.Read pairs with OnConsumerTagChangedAfterRecoveryAsync's write — same
@@ -713,9 +751,10 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             subscribedConn.ConnectionShutdownAsync -= OnConnectionShutdownAsync;
             subscribedConn.ConnectionBlockedAsync -= OnConnectionBlockedAsync;
             subscribedConn.ConnectionUnblockedAsync -= OnConnectionUnblockedAsync;
-            // ConsumerTagChangeAfterRecoveryAsync was already unsubscribed earlier in dispose
-            // to prevent recovery-during-cancel swaps; only the connection-level shutdown
-            // handlers are unsubscribed here.
+            // ConsumerTagChangeAfterRecoveryAsync and RecoverySucceededAsync were already
+            // unsubscribed earlier in dispose to prevent recovery-during-cancel swaps and a
+            // late recovery clearing the cancelled flag on a tearing-down host; only the
+            // connection-level shutdown handlers are unsubscribed here.
             _subscribedUnderlyingConnection = null;
         }
 

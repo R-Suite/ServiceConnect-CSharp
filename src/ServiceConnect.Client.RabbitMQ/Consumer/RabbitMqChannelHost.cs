@@ -48,7 +48,10 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
     /// True if a non-Application channel shutdown fired (broker tore down the channel, e.g.
     /// queue deleted, policy expired, peer protocol error), or if the host explicitly
     /// reported a broker-initiated basic.cancel via <see cref="NotifyBrokerCancelled"/>.
-    /// Latched until disposal.
+    /// Cleared by <see cref="NotifyRecoverySucceeded"/>, which the consumer host invokes when
+    /// RabbitMQ.Client's automatic recovery completes (<c>RecoverySucceededAsync</c>). For
+    /// permanent broker rejections the recovery event does not fire, so the flag remains
+    /// latched until disposal.
     /// </summary>
     internal bool IsCancelledByBroker => Volatile.Read(ref _consumerCancelledByBroker) != 0;
 
@@ -59,6 +62,15 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
     /// </summary>
     internal void NotifyBrokerCancelled()
         => Interlocked.Exchange(ref _consumerCancelledByBroker, 1);
+
+    /// <summary>
+    /// Resets the broker-cancelled flag. Called by the consumer host when RabbitMQ.Client's
+    /// automatic recovery has successfully restored the connection and re-declared the consumer
+    /// (<c>RecoverySucceededAsync</c> event). Idempotent — calling on an already-unset flag
+    /// is a no-op.
+    /// </summary>
+    internal void NotifyRecoverySucceeded()
+        => Interlocked.Exchange(ref _consumerCancelledByBroker, 0);
 
     /// <summary>
     /// Removes the channel-shutdown event subscriptions without closing or disposing the channels.
