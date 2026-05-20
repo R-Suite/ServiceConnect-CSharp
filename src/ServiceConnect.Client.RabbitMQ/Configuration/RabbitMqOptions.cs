@@ -66,6 +66,14 @@ public sealed record class RabbitMqOptions
     /// <summary>Maximum time to wait for a broker ack under publisher confirms. Default: 30s.</summary>
     public TimeSpan? PublishTimeout { get; set; }
 
+    /// <summary>
+    /// Wall-clock cap on the publisher's retry loop. Default: 120s. Set to
+    /// <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to disable the cap.
+    /// Distinct from <see cref="PublishTimeout"/>: that bounds a single confirm-ack
+    /// wait, this bounds the total wall-clock across retry attempts.
+    /// </summary>
+    public TimeSpan? MaxPublishWaitTime { get; set; }
+
     /// <summary>Maximum outstanding publisher confirms before back-pressure. Default: 256.</summary>
     public int? MaxOutstandingPublishConfirms { get; set; }
 
@@ -123,6 +131,13 @@ public sealed record class RabbitMqOptions
         if (PublishTimeout is { } publishTimeout && publishTimeout <= TimeSpan.Zero)
         {
             errors.Add($"PublishTimeout must be positive (was {publishTimeout}).");
+        }
+
+        if (MaxPublishWaitTime is { } maxPublishWaitTime
+            && maxPublishWaitTime <= TimeSpan.Zero
+            && maxPublishWaitTime != Timeout.InfiniteTimeSpan)
+        {
+            errors.Add($"MaxPublishWaitTime must be positive or Timeout.InfiniteTimeSpan (was {maxPublishWaitTime}).");
         }
 
         if (MaxOutstandingPublishConfirms is { } maxOutstanding && maxOutstanding <= 0)
