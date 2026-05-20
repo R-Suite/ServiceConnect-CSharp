@@ -24,7 +24,8 @@ public class JsonReportWriterTests
             [
                 new PatternStats("p2p", 2, 2, 0, 1, 0, 1, 0, 5.0, 10.0, 15.0, [], []),
             ],
-            ProcessAssertionFailures: []);
+            ProcessAssertionFailures: [],
+            Metadata: new ReportMetadata("test-host", "net10.0", "amqp://localhost", "inmemory"));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stress-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -43,6 +44,8 @@ public class JsonReportWriterTests
             Assert.Equal(1, doc.RootElement.GetProperty("patterns")[0].GetProperty("alphaPassed").GetInt32());
             Assert.Equal(1, doc.RootElement.GetProperty("patterns")[0].GetProperty("betaPassed").GetInt32());
             Assert.Equal(0, doc.RootElement.GetProperty("patterns")[0].GetProperty("failedFlows").GetArrayLength());
+            Assert.Equal("test-host", doc.RootElement.GetProperty("metadata").GetProperty("hostname").GetString());
+            Assert.Equal("inmemory", doc.RootElement.GetProperty("metadata").GetProperty("persistenceMode").GetString());
         }
         finally
         {

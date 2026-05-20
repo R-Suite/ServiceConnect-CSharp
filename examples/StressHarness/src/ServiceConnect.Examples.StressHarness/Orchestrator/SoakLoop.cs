@@ -29,6 +29,7 @@ public static class SoakLoop
         IBus beta,
         FlowAccounting accounting,
         ConsoleReporter console,
+        ReportMetadata metadata,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(opts);
@@ -37,49 +38,63 @@ public static class SoakLoop
         ArgumentNullException.ThrowIfNull(beta);
         ArgumentNullException.ThrowIfNull(accounting);
         ArgumentNullException.ThrowIfNull(console);
+        ArgumentNullException.ThrowIfNull(metadata);
 
         var startedAt = DateTimeOffset.UtcNow;
         var baseline = MemoryAssertions.SnapshotTotalMemory();
         var runner = new FlowRunner(opts.FlowTimeout);
         var perPatternResults = drivers.ToDictionary(d => d.Name, _ => new List<DirectionResult>(), StringComparer.Ordinal);
 
-        var sw = Stopwatch.StartNew();
-        var tick = 0;
-        while (sw.Elapsed < opts.Duration && !cancellationToken.IsCancellationRequested)
+        // Switch the console into soak mode for the duration of the loop. The reporter
+        // suppresses per-flow PASS lines (replacing them with a periodic heartbeat) and
+        // still prints failures inline. The finally ensures the heartbeat timer is
+        // released even if a driver raises mid-loop, so the disposer in Program.cs has
+        // nothing left to clean up.
+        console.BeginSoakMode(TimeSpan.FromSeconds(5));
+        try
         {
-            tick++;
-            foreach (var driver in drivers)
+            var sw = Stopwatch.StartNew();
+            var tick = 0;
+            while (sw.Elapsed < opts.Duration && !cancellationToken.IsCancellationRequested)
             {
-                if (opts.Patterns is not null && !opts.Patterns.Contains(driver.Name))
+                tick++;
+                foreach (var driver in drivers)
                 {
-                    continue;
+                    if (opts.Patterns is not null && !opts.Patterns.Contains(driver.Name))
+                    {
+                        continue;
+                    }
+
+                    // Soak mode has no fixed tick total — the loop runs until the wall-clock
+                    // budget expires. Pass -1 so the console line reads "[tick N/-1]"; the
+                    // reporter does no arithmetic on the value and downstream consumers treat
+                    // the negative as "unknown total".
+                    console.Heartbeat(tick, totalTicks: -1, driver.Name);
+
+                    var directions = await runner.RunBothDirectionsAsync(
+                        driver, alpha, beta, accounting, cancellationToken).ConfigureAwait(false);
+
+                    foreach (var dir in directions)
+                    {
+                        perPatternResults[driver.Name].Add(dir);
+                        console.FlowResult(
+                            string.Create(CultureInfo.InvariantCulture, $"{driver.Name} {dir.DirectionLabel}"),
+                            dir.Succeeded,
+                            dir.Elapsed,
+                            dir.AssertionFailures.Count > 0 ? string.Join("; ", dir.AssertionFailures) : null);
+                    }
                 }
 
-                // Soak mode has no fixed tick total — the loop runs until the wall-clock
-                // budget expires. Pass -1 so the console line reads "[tick N/-1]"; the
-                // reporter does no arithmetic on the value and downstream consumers treat
-                // the negative as "unknown total".
-                console.Heartbeat(tick, totalTicks: -1, driver.Name);
-
-                var directions = await runner.RunBothDirectionsAsync(
-                    driver, alpha, beta, accounting, cancellationToken).ConfigureAwait(false);
-
-                foreach (var dir in directions)
-                {
-                    perPatternResults[driver.Name].Add(dir);
-                    console.FlowResult(
-                        string.Create(CultureInfo.InvariantCulture, $"{driver.Name} {dir.DirectionLabel}"),
-                        dir.Succeeded,
-                        dir.Elapsed,
-                        dir.AssertionFailures.Count > 0 ? string.Join("; ", dir.AssertionFailures) : null);
-                }
+                // Drop accounting entries for flows that have already reached their expected
+                // handler count so the per-flow dictionaries stay bounded by the in-flight set.
+                // The end-of-run Reconcile() still sees any under-handled flows because
+                // TryRemoveCompleted only evicts rows where observed >= expected.
+                accounting.TryRemoveCompleted();
             }
-
-            // Drop accounting entries for flows that have already reached their expected
-            // handler count so the per-flow dictionaries stay bounded by the in-flight set.
-            // The end-of-run Reconcile() still sees any under-handled flows because
-            // TryRemoveCompleted only evicts rows where observed >= expected.
-            accounting.TryRemoveCompleted();
+        }
+        finally
+        {
+            console.EndSoakMode();
         }
 
         var final = MemoryAssertions.SnapshotTotalMemory();
@@ -144,7 +159,8 @@ public static class SoakLoop
             PassedFlows: stats.Sum(s => s.Passed),
             FailedFlows: stats.Sum(s => s.Failed),
             Patterns: stats,
-            ProcessAssertionFailures: processFailures);
+            ProcessAssertionFailures: processFailures,
+            Metadata: metadata);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

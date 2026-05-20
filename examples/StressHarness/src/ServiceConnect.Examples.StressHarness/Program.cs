@@ -1,3 +1,5 @@
+using System.Net;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -20,6 +22,17 @@ try
 {
     var opts = HarnessCliParser.Parse(args);
     using var loggerFactory = LoggerFactory.Create(b => b.AddConsole().SetMinimumLevel(LogLevel.Information));
+
+    // Snapshot the runtime environment once at startup. Host name is captured via DNS
+    // rather than Environment.MachineName so the value matches the FQDN the operator
+    // would see in a deployment dashboard; the runtime description includes both the
+    // framework moniker and the patch revision so a report from net10.0.3 is
+    // distinguishable from net10.0.0.
+    var metadata = new ReportMetadata(
+        Hostname: Dns.GetHostName(),
+        RuntimeVersion: RuntimeInformation.FrameworkDescription,
+        BrokerUri: opts.BrokerUri,
+        PersistenceMode: opts.Persistence);
 
     var harnessOptions = new HarnessOptions(
         BrokerUri: opts.BrokerUri,
@@ -329,13 +342,14 @@ try
         loggerFactory,
         CancellationToken.None);
 
-    var console = new ConsoleReporter();
+    using var console = new ConsoleReporter();
     var dispatcher = new ModeDispatcher(
         opts,
         drivers,
         host,
         accounting,
         console,
+        metadata,
         loggerFactory.CreateLogger<ModeDispatcher>());
 
     var report = await dispatcher.RunAsync(CancellationToken.None);

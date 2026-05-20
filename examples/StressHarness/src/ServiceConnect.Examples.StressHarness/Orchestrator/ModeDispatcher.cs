@@ -21,6 +21,7 @@ public sealed class ModeDispatcher(
     HarnessHost host,
     FlowAccounting accounting,
     ConsoleReporter console,
+    ReportMetadata metadata,
     ILogger<ModeDispatcher> logger)
 {
     private readonly HarnessCliOptions _opts = opts;
@@ -28,6 +29,7 @@ public sealed class ModeDispatcher(
     private readonly HarnessHost _host = host;
     private readonly FlowAccounting _accounting = accounting;
     private readonly ConsoleReporter _console = console;
+    private readonly ReportMetadata _metadata = metadata;
 
     // Logger reserved for soak/throughput modes which need progress logging beyond the
     // per-flow console reporter. Smoke mode prints directly through the reporter so this
@@ -38,8 +40,8 @@ public sealed class ModeDispatcher(
     public Task<Report> RunAsync(CancellationToken cancellationToken) => _opts.Mode switch
     {
         "smoke" => RunSmokeAsync(cancellationToken),
-        "soak" => SoakLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, cancellationToken),
-        "throughput" => ThroughputLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, cancellationToken),
+        "soak" => SoakLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, cancellationToken),
+        "throughput" => ThroughputLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, cancellationToken),
         _ => throw new InvalidOperationException(
             string.Create(CultureInfo.InvariantCulture, $"unknown mode {_opts.Mode}")),
     };
@@ -155,7 +157,8 @@ public sealed class ModeDispatcher(
             PassedFlows: passedFlows,
             FailedFlows: failedFlows,
             Patterns: patternStats,
-            ProcessAssertionFailures: processFailures);
+            ProcessAssertionFailures: processFailures,
+            Metadata: _metadata);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

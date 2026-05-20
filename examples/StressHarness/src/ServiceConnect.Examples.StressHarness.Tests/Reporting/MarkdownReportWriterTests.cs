@@ -29,7 +29,8 @@ public class MarkdownReportWriterTests
                         Direction: "α→β",
                         Failures: ["handler fired 1 time, expected 2"])]),
             ],
-            ProcessAssertionFailures: []);
+            ProcessAssertionFailures: [],
+            Metadata: new ReportMetadata("test-host", "net10.0", "amqp://localhost", "inmemory"));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stress-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -39,6 +40,9 @@ public class MarkdownReportWriterTests
         {
             await MarkdownReportWriter.WriteAsync(report, path, CancellationToken.None);
             var md = await File.ReadAllTextAsync(path);
+            Assert.Contains("**Host:** test-host", md);
+            Assert.Contains("**Broker:** amqp://localhost", md);
+            Assert.Contains("**Persistence:** inmemory", md);
             Assert.Contains("**Mode:** smoke", md);
             Assert.Contains("27 / 28", md);
             Assert.Contains("| p2p | 2 | 2/0 | 1/0 | 1/0 | ", md);

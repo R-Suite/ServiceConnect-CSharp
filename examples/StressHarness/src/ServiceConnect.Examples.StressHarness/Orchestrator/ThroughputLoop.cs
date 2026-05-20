@@ -28,6 +28,7 @@ public static class ThroughputLoop
         IBus beta,
         FlowAccounting accounting,
         ConsoleReporter console,
+        ReportMetadata metadata,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(opts);
@@ -36,6 +37,7 @@ public static class ThroughputLoop
         ArgumentNullException.ThrowIfNull(beta);
         ArgumentNullException.ThrowIfNull(accounting);
         ArgumentNullException.ThrowIfNull(console);
+        ArgumentNullException.ThrowIfNull(metadata);
         _ = console;     // ConsoleReporter is reserved for future progress lines; the rate
                          // loop intentionally stays silent per flow to avoid distorting the
                          // measured latency with synchronous console I/O.
@@ -139,7 +141,8 @@ public static class ThroughputLoop
             PassedFlows: stats.Sum(s => s.Passed),
             FailedFlows: stats.Sum(s => s.Failed),
             Patterns: stats,
-            ProcessAssertionFailures: processFailures);
+            ProcessAssertionFailures: processFailures,
+            Metadata: metadata);
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

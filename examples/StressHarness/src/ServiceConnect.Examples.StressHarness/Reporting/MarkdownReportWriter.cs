@@ -16,6 +16,11 @@ public static class MarkdownReportWriter
         var sb = new StringBuilder();
         sb.AppendLine("# Stress harness report");
         sb.AppendLine();
+        sb.AppendLine($"**Host:** {report.Metadata.Hostname}");
+        sb.AppendLine($"**Runtime:** {report.Metadata.RuntimeVersion}");
+        sb.AppendLine($"**Broker:** {report.Metadata.BrokerUri}");
+        sb.AppendLine($"**Persistence:** {report.Metadata.PersistenceMode}");
+        sb.AppendLine();
         sb.AppendLine($"**Mode:** {report.Mode}");
         sb.AppendLine($"**Started:** {report.StartedAtUtc.ToString("o", CultureInfo.InvariantCulture)}");
         sb.AppendLine($"**Completed:** {report.CompletedAtUtc.ToString("o", CultureInfo.InvariantCulture)}");
