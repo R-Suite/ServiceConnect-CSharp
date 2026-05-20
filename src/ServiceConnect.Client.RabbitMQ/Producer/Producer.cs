@@ -200,13 +200,6 @@ internal sealed class Producer : IProducer
                 throw;
             }
             catch (OperationCanceledException) { throw; }
-            catch (TimeoutException)
-            {
-                // PublishWithTimeoutAsync already flagged MarkResetRequired before throwing —
-                // do not double-flag and do not retry. The next publish's EnsureConnectedAsync
-                // consumes the flag and rebuilds the channel.
-                throw;
-            }
             catch (ObjectDisposedException)
             {
                 // The producer was disposed mid-loop: EnsureConnectedAsync (or the post-lock
@@ -287,9 +280,16 @@ internal sealed class Producer : IProducer
     // loop that tears down the connection for a publish-layer error. Only transport-level
     // failures should flow into the reconnect-retry path.
     //
-    // TimeoutException comes from PublishWithTimeoutAsync when the broker ack doesn't arrive
-    // within _publishTimeout. A reconnect won't help — the connection is considered stalled/dead;
-    // propagate immediately so callers can decide whether to retry at a higher level.
+    // OperationCanceledException is caller-driven cancellation — retrying it would violate
+    // the caller's intent.
+    //
+    // TimeoutException (from PublishWithTimeoutAsync's _publishTimeout firing) IS retriable:
+    // the publish-confirm ack timer fired before the broker acked, and a fresh channel
+    // built by the next attempt's EnsureConnectedAsync prologue can resubmit. The framework's
+    // at-least-once delivery contract (IBus.cs:9-27) permits duplicate delivery; consumers
+    // must be idempotent or use a BeforeConsuming + OnConsumedSuccessfully dedup filter
+    // pair. The same BasicProperties (including MessageId) is reused across attempts, so
+    // dedup by MessageId is valid.
     private static bool IsRetriablePublishException(Exception ex)
     {
         if (ex is global::RabbitMQ.Client.Exceptions.PublishException)
@@ -298,11 +298,6 @@ internal sealed class Producer : IProducer
         }
 
         if (ex is OperationCanceledException)
-        {
-            return false;
-        }
-
-        if (ex is TimeoutException)
         {
             return false;
         }

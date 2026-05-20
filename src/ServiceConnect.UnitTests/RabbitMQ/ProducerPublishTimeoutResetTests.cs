@@ -22,11 +22,15 @@ public sealed class ProducerPublishTimeoutResetTests
     {
         var transport = new Mock<ITransportConfiguration>();
         transport.SetupGet(t => t.Host).Returns("localhost");
+        // RetryCount:0 — these tests assert the single-attempt timeout mechanism (deferred
+        // reset flag, no inline reconnect). With TimeoutException now retriable, a non-zero
+        // retryCount would cause EnsureConnectedAsync to attempt a real connection on the
+        // retry, which hangs and never resolves in a unit test without a broker.
         transport.SetupGet(t => t.ClientSettings).Returns(new Dictionary<string, object>
         {
             [RabbitMQSettingKeys.PublishTimeout] = publishTimeout,
-            [RabbitMQSettingKeys.RetryCount] = (ushort)1,
-            [RabbitMQSettingKeys.RetrySeconds] = (ushort)1,
+            [RabbitMQSettingKeys.RetryCount] = (ushort)0,
+            [RabbitMQSettingKeys.RetrySeconds] = (ushort)0,
         });
 
         var queue = new Mock<IQueueConfiguration>();

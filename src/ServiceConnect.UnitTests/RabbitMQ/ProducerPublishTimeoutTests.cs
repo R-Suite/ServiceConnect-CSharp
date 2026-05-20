@@ -14,19 +14,26 @@ namespace ServiceConnect.UnitTests.RabbitMQ;
 /// </summary>
 public class ProducerPublishTimeoutTests
 {
-    private static Producer CreateProducer(TimeSpan? publishTimeout = null)
+    private static Producer CreateProducer(
+        TimeSpan? publishTimeout = null,
+        TimeSpan? maxPublishWaitTime = null,
+        ushort retryCount = 1)
     {
         var transport = new Mock<ITransportConfiguration>();
         transport.SetupGet(t => t.Host).Returns("localhost");
 
         var settings = new Dictionary<string, object>
         {
-            [RabbitMQSettingKeys.RetryCount] = (ushort)1,
+            [RabbitMQSettingKeys.RetryCount] = retryCount,
             [RabbitMQSettingKeys.RetrySeconds] = (ushort)0,
         };
         if (publishTimeout.HasValue)
         {
             settings[RabbitMQSettingKeys.PublishTimeout] = publishTimeout.Value;
+        }
+        if (maxPublishWaitTime.HasValue)
+        {
+            settings[RabbitMQSettingKeys.MaxPublishWaitTime] = maxPublishWaitTime.Value;
         }
 
         transport.SetupGet(t => t.ClientSettings).Returns(settings);
@@ -73,11 +80,41 @@ public class ProducerPublishTimeoutTests
         return channel;
     }
 
-    [Fact]
-    public async Task PublishAsync_ThrowsTimeoutException_WhenBasicPublishHangs()
+    // Builds a fake IConnection that always produces a new hanging channel. Used by the
+    // wall-clock budget tests to keep EnsureConnectedAsync (post-timeout reconnect) fast so
+    // the retry loop's only source of latency is the hanging BasicPublishAsync, not a real
+    // connection attempt to a broker that isn't running in unit tests.
+    private static Func<ConnectionFactory, string[], string, CancellationToken, Task<IConnection>> MakeHangingConnectionFactory()
     {
-        // Arrange: short timeout so the test doesn't wait long
-        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        return (_, _, _, _) =>
+        {
+            var channel = new Mock<IChannel>();
+            channel.SetupGet(c => c.IsOpen).Returns(true);
+            channel.Setup(c => c.BasicPublishAsync(
+                    It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                    It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns((string _, string _, bool _, BasicProperties _, ReadOnlyMemory<byte> _, CancellationToken ct) =>
+                    new ValueTask(Task.Delay(Timeout.Infinite, ct)));
+
+            var conn = new Mock<IConnection>();
+            conn.SetupGet(c => c.IsOpen).Returns(true);
+            conn.Setup(c => c.CreateChannelAsync(
+                    It.IsAny<CreateChannelOptions?>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(channel.Object);
+            return Task.FromResult(conn.Object);
+        };
+    }
+
+    [Fact]
+    public async Task PublishAsync_ThrowsTimeoutException_WhenBasicPublishHangsForLongerThanBudget()
+    {
+        var producer = CreateProducer(
+            publishTimeout: TimeSpan.FromMilliseconds(100),
+            maxPublishWaitTime: TimeSpan.FromMilliseconds(300),
+            retryCount: 10);
+        producer.CreateConnectionForTests = MakeHangingConnectionFactory();
         var channel = MakeHangingChannel();
         var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = 0L;
@@ -85,18 +122,22 @@ public class ProducerPublishTimeoutTests
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
 
-        // Act & Assert
-        await Assert.ThrowsAsync<TimeoutException>(() =>
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
             producer.PublishAsync(typeof(object), new byte[] { 1, 2, 3 }));
+        Assert.Contains("wall-clock budget", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task SendAsync_ByType_ThrowsAggregateException_ContainingTimeoutException_WhenBasicPublishHangs()
+    public async Task SendAsync_ByType_ThrowsAggregateException_ContainingTimeoutException_WhenBasicPublishHangsForLongerThanBudget()
     {
-        // B.2 (fan-out continue-on-failure): SendAsync(Type) now collects per-endpoint failures
-        // and surfaces them as AggregateException. A single-endpoint mapping still wraps the
-        // TimeoutException — callers must unwrap or use .Handle()/.Flatten().
-        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        // SendAsync(Type) collects per-endpoint failures and surfaces them as AggregateException.
+        // A single-endpoint mapping wraps the TimeoutException — callers must unwrap or use
+        // .Handle()/.Flatten().
+        var producer = CreateProducer(
+            publishTimeout: TimeSpan.FromMilliseconds(100),
+            maxPublishWaitTime: TimeSpan.FromMilliseconds(300),
+            retryCount: 10);
+        producer.CreateConnectionForTests = MakeHangingConnectionFactory();
         var channel = MakeHangingChannel();
 
         SetField(producer, "_model", channel.Object);
@@ -106,33 +147,44 @@ public class ProducerPublishTimeoutTests
             producer.SendAsync(typeof(object), new byte[] { 1, 2, 3 }));
 
         Assert.Single(ex.InnerExceptions);
-        Assert.IsType<TimeoutException>(ex.InnerExceptions[0]);
+        var timeout = Assert.IsType<TimeoutException>(ex.InnerExceptions[0]);
+        Assert.Contains("wall-clock budget", timeout.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task SendAsync_ByEndpoint_ThrowsTimeoutException_WhenBasicPublishHangs()
+    public async Task SendAsync_ByEndpoint_ThrowsTimeoutException_WhenBasicPublishHangsForLongerThanBudget()
     {
-        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        var producer = CreateProducer(
+            publishTimeout: TimeSpan.FromMilliseconds(100),
+            maxPublishWaitTime: TimeSpan.FromMilliseconds(300),
+            retryCount: 10);
+        producer.CreateConnectionForTests = MakeHangingConnectionFactory();
         var channel = MakeHangingChannel();
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
 
-        await Assert.ThrowsAsync<TimeoutException>(() =>
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
             producer.SendAsync("destination-queue", typeof(object), new byte[] { 1, 2, 3 }));
+        Assert.Contains("wall-clock budget", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task SendBytesAsync_ThrowsTimeoutException_WhenBasicPublishHangs()
+    public async Task SendBytesAsync_ThrowsTimeoutException_WhenBasicPublishHangsForLongerThanBudget()
     {
-        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        var producer = CreateProducer(
+            publishTimeout: TimeSpan.FromMilliseconds(100),
+            maxPublishWaitTime: TimeSpan.FromMilliseconds(300),
+            retryCount: 10);
+        producer.CreateConnectionForTests = MakeHangingConnectionFactory();
         var channel = MakeHangingChannel();
 
         SetField(producer, "_model", channel.Object);
         SetField(producer, "_connected", true);
 
-        await Assert.ThrowsAsync<TimeoutException>(() =>
+        var ex = await Assert.ThrowsAsync<TimeoutException>(() =>
             producer.SendBytesAsync("destination-queue", typeof(object), new byte[] { 1, 2, 3 }));
+        Assert.Contains("wall-clock budget", ex.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -211,7 +263,9 @@ public class ProducerPublishTimeoutTests
         // retrySeconds — minutes — blocking concurrent publishers. Instead it sets the
         // reset-required flag on ProducerConnection; the next EnsureConnectedAsync (which
         // runs OUTSIDE _publishLock) consumes the flag under _connectionSemaphore.
-        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        // retryCount:0 ensures the single timed-out attempt propagates directly so the
+        // reset-required flag is observable without a wall-clock budget race.
+        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100), retryCount: 0);
         var channel = MakeHangingChannel();
         var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = 0L;
@@ -237,7 +291,9 @@ public class ProducerPublishTimeoutTests
     {
         // Verify that the enriched TimeoutException message includes exchange / routingKey /
         // messageId so operators have enough context for post-mortem correlation.
-        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100));
+        // retryCount:0 so the single timed-out attempt propagates directly (the TimeoutException
+        // from PublishWithTimeoutAsync, not the wall-clock budget exception).
+        var producer = CreateProducer(publishTimeout: TimeSpan.FromMilliseconds(100), retryCount: 0);
         var channel = MakeHangingChannel();
         var declaredExchanges = GetField<ConcurrentDictionary<string, long>>(producer, "_declaredExchanges");
         declaredExchanges["SystemObject"] = 0L;

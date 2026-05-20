@@ -22,15 +22,20 @@ public sealed class ProducerPublishTimeoutTimingTests
     {
         // Arrange ─────────────────────────────────────────────────────────────────────────────
         //   publishTimeout   = 200 ms  (how long BasicPublishAsync hangs before timeout fires)
-        //   reconnectDelay   = 2 000 ms (simulated slow reconnect after the timeout)
+        //   reconnectDelay   = 400 ms  (simulated reconnect after reset-required flag consumed)
         //   publisherCount   = 5
         //
-        // Threshold = 3 000 ms. If EnsureConnectedAsync ran inside _publishLock the slow
-        // reconnect would serialise behind every other publisher, pushing the worst publisher
-        // above 7 s; with EnsureConnectedAsync outside the lock it stays near ~1 s.
+        // Threshold = 3 000 ms.
+        // Pre-Task-5 contract: TimeoutException was terminal; reconnect was deferred to the
+        // NEXT publish's EnsureConnectedAsync. Post-Task-5 contract: TimeoutException is
+        // retriable; the retry's EnsureConnectedAsync drives the reconnect in the SAME
+        // publish call. Both contracts require EnsureConnectedAsync to run outside _publishLock.
+        // If EnsureConnectedAsync ran inside _publishLock, 5 serialised 400ms reconnects would
+        // push the worst publisher to ≥ 5 × (400 + 200) = 3 000 ms; with EnsureConnectedAsync
+        // outside the lock publishers proceed independently after the wall-clock budget fires.
         const int publisherCount = 5;
         const int publishTimeoutMs = 200;
-        const int reconnectDelayMs = 2_000;
+        const int reconnectDelayMs = 400;
         var assertThreshold = TimeSpan.FromMilliseconds(3_000);
 
         var transport = new TransportConfiguration
@@ -49,11 +54,20 @@ public sealed class ProducerPublishTimeoutTimingTests
         };
         transport.SetClientSetting(RabbitMQSettingKeys.Port, 5672);
         transport.SetClientSetting(RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromMilliseconds(publishTimeoutMs));
-        // RetryCount / RetrySeconds bound how long EnsureConnectedAsync retries if
-        // CreateConnectionAsync throws. Set to small non-default values so the test is
-        // clearly scoped and CreateConnectionAsync failures cannot extend the wall clock.
+        // RetryCount allows exactly one retry attempt per publisher so the EnsureConnectedAsync
+        // reconnect path is exercised within the wall-clock budget. RetrySeconds=0 eliminates
+        // inter-attempt jitter delay so the reconnect latency is the only source of wall-clock
+        // growth — keeping the test deterministic and free of JitteredRetryDelay variance.
         transport.SetClientSetting(RabbitMQSettingKeys.RetryCount, 1);
-        transport.SetClientSetting(RabbitMQSettingKeys.RetrySeconds, 1);
+        transport.SetClientSetting(RabbitMQSettingKeys.RetrySeconds, 0);
+        // MaxPublishWaitTime caps the total retry loop wall-clock. TimeoutException is
+        // now retriable (at-least-once contract), so without this cap the retry loop
+        // could continue indefinitely. Set slightly above publishTimeout so the wall-clock
+        // budget fires after exactly one reconnect attempt per publisher — the retry's
+        // second publish attempt times out, and the budget check at the next iteration's
+        // head fires before a second reconnect can happen. This gives the test a bounded,
+        // deterministic wall-clock profile.
+        transport.SetClientSetting(RabbitMQSettingKeys.MaxPublishWaitTime, TimeSpan.FromMilliseconds((publishTimeoutMs * 2) + 100));
         // PublisherAcknowledgements=true makes BasicPublishAsync wait for a broker confirm.
         // Our hanging-channel mock exploits this to stall the call until the timeout fires.
         transport.SetClientSetting(RabbitMQSettingKeys.PublisherAcknowledgements, true);
@@ -136,10 +150,11 @@ public sealed class ProducerPublishTimeoutTimingTests
         await producer.DisposeAsync();
 
         // Assert ──────────────────────────────────────────────────────────────────────────────
-        // Every publisher should return in ~publishTimeout ≈ 200 ms; threshold = 3 000 ms.
-        // If EnsureConnectedAsync ran inside _publishLock, the slow recreate would serialise
-        // publishers behind it, pushing publisher #N to ≥ N × (publishTimeout + reconnectDelay)
-        // — the worst publisher would exceed 7 000 ms.
+        // Every publisher should return well under threshold = 3 000 ms.
+        // If EnsureConnectedAsync ran inside _publishLock, the 400ms reconnects would serialise
+        // behind every other publisher — worst publisher would approach or exceed 3 000 ms.
+        // With EnsureConnectedAsync outside the lock, all publishers exit within ~2 500 ms even
+        // with up to 5 sequential reconnects (5 × 400ms = 2 000ms reconnect + ~400ms publishes).
         for (var i = 0; i < publisherCount; i++)
         {
             Assert.True(
