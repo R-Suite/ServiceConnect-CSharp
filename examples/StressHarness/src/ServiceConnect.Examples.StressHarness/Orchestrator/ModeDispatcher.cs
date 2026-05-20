@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using Microsoft.Extensions.Logging;
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Cli;
 using ServiceConnect.Examples.StressHarness.Patterns;
 using ServiceConnect.Examples.StressHarness.Reporting;
@@ -23,7 +24,9 @@ public sealed class ModeDispatcher(
     ConsoleReporter console,
     ReportMetadata metadata,
     IReadOnlyList<IFlowKeyedSingleton> flowKeyedSingletons,
-    ILogger<ModeDispatcher> logger)
+    ILogger<ModeDispatcher> logger,
+    ChaosClock? chaosClock = null,
+    ChaosScheduler? chaosScheduler = null)
 {
     private readonly HarnessCliOptions _opts = opts;
     private readonly IReadOnlyList<IPatternDriver> _drivers = drivers;
@@ -38,6 +41,15 @@ public sealed class ModeDispatcher(
     // field is currently dormant.
     [SuppressMessage("CodeQuality", "IDE0052", Justification = "Reserved for soak/throughput modes.")]
     private readonly ILogger<ModeDispatcher> _logger = logger;
+
+    // Chaos handles are accepted now so Program.cs can construct them at startup
+    // without a downstream consumer. The soak path will read both to drive
+    // window tagging and run the kill / restart loop; smoke and throughput
+    // ignore them.
+    [SuppressMessage("CodeQuality", "IDE0052", Justification = "Reserved for soak chaos wiring.")]
+    private readonly ChaosClock? _chaosClock = chaosClock;
+    [SuppressMessage("CodeQuality", "IDE0052", Justification = "Reserved for soak chaos wiring.")]
+    private readonly ChaosScheduler? _chaosScheduler = chaosScheduler;
 
     public Task<Report> RunAsync(CancellationToken cancellationToken) => _opts.Mode switch
     {

@@ -371,6 +371,27 @@ try
         loggerFactory,
         CancellationToken.None);
 
+    // Broker-chaos singleton picks up the CLI choice. NoopBrokerChaos is wired
+    // into DI for handler-side observers; the dispatcher-side reference here
+    // drives the scheduler that actually executes kill/restart cycles, so the
+    // docker-compose implementation is materialised eagerly when --chaos
+    // docker is selected. The compose file lives alongside run.sh in
+    // examples/StressHarness/ and that's the cwd both run.sh and the launch
+    // scripts cd into before invoking dotnet run.
+    IBrokerChaos brokerChaos = opts.Chaos switch
+    {
+        "docker" => new DockerComposeBrokerChaos(
+            composeFile: "docker-compose.yml",
+            projectName: "stress-harness",
+            runner: new SystemProcessRunner()),
+        _ => new NoopBrokerChaos(),
+    };
+
+    var chaosClock = new ChaosClock();
+    ChaosScheduler? chaosScheduler = opts.Chaos == "docker"
+        ? new ChaosScheduler(brokerChaos, chaosClock, "rabbitmq", opts.ChaosInterval, opts.ChaosDowntime)
+        : null;
+
     using var console = new ConsoleReporter();
     var dispatcher = new ModeDispatcher(
         opts,
@@ -380,7 +401,9 @@ try
         console,
         metadata,
         flowKeyedSingletons,
-        loggerFactory.CreateLogger<ModeDispatcher>());
+        loggerFactory.CreateLogger<ModeDispatcher>(),
+        chaosClock,
+        chaosScheduler);
 
     var report = await dispatcher.RunAsync(CancellationToken.None);
 
