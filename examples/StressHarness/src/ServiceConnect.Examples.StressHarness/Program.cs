@@ -386,7 +386,8 @@ try
         "docker" => new DockerComposeBrokerChaos(
             composeFile: ResolveComposeFile(opts.ChaosComposeFile),
             projectName: "stress-harness",
-            runner: new SystemProcessRunner()),
+            runner: new SystemProcessRunner(),
+            stopTimeout: opts.ChaosStopTimeout),
         _ => new NoopBrokerChaos(),
     };
 

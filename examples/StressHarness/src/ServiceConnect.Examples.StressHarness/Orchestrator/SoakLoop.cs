@@ -159,23 +159,17 @@ public static class SoakLoop
         // Recovery phase only runs when chaos was active. The clock advances into
         // InRecovery so any flow still in flight (drivers run synchronously inside
         // the loop body, so this is a no-op for the current shape but documents the
-        // intent for future async drivers) is tagged appropriately; after the wait
-        // expires the clock moves to PostChaos for any subsequent assertion. The
+        // intent for future async drivers) is tagged appropriately; after the drain
+        // settles the clock moves to PostChaos for any subsequent assertion. The
         // recovery check uses a fixed 30 s budget to confirm consume liveness on
-        // both buses; the configured recovery budget governs how long the harness
-        // gives the broker to settle before the check fires.
+        // both buses; the configured recovery budget is consumed by DrainAccountingAsync
+        // as its maximum wall-clock budget rather than as a fixed delay, so late
+        // broker redeliveries get accounted for as either successful arrivals or
+        // duplicates instead of being counted as lost.
         if (chaosScheduler is not null)
         {
             chaosClock.SetWindow(ChaosWindow.InRecovery);
-            try
-            {
-                await Task.Delay(chaosRecoveryBudget, cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // user-cancelled mid-recovery; fall through to the consume check anyway so
-                // the report still reflects the bus state at shutdown.
-            }
+            await DrainAccountingAsync(accounting, chaosRecoveryBudget, cancellationToken).ConfigureAwait(false);
             chaosClock.SetWindow(ChaosWindow.PostChaos);
 
             var recoveryCheck = await RecoveryAssertion.CheckBothBusesConsumingAsync(
@@ -289,6 +283,56 @@ public static class SoakLoop
             ProcessAssertionFailures: processFailures,
             Metadata: metadata,
             Chaos: chaosStats);
+    }
+
+    // Polls FlowAccounting until either every sent flow has reached its expected
+    // handler count, the missing-flow count plateaus (no broker redeliveries are
+    // arriving any more), or the supplied <paramref name="maxWait"/> budget is
+    // exhausted. Replaces a fixed delay so the harness waits long enough for late
+    // post-recovery redeliveries to be accounted for without burning the full
+    // budget on a soak that has already converged. Cancellation is treated as
+    // "stop draining" — the surrounding recovery assertion still runs so the
+    // shutdown report reflects the bus state.
+    private static async Task DrainAccountingAsync(FlowAccounting accounting, TimeSpan maxWait, CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + maxWait;
+        var lastMissing = int.MaxValue;
+        var stableTicks = 0;
+        while (DateTime.UtcNow < deadline && !ct.IsCancellationRequested)
+        {
+            var summary = accounting.Reconcile();
+            if (summary.MissingFlows.Count == 0)
+            {
+                return;
+            }
+
+            if (summary.MissingFlows.Count == lastMissing)
+            {
+                stableTicks++;
+                // Ten consecutive 500 ms ticks with no change means the broker has
+                // stopped delivering — the remaining gap is genuine loss, not
+                // latency. Bail early so the recovery assertion can run rather
+                // than burning the rest of the budget on a non-converging poll.
+                if (stableTicks >= 10)
+                {
+                    return;
+                }
+            }
+            else
+            {
+                stableTicks = 0;
+                lastMissing = summary.MissingFlows.Count;
+            }
+
+            try
+            {
+                await Task.Delay(500, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
     }
 
     // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list

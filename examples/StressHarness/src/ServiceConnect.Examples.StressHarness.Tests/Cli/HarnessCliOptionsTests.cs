@@ -48,6 +48,14 @@ public class HarnessCliOptionsTests
         Assert.Equal(TimeSpan.FromSeconds(20), opts.ChaosDowntime);
         Assert.Equal(TimeSpan.FromSeconds(60), opts.ChaosRecoveryBudget);
         Assert.Null(opts.ChaosComposeFile);
+        Assert.Equal(TimeSpan.FromSeconds(30), opts.ChaosStopTimeout);
+    }
+
+    [Fact]
+    public void Parse_ChaosStopTimeout_OverridesDefault()
+    {
+        var opts = HarnessCliParser.Parse(["--chaos-stop-timeout", "00:01:00"]);
+        Assert.Equal(TimeSpan.FromMinutes(1), opts.ChaosStopTimeout);
     }
 
     [Fact]

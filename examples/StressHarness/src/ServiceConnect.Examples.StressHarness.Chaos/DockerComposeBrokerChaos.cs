@@ -11,7 +11,17 @@ namespace ServiceConnect.Examples.StressHarness.Chaos;
 /// reserved for a future iteration that can layer <c>tc</c>/<c>iptables</c>
 /// or a userland TCP proxy on top of the same seam.
 /// </summary>
-public sealed class DockerComposeBrokerChaos(string composeFile, string projectName, IProcessRunner runner) : IBrokerChaos
+/// <remarks>
+/// <paramref name="stopTimeout"/> is forwarded to <c>docker compose stop</c>
+/// as <c>-t &lt;seconds&gt;</c>. Docker's default SIGTERM-to-SIGKILL grace
+/// of 10 s is too short for RabbitMQ to flush in-memory delivered-but-unacked
+/// state plus its queue index at the throughput rates the chaos soak drives;
+/// extending the grace lets the broker reach a clean shutdown rather than
+/// being SIGKILL'd mid-flush, which would otherwise lose any messages still
+/// in RAM. Integer seconds because both docker and RabbitMQ honour second
+/// granularity for shutdown timeouts.
+/// </remarks>
+public sealed class DockerComposeBrokerChaos(string composeFile, string projectName, IProcessRunner runner, TimeSpan stopTimeout) : IBrokerChaos
 {
     public Task KillNodeAsync(string nodeName, CancellationToken cancellationToken) =>
         RunComposeAsync("stop", nodeName, cancellationToken);
@@ -25,7 +35,21 @@ public sealed class DockerComposeBrokerChaos(string composeFile, string projectN
 
     private async Task RunComposeAsync(string verb, string nodeName, CancellationToken cancellationToken)
     {
-        string[] args = ["compose", "-f", composeFile, "-p", projectName, verb, nodeName];
+        // Only `stop` accepts `-t`; `start` would reject the flag. The stop
+        // grace is forwarded as integer seconds (the only granularity docker
+        // and RabbitMQ both honour) so the broker has enough time to flush
+        // its queue index and unacked-delivery state to disk before SIGKILL.
+        string[] args;
+        if (string.Equals(verb, "stop", StringComparison.Ordinal))
+        {
+            var stopSeconds = ((int)stopTimeout.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+            args = ["compose", "-f", composeFile, "-p", projectName, "stop", "-t", stopSeconds, nodeName];
+        }
+        else
+        {
+            args = ["compose", "-f", composeFile, "-p", projectName, verb, nodeName];
+        }
+
         var exitCode = await runner.RunAsync("docker", args, cancellationToken);
         if (exitCode != 0)
         {

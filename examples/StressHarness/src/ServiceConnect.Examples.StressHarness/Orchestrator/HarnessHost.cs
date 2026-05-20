@@ -164,16 +164,26 @@ public sealed class HarnessHost : IAsyncDisposable
             //                              before completing, so a kill mid-publish
             //                              surfaces as a failed flow rather than a
             //                              silent loss.
+            //   PrefetchCount=1          — caps the consumer-side delivered-but-unacked
+            //                              window to a single message. A broker SIGKILL
+            //                              can only lose what's already been pushed to
+            //                              the consumer without an ack; minimising that
+            //                              window minimises the exposure surface. The
+            //                              throughput cost is negligible for the
+            //                              ~110 flows/sec the harness drives, so the
+            //                              tighter setting applies to every run rather
+            //                              than just chaos.
             // Delivery-mode=2 (persistent on-disk) is set unconditionally by the
             // producer's BasicProperties builder (OutboundHeaderBuilder), so the
-            // broker fsyncs each message; no opt-in is required for that leg. Both
-            // values match the framework defaults — declaring them explicitly is
-            // belt-and-braces against a future default change rotating chaos runs
-            // back into silent-loss territory.
+            // broker fsyncs each message; no opt-in is required for that leg. The
+            // durability/ack values match the framework defaults — declaring them
+            // explicitly is belt-and-braces against a future default change rotating
+            // chaos runs back into silent-loss territory.
             builder.UseRabbitMQ((RabbitMqOptions rabbit) =>
             {
                 rabbit.Durable = true;
                 rabbit.PublisherAcknowledgements = true;
+                rabbit.PrefetchCount = 1;
             });
 
             builder.ConfigureQueues(queues =>

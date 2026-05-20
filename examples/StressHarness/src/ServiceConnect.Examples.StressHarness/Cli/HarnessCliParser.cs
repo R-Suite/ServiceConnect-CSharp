@@ -41,6 +41,7 @@ public static class HarnessCliParser
                 "--chaos-downtime" => opts with { ChaosDowntime = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
                 "--chaos-recovery-budget" => opts with { ChaosRecoveryBudget = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
                 "--chaos-compose-file" => opts with { ChaosComposeFile = Next() },
+                "--chaos-stop-timeout" => opts with { ChaosStopTimeout = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
                 _ => throw new ArgumentException($"unknown flag {flag}"),
             };
         }
