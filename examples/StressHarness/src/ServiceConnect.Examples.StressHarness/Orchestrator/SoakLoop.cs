@@ -30,6 +30,7 @@ public static class SoakLoop
         FlowAccounting accounting,
         ConsoleReporter console,
         ReportMetadata metadata,
+        IReadOnlyList<IFlowKeyedSingleton> flowKeyedSingletons,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(opts);
@@ -39,6 +40,7 @@ public static class SoakLoop
         ArgumentNullException.ThrowIfNull(accounting);
         ArgumentNullException.ThrowIfNull(console);
         ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(flowKeyedSingletons);
 
         var startedAt = DateTimeOffset.UtcNow;
         var baseline = MemoryAssertions.SnapshotTotalMemory();
@@ -82,6 +84,20 @@ public static class SoakLoop
                             dir.Succeeded,
                             dir.Elapsed,
                             dir.AssertionFailures.Count > 0 ? string.Join("; ", dir.AssertionFailures) : null);
+                    }
+
+                    // Reclaim per-flow accumulator rows for the flows that succeeded on
+                    // this driver this tick. Failed flows are deliberately retained so
+                    // their per-flow detail survives into report.md. Each accumulator's
+                    // TryRemoveCompleted is idempotent and tolerates ids it never saw,
+                    // so the loop sweeps every singleton without per-driver routing.
+                    var completedIds = directions.Where(d => d.Succeeded).Select(d => d.FlowId).ToList();
+                    if (completedIds.Count > 0)
+                    {
+                        foreach (var singleton in flowKeyedSingletons)
+                        {
+                            singleton.TryRemoveCompleted(completedIds);
+                        }
                     }
                 }
 

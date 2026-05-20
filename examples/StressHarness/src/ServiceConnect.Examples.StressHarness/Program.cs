@@ -58,6 +58,22 @@ try
     // by either bus because the framework's ActivitySource is process-global.
     using var telemetryObservations = new TelemetryObservations();
 
+    // Flow-keyed accumulators are grouped here so the dispatcher can reclaim
+    // per-flow rows at end-of-tick. Without this reclamation pass the soak's
+    // per-flow dictionaries would grow with the cumulative flow count rather
+    // than the in-flight set, and the 50 MB memory budget would catch normal
+    // growth instead of real leaks.
+    IReadOnlyList<IFlowKeyedSingleton> flowKeyedSingletons =
+    [
+        filterTrail,
+        sagaObservations,
+        aggregatorObservations,
+        middlewareTrail,
+        slipTrail,
+        streamObservations,
+        telemetryObservations,
+    ];
+
     IReadOnlyList<IPatternDriver> drivers =
     [
         new PointToPointDriver(accounting, signals),
@@ -350,6 +366,7 @@ try
         accounting,
         console,
         metadata,
+        flowKeyedSingletons,
         loggerFactory.CreateLogger<ModeDispatcher>());
 
     var report = await dispatcher.RunAsync(CancellationToken.None);

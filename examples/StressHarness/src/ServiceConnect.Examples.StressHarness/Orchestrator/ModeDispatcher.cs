@@ -22,6 +22,7 @@ public sealed class ModeDispatcher(
     FlowAccounting accounting,
     ConsoleReporter console,
     ReportMetadata metadata,
+    IReadOnlyList<IFlowKeyedSingleton> flowKeyedSingletons,
     ILogger<ModeDispatcher> logger)
 {
     private readonly HarnessCliOptions _opts = opts;
@@ -30,6 +31,7 @@ public sealed class ModeDispatcher(
     private readonly FlowAccounting _accounting = accounting;
     private readonly ConsoleReporter _console = console;
     private readonly ReportMetadata _metadata = metadata;
+    private readonly IReadOnlyList<IFlowKeyedSingleton> _flowKeyedSingletons = flowKeyedSingletons;
 
     // Logger reserved for soak/throughput modes which need progress logging beyond the
     // per-flow console reporter. Smoke mode prints directly through the reporter so this
@@ -40,8 +42,8 @@ public sealed class ModeDispatcher(
     public Task<Report> RunAsync(CancellationToken cancellationToken) => _opts.Mode switch
     {
         "smoke" => RunSmokeAsync(cancellationToken),
-        "soak" => SoakLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, cancellationToken),
-        "throughput" => ThroughputLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, cancellationToken),
+        "soak" => SoakLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, _flowKeyedSingletons, cancellationToken),
+        "throughput" => ThroughputLoop.RunAsync(_opts, _drivers, _host.Alpha, _host.Beta, _accounting, _console, _metadata, _flowKeyedSingletons, cancellationToken),
         _ => throw new InvalidOperationException(
             string.Create(CultureInfo.InvariantCulture, $"unknown mode {_opts.Mode}")),
     };
@@ -80,6 +82,20 @@ public sealed class ModeDispatcher(
                     dir.Succeeded,
                     dir.Elapsed,
                     dir.AssertionFailures.Count > 0 ? string.Join("; ", dir.AssertionFailures) : null);
+            }
+
+            // Reclaim per-flow accumulator rows for the flows that succeeded on this
+            // driver. Failed flows are deliberately retained so the per-flow detail
+            // survives into report.md. Each accumulator's TryRemoveCompleted is
+            // idempotent and tolerates ids it never saw, so the loop sweeps every
+            // singleton without needing to know which one each flow touched.
+            var completedIds = directions.Where(d => d.Succeeded).Select(d => d.FlowId).ToList();
+            if (completedIds.Count > 0)
+            {
+                foreach (var singleton in _flowKeyedSingletons)
+                {
+                    singleton.TryRemoveCompleted(completedIds);
+                }
             }
         }
 

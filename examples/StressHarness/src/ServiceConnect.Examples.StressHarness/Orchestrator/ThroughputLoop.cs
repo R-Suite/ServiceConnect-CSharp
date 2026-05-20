@@ -29,6 +29,7 @@ public static class ThroughputLoop
         FlowAccounting accounting,
         ConsoleReporter console,
         ReportMetadata metadata,
+        IReadOnlyList<IFlowKeyedSingleton> flowKeyedSingletons,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(opts);
@@ -38,6 +39,7 @@ public static class ThroughputLoop
         ArgumentNullException.ThrowIfNull(accounting);
         ArgumentNullException.ThrowIfNull(console);
         ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(flowKeyedSingletons);
         _ = console;     // ConsoleReporter is reserved for future progress lines; the rate
                          // loop intentionally stays silent per flow to avoid distorting the
                          // measured latency with synchronous console I/O.
@@ -70,6 +72,20 @@ public static class ThroughputLoop
                 foreach (var dir in directions)
                 {
                     perPatternResults[driver.Name].Add(dir);
+                }
+
+                // Reclaim per-flow accumulator rows for the flows that succeeded on
+                // this driver this tick. Failed flows are deliberately retained so
+                // their per-flow detail survives into report.md. Each accumulator's
+                // TryRemoveCompleted is idempotent and tolerates ids it never saw,
+                // so the loop sweeps every singleton without per-driver routing.
+                var completedIds = directions.Where(d => d.Succeeded).Select(d => d.FlowId).ToList();
+                if (completedIds.Count > 0)
+                {
+                    foreach (var singleton in flowKeyedSingletons)
+                    {
+                        singleton.TryRemoveCompleted(completedIds);
+                    }
                 }
             }
 
