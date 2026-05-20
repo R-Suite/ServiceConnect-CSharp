@@ -28,6 +28,7 @@ internal sealed class Producer : IProducer
     private readonly TimeSpan _publishTimeout;
     private readonly ushort _retryCount;
     private readonly ushort _retryTimeInSeconds;
+    private readonly TimeSpan _maxPublishWaitTime;
     private int _disposed;
 
     /// <summary>Overrides the dispose lock-wait timeout for unit tests.</summary>
@@ -81,6 +82,16 @@ internal sealed class Producer : IProducer
         }
         _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, (ushort)60, Convert.ToUInt16);
         _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, (ushort)10, Convert.ToUInt16);
+        _maxPublishWaitTime = GetSetting(settings, RabbitMQSettingKeys.MaxPublishWaitTime, TimeSpan.FromSeconds(120), v => (TimeSpan)v);
+        // Reject the same invalid range as PublishTimeout — a value of zero or other negative
+        // would let the wall-clock cap fire immediately on every publish, burning the entire
+        // retry budget against an unreachable condition.
+        if (_maxPublishWaitTime <= TimeSpan.Zero && _maxPublishWaitTime != Timeout.InfiniteTimeSpan)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(transportConfiguration),
+                $"Setting '{RabbitMQSettingKeys.MaxPublishWaitTime}' must be positive or Timeout.InfiniteTimeSpan; got {_maxPublishWaitTime}.");
+        }
 
         // Reject the dangerous combination: explicit publisher-acks=false with a finite
         // publish timeout is silent breakage. Without confirms, BasicPublishAsync returns
@@ -136,9 +147,18 @@ internal sealed class Producer : IProducer
         CancellationToken cancellationToken)
     {
         Exception? lastException = null;
+        var publishStartedAt = Stopwatch.GetTimestamp();
         for (int attempt = 0; attempt <= _retryCount; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (_maxPublishWaitTime != Timeout.InfiniteTimeSpan
+                && Stopwatch.GetElapsedTime(publishStartedAt) >= _maxPublishWaitTime)
+            {
+                throw new TimeoutException(
+                    $"Publish wall-clock budget {_maxPublishWaitTime.TotalSeconds:0.###}s exhausted " +
+                    $"after {attempt} attempt(s); last error: {lastException?.Message ?? "<none>"}.",
+                    lastException);
+            }
             try
             {
                 // EnsureConnectedAsync runs OUTSIDE _publishLock so a slow reconnect (held under
