@@ -8,9 +8,9 @@ namespace ServiceConnect.Examples.StressHarness.Orchestrator;
 
 /// <summary>
 /// Runs a single <see cref="IPatternDriver"/> in both directions concurrently (α→β and
-/// β→α) under a per-direction wall-clock budget, and merges the two outcomes into a
-/// single <see cref="FlowResult"/>. The merged elapsed is the slower of the two so the
-/// caller's per-flow timing reflects the bottleneck direction.
+/// β→α) under a per-direction wall-clock budget, returning one <see cref="DirectionResult"/>
+/// per leg so downstream aggregators can count successes and failures per bus without
+/// re-deriving the direction from a collapsed result.
 /// </summary>
 public sealed class FlowRunner(TimeSpan flowTimeout)
 {
@@ -20,9 +20,9 @@ public sealed class FlowRunner(TimeSpan flowTimeout)
     /// Dispatches the driver against the bus pair in both directions in parallel. Each
     /// direction gets its own linked <see cref="CancellationTokenSource"/> so a stall on
     /// one side is bounded by the flow timeout without aborting the sibling direction.
-    /// Returns a merged result regardless of which side failed.
+    /// The returned list is always length 2: index 0 is α→β, index 1 is β→α.
     /// </summary>
-    public async Task<FlowResult> RunBothDirectionsAsync(
+    public async Task<IReadOnlyList<DirectionResult>> RunBothDirectionsAsync(
         IPatternDriver driver,
         IBus alpha,
         IBus beta,
@@ -38,14 +38,14 @@ public sealed class FlowRunner(TimeSpan flowTimeout)
         var betaToAlpha = RunOneAsync(driver, beta, alpha, BusIdentity.Beta, BusIdentity.Alpha, accounting, betaCts.Token);
 
         var results = await Task.WhenAll(alphaToBeta, betaToAlpha).ConfigureAwait(false);
-        return MergeResults(results[0], results[1]);
+        return [results[0], results[1]];
     }
 
     // accounting flows through to the driver — drivers register sends through it, but the
     // runner itself only forwards the reference. Keeping the parameter named (rather than
     // discarded) preserves the call-site contract for future drivers that need it.
     [SuppressMessage("Style", "IDE0060", Justification = "Threaded through to pattern drivers; reserved by contract.")]
-    private async Task<FlowResult> RunOneAsync(
+    private async Task<DirectionResult> RunOneAsync(
         IPatternDriver driver,
         IBus sender,
         IBus receiver,
@@ -54,8 +54,9 @@ public sealed class FlowRunner(TimeSpan flowTimeout)
         FlowAccounting accounting,
         CancellationToken cancellationToken)
     {
+        var flowId = Guid.NewGuid();
         var ctx = new StressFlowContext(
-            FlowId: Guid.NewGuid(),
+            FlowId: flowId,
             Origin: origin,
             ExpectedReceiver: expectedReceiver,
             PatternName: driver.Name,
@@ -66,26 +67,41 @@ public sealed class FlowRunner(TimeSpan flowTimeout)
         {
             var result = await driver.RunFlowAsync(sender, receiver, ctx, cancellationToken).ConfigureAwait(false);
             sw.Stop();
-            return result;
+            return new DirectionResult(
+                FlowId: flowId,
+                Origin: origin,
+                ExpectedReceiver: expectedReceiver,
+                Succeeded: result.Succeeded,
+                Elapsed: sw.Elapsed,
+                MessagesSent: result.MessagesSent,
+                MessagesHandled: result.MessagesHandled,
+                AssertionFailures: result.AssertionFailures);
         }
         catch (OperationCanceledException)
         {
             sw.Stop();
-            return FlowResult.Fail(sw.Elapsed, sent: 0, handled: 0,
-                $"{driver.Name} {origin}→{expectedReceiver}: timed out after {_flowTimeout}");
+            return new DirectionResult(
+                FlowId: flowId,
+                Origin: origin,
+                ExpectedReceiver: expectedReceiver,
+                Succeeded: false,
+                Elapsed: sw.Elapsed,
+                MessagesSent: 0,
+                MessagesHandled: 0,
+                AssertionFailures: [$"{driver.Name} {origin.ToHeaderValue()}→{expectedReceiver.ToHeaderValue()}: timed out after {_flowTimeout}"]);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            return FlowResult.Fail(sw.Elapsed, sent: 0, handled: 0,
-                $"{driver.Name} {origin}→{expectedReceiver}: {ex.GetType().Name}: {ex.Message}");
+            return new DirectionResult(
+                FlowId: flowId,
+                Origin: origin,
+                ExpectedReceiver: expectedReceiver,
+                Succeeded: false,
+                Elapsed: sw.Elapsed,
+                MessagesSent: 0,
+                MessagesHandled: 0,
+                AssertionFailures: [$"{driver.Name} {origin.ToHeaderValue()}→{expectedReceiver.ToHeaderValue()}: {ex.GetType().Name}: {ex.Message}"]);
         }
     }
-
-    private static FlowResult MergeResults(FlowResult a, FlowResult b) => new(
-        Succeeded: a.Succeeded && b.Succeeded,
-        Elapsed: a.Elapsed > b.Elapsed ? a.Elapsed : b.Elapsed,
-        MessagesSent: a.MessagesSent + b.MessagesSent,
-        MessagesHandled: a.MessagesHandled + b.MessagesHandled,
-        AssertionFailures: [.. a.AssertionFailures, .. b.AssertionFailures]);
 }

@@ -49,7 +49,7 @@ public sealed class ModeDispatcher(
         var startedAt = DateTimeOffset.UtcNow;
         var baseline = MemoryAssertions.SnapshotTotalMemory();
         var runner = new FlowRunner(_opts.FlowTimeout);
-        var perPattern = new Dictionary<string, List<FlowResult>>(StringComparer.Ordinal);
+        var perPattern = new Dictionary<string, List<DirectionResult>>(StringComparer.Ordinal);
         var processFailures = new List<string>();
 
         foreach (var driver in _drivers)
@@ -61,15 +61,24 @@ public sealed class ModeDispatcher(
 
             _console.Heartbeat(tick: 1, totalTicks: 1, driver.Name);
 
-            var result = await runner.RunBothDirectionsAsync(
+            var directions = await runner.RunBothDirectionsAsync(
                 driver, _host.Alpha, _host.Beta, _accounting, cancellationToken).ConfigureAwait(false);
-            perPattern[driver.Name] = [result];
 
-            _console.FlowResult(
-                driver.Name,
-                result.Succeeded,
-                result.Elapsed,
-                result.AssertionFailures.Count > 0 ? string.Join("; ", result.AssertionFailures) : null);
+            if (!perPattern.TryGetValue(driver.Name, out var bucket))
+            {
+                bucket = [];
+                perPattern[driver.Name] = bucket;
+            }
+
+            foreach (var dir in directions)
+            {
+                bucket.Add(dir);
+                _console.FlowResult(
+                    string.Create(CultureInfo.InvariantCulture, $"{driver.Name} {dir.DirectionLabel}"),
+                    dir.Succeeded,
+                    dir.Elapsed,
+                    dir.AssertionFailures.Count > 0 ? string.Join("; ", dir.AssertionFailures) : null);
+            }
         }
 
         var acct = _accounting.Reconcile();
@@ -101,25 +110,33 @@ public sealed class ModeDispatcher(
 
         var patternStats = perPattern.Select(kv =>
         {
-            var fails = kv.Value.SelectMany(r => r.AssertionFailures).ToList();
-            var passedRuns = kv.Value.Count(r => r.Succeeded);
+            var dirs = kv.Value;
+            var fails = dirs.SelectMany(d => d.AssertionFailures).ToList();
+            var alphaPassed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Alpha && d.Succeeded);
+            var alphaFailed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Alpha && !d.Succeeded);
+            var betaPassed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Beta && d.Succeeded);
+            var betaFailed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Beta && !d.Succeeded);
             return new PatternStats(
                 Name: kv.Key,
-                Runs: kv.Value.Count * 2,
-                Passed: (passedRuns * 2) - fails.Count,
-                Failed: fails.Count,
-                LatencyP50Ms: 0,
-                LatencyP95Ms: 0,
-                LatencyP99Ms: 0,
+                Runs: dirs.Count,
+                Passed: alphaPassed + betaPassed,
+                Failed: alphaFailed + betaFailed,
+                AlphaPassed: alphaPassed,
+                AlphaFailed: alphaFailed,
+                BetaPassed: betaPassed,
+                BetaFailed: betaFailed,
+                LatencyP50Ms: Percentile(dirs, 0.50),
+                LatencyP95Ms: Percentile(dirs, 0.95),
+                LatencyP99Ms: Percentile(dirs, 0.99),
                 AssertionFailures: fails);
         }).ToList();
 
         var totalFlows = patternStats.Sum(p => p.Runs);
         var passedFlows = patternStats.Sum(p => p.Passed);
-        var failedFlows = totalFlows - passedFlows;
+        var failedFlows = patternStats.Sum(p => p.Failed);
 
         return new Report(
-            ReportVersion: 1,
+            ReportVersion: 2,
             Mode: _opts.Mode,
             StartedAtUtc: startedAt,
             CompletedAtUtc: completedAt,
@@ -131,5 +148,19 @@ public sealed class ModeDispatcher(
             FailedFlows: failedFlows,
             Patterns: patternStats,
             ProcessAssertionFailures: processFailures);
+    }
+
+    // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list
+    // rather than throwing, so a filtered-out driver yields a zero row in the report instead
+    // of being absent.
+    private static double Percentile(IReadOnlyList<DirectionResult> dirs, double p)
+    {
+        if (dirs.Count == 0)
+        {
+            return 0;
+        }
+        var sorted = dirs.Select(d => d.Elapsed.TotalMilliseconds).OrderBy(x => x).ToArray();
+        var idx = Math.Min(sorted.Length - 1, (int)(sorted.Length * p));
+        return sorted[idx];
     }
 }

@@ -9,7 +9,7 @@ public class MarkdownReportWriterTests
     public async Task WriteAsync_IncludesHeadlineCountsAndPatternRows()
     {
         var report = new Report(
-            ReportVersion: 1,
+            ReportVersion: 2,
             Mode: "smoke",
             StartedAtUtc: DateTimeOffset.UnixEpoch,
             CompletedAtUtc: DateTimeOffset.UnixEpoch.AddSeconds(30),
@@ -21,8 +21,9 @@ public class MarkdownReportWriterTests
             FailedFlows: 1,
             Patterns:
             [
-                new PatternStats("p2p", 2, 2, 0, 5.0, 10.0, 15.0, []),
-                new PatternStats("pubsub", 2, 1, 1, 8.0, 12.0, 20.0, ["α→β handler fired 1 time, expected 2"]),
+                new PatternStats("p2p", 2, 2, 0, 1, 0, 1, 0, 5.0, 10.0, 15.0, []),
+                new PatternStats("pubsub", 2, 1, 1, 1, 0, 0, 1, 8.0, 12.0, 20.0,
+                    ["α→β handler fired 1 time, expected 2"]),
             ],
             ProcessAssertionFailures: []);
 

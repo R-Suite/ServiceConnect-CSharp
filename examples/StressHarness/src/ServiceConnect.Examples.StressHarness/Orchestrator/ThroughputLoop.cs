@@ -43,8 +43,7 @@ public static class ThroughputLoop
         var startedAt = DateTimeOffset.UtcNow;
         var baseline = MemoryAssertions.SnapshotTotalMemory();
         var runner = new FlowRunner(opts.FlowTimeout);
-        var latencies = drivers.ToDictionary(d => d.Name, _ => new List<long>(), StringComparer.Ordinal);
-        var fails = drivers.ToDictionary(d => d.Name, _ => new List<string>(), StringComparer.Ordinal);
+        var perPatternResults = drivers.ToDictionary(d => d.Name, _ => new List<DirectionResult>(), StringComparer.Ordinal);
 
         // Rate is flows per second per pattern slot, so the inter-tick period is the
         // reciprocal in milliseconds. Each tick visits every selected driver once, which
@@ -63,12 +62,12 @@ public static class ThroughputLoop
                     continue;
                 }
 
-                var result = await runner.RunBothDirectionsAsync(
+                var directions = await runner.RunBothDirectionsAsync(
                     driver, alpha, beta, accounting, cancellationToken).ConfigureAwait(false);
-                latencies[driver.Name].Add((long)result.Elapsed.TotalMilliseconds);
-                if (!result.Succeeded)
+
+                foreach (var dir in directions)
                 {
-                    fails[driver.Name].AddRange(result.AssertionFailures);
+                    perPatternResults[driver.Name].Add(dir);
                 }
             }
 
@@ -94,34 +93,34 @@ public static class ThroughputLoop
             processFailures.Add(memCheck.Failure);
         }
 
-        var stats = drivers.Select(d =>
+        var stats = perPatternResults.Select(kv =>
         {
-            var lat = latencies[d.Name];
-            lat.Sort();
-            // Nearest-rank percentile. The sorted list is already in ascending order, so
-            // floor(count * p) gives the zero-based index of the requested percentile; the
-            // Math.Min clamp protects the p99 case when count * 0.99 rounds up to count.
-            // Returns 0 for an empty list rather than throwing — a driver filtered out by
-            // --patterns contributes a zero-row to the report instead of being absent.
-            double Pct(double p) => lat.Count == 0 ? 0 : lat[Math.Min(lat.Count - 1, (int)(lat.Count * p))];
-            var passed = (lat.Count * 2) - fails[d.Name].Count;
+            var dirs = kv.Value;
+            var fails = dirs.SelectMany(d => d.AssertionFailures).ToList();
+            var alphaPassed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Alpha && d.Succeeded);
+            var alphaFailed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Alpha && !d.Succeeded);
+            var betaPassed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Beta && d.Succeeded);
+            var betaFailed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Beta && !d.Succeeded);
             return new PatternStats(
-                Name: d.Name,
-                // Each entry in latencies[] represents one RunBothDirectionsAsync call,
-                // which executed both α→β and β→α, so total run count is double the
-                // sample count. Matches the soak / smoke convention.
-                Runs: lat.Count * 2,
-                Passed: passed,
-                Failed: fails[d.Name].Count,
-                LatencyP50Ms: Pct(0.50),
-                LatencyP95Ms: Pct(0.95),
-                LatencyP99Ms: Pct(0.99),
-                AssertionFailures: fails[d.Name]);
+                Name: kv.Key,
+                // Each tick contributes one α→β plus one β→α direction; Runs is the total
+                // direction count, matching smoke and soak modes.
+                Runs: dirs.Count,
+                Passed: alphaPassed + betaPassed,
+                Failed: alphaFailed + betaFailed,
+                AlphaPassed: alphaPassed,
+                AlphaFailed: alphaFailed,
+                BetaPassed: betaPassed,
+                BetaFailed: betaFailed,
+                LatencyP50Ms: Percentile(dirs, 0.50),
+                LatencyP95Ms: Percentile(dirs, 0.95),
+                LatencyP99Ms: Percentile(dirs, 0.99),
+                AssertionFailures: fails);
         }).ToList();
 
         var completedAt = DateTimeOffset.UtcNow;
         return new Report(
-            ReportVersion: 1,
+            ReportVersion: 2,
             Mode: "throughput",
             StartedAtUtc: startedAt,
             CompletedAtUtc: completedAt,
@@ -133,5 +132,19 @@ public static class ThroughputLoop
             FailedFlows: stats.Sum(s => s.Failed),
             Patterns: stats,
             ProcessAssertionFailures: processFailures);
+    }
+
+    // Nearest-rank percentile over per-direction elapsed times. Returns 0 for an empty list
+    // rather than throwing, so a filtered-out driver yields a zero row in the report instead
+    // of being absent.
+    private static double Percentile(IReadOnlyList<DirectionResult> dirs, double p)
+    {
+        if (dirs.Count == 0)
+        {
+            return 0;
+        }
+        var sorted = dirs.Select(d => d.Elapsed.TotalMilliseconds).OrderBy(x => x).ToArray();
+        var idx = Math.Min(sorted.Length - 1, (int)(sorted.Length * p));
+        return sorted[idx];
     }
 }
