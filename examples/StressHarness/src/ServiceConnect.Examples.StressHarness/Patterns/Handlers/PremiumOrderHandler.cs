@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Interfaces;
 
@@ -20,7 +21,7 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 /// <c>expectedHandlerInvocations: 1</c> bookkeeping.
 /// </para>
 /// </remarks>
-public sealed class PremiumOrderHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals)
+public sealed class PremiumOrderHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals, MessageLedger ledger, IChaosClock chaosClock)
     : IMessageHandler<PremiumOrder>
 {
     public Task HandleAsync(PremiumOrder message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -40,6 +41,7 @@ public sealed class PremiumOrderHandler(string busTag, FlowAccounting accounting
         {
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "content-based-routing", busTag, flowId, ledger, chaosClock);
         }
         return Task.CompletedTask;
     }

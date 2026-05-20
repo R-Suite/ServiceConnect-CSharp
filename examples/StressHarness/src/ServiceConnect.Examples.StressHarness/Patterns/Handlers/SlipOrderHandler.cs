@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Interfaces;
 
@@ -30,7 +31,7 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 /// access to per-message headers).
 /// </para>
 /// </remarks>
-public sealed class SlipOrderHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals, SlipTrail trail)
+public sealed class SlipOrderHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals, SlipTrail trail, MessageLedger ledger, IChaosClock chaosClock)
     : IMessageHandler<SlipOrder>
 {
     public Task HandleAsync(SlipOrder message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -44,6 +45,10 @@ public sealed class SlipOrderHandler(string busTag, FlowAccounting accounting, P
         // TCS is already completed.
         signals.Signal(flowId, busTag, context);
         trail.Record(flowId, busTag);
+        // RouteAsync does not forward caller-controlled headers, so X-Stress-MessageId
+        // is absent from inbound context. The helper falls back to message.CorrelationId
+        // as the ledger key; the publish side records under the same key for this path.
+        LedgerHandlerHelpers.RecordLedgerConsume(message, context, "routing-slip", busTag, flowId, ledger, chaosClock);
         return Task.CompletedTask;
     }
 }

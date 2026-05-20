@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Interfaces;
 
@@ -28,7 +29,7 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 /// form and silently skip every flow on the live broker.
 /// </para>
 /// </remarks>
-public sealed class DomainEventHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals)
+public sealed class DomainEventHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals, MessageLedger ledger, IChaosClock chaosClock)
     : IMessageHandler<DomainEvent>
 {
     public Task HandleAsync(DomainEvent message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -48,6 +49,7 @@ public sealed class DomainEventHandler(string busTag, FlowAccounting accounting,
         {
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "polymorphic", busTag, flowId, ledger, chaosClock);
         }
         return Task.CompletedTask;
     }

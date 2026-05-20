@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Interfaces;
 
@@ -38,7 +39,9 @@ public sealed class SagaHandler(
     string busTag,
     FlowAccounting accounting,
     PerHandlerSignal signals,
-    SagaObservations observations)
+    SagaObservations observations,
+    MessageLedger ledger,
+    IChaosClock chaosClock)
     : IProcessHandler<SagaData, SagaStarted>,
       IProcessHandler<SagaData, SagaIntermediate>,
       IProcessHandler<SagaData, SagaCompleted>
@@ -51,6 +54,7 @@ public sealed class SagaHandler(
         }
         observations.Record(message.CorrelationId, data.Stage);
         SignalStageArrival(context);
+        RecordSagaConsume(message, context);
         return Task.CompletedTask;
     }
 
@@ -62,6 +66,7 @@ public sealed class SagaHandler(
         }
         observations.Record(message.CorrelationId, data.Stage);
         SignalStageArrival(context);
+        RecordSagaConsume(message, context);
         return Task.CompletedTask;
     }
 
@@ -73,6 +78,7 @@ public sealed class SagaHandler(
         }
         observations.Record(message.CorrelationId, data.Stage);
         SignalStageArrival(context);
+        RecordSagaConsume(message, context);
         return Task.CompletedTask;
     }
 
@@ -88,6 +94,18 @@ public sealed class SagaHandler(
         {
             accounting.RecordHandled(subFlowId);
             signals.Signal(subFlowId, busTag, context);
+        }
+    }
+
+    private void RecordSagaConsume(Message message, IConsumeContext context)
+    {
+        // The sub-flow id on StressHeaders.FlowId is the ledger key for each stage;
+        // re-reads the header so all three overloads share one code path.
+        if (context.Headers.TryGetValue(StressHeaders.FlowId, out var raw)
+            && HeaderDecoder.Decode(raw) is { } flowIdStr
+            && Guid.TryParseExact(flowIdStr, "N", out var subFlowId))
+        {
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "process-manager", busTag, subFlowId, ledger, chaosClock);
         }
     }
 }

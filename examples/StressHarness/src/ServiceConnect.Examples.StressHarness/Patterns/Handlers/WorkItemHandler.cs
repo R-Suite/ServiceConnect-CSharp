@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Interfaces;
 
@@ -33,7 +34,9 @@ public sealed class WorkItemHandler(
     string busTag,
     FlowAccounting accounting,
     PerHandlerSignal signals,
-    WorkItemCounters counters)
+    WorkItemCounters counters,
+    MessageLedger ledger,
+    IChaosClock chaosClock)
     : IMessageHandler<WorkItem>
 {
     public Task HandleAsync(WorkItem message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -45,6 +48,7 @@ public sealed class WorkItemHandler(
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
             counters.Hits.AddOrUpdate($"{busTag}:{handlerTag}", 1, (_, n) => n + 1);
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "competing-consumers", busTag, flowId, ledger, chaosClock);
         }
         return Task.CompletedTask;
     }

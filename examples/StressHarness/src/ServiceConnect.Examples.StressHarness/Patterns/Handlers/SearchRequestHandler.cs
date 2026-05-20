@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Interfaces;
 
@@ -32,7 +33,7 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 /// form and silently skip every flow on the live broker.
 /// </para>
 /// </remarks>
-public sealed class SearchRequestHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals)
+public sealed class SearchRequestHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals, MessageLedger ledger, IChaosClock chaosClock)
     : IMessageHandler<SearchRequest>
 {
     public async Task HandleAsync(SearchRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -43,6 +44,7 @@ public sealed class SearchRequestHandler(string busTag, FlowAccounting accountin
         {
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "scatter-gather", busTag, flowId, ledger, chaosClock);
         }
 
         // Reply destination is taken from the incoming envelope's reply-to header

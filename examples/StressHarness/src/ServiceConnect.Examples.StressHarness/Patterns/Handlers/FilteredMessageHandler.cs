@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Examples.StressHarness.Patterns.Filters;
 using ServiceConnect.Interfaces;
@@ -29,7 +30,9 @@ public sealed class FilteredMessageHandler(
     string busTag,
     FlowAccounting accounting,
     PerHandlerSignal signals,
-    FilterTrail trail)
+    FilterTrail trail,
+    MessageLedger ledger,
+    IChaosClock chaosClock)
     : IMessageHandler<FilteredMessage>
 {
     public Task HandleAsync(FilteredMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -43,6 +46,7 @@ public sealed class FilteredMessageHandler(
             trail.Record(flowId, "handler");
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "filters", busTag, flowId, ledger, chaosClock);
         }
         return Task.CompletedTask;
     }

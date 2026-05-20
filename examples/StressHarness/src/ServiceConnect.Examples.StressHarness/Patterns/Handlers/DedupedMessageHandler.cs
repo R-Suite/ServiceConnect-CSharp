@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Examples.StressHarness.Patterns.Middleware;
 using ServiceConnect.Interfaces;
@@ -28,7 +29,9 @@ public sealed class DedupedMessageHandler(
     string busTag,
     FlowAccounting accounting,
     PerHandlerSignal signals,
-    MiddlewareTrail trail)
+    MiddlewareTrail trail,
+    MessageLedger ledger,
+    IChaosClock chaosClock)
     : IMessageHandler<DedupedMessage>
 {
     public Task HandleAsync(DedupedMessage message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -45,6 +48,7 @@ public sealed class DedupedMessageHandler(
             trail.Record(flowId, "handler");
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "custom-filter-middleware", busTag, flowId, ledger, chaosClock);
         }
         return Task.CompletedTask;
     }

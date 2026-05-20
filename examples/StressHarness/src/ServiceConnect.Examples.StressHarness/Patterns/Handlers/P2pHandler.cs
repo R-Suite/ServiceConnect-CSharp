@@ -1,4 +1,5 @@
 using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Examples.StressHarness.Contracts.Messages;
 using ServiceConnect.Interfaces;
 
@@ -24,7 +25,7 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 /// form and silently skip every flow on the live broker.
 /// </para>
 /// </remarks>
-public sealed class P2pHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals)
+public sealed class P2pHandler(string busTag, FlowAccounting accounting, PerHandlerSignal signals, MessageLedger ledger, IChaosClock chaosClock)
     : IMessageHandler<P2pPing>
 {
     public Task HandleAsync(P2pPing message, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -35,6 +36,7 @@ public sealed class P2pHandler(string busTag, FlowAccounting accounting, PerHand
         {
             accounting.RecordHandled(flowId);
             signals.Signal(flowId, busTag, context);
+            LedgerHandlerHelpers.RecordLedgerConsume(message, context, "p2p", busTag, flowId, ledger, chaosClock);
         }
         return Task.CompletedTask;
     }

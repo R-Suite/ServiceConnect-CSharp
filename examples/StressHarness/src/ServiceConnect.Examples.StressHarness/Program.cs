@@ -230,17 +230,23 @@ try
                 services.AddTransient<IMessageHandler<P2pPing>>(sp => new P2pHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 services.AddTransient<IMessageHandler<PubSubEvent>>(sp => new PubSubHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 services.AddTransient<IMessageHandler<QuoteRequest>>(sp => new QuoteRequestHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 // Two WorkItemHandler registrations per bus, distinguished by their
                 // handler tag. GetServices(IMessageHandler<WorkItem>) returns both, so
@@ -254,35 +260,47 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<WorkItemCounters>()));
+                    sp.GetRequiredService<WorkItemCounters>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 services.AddTransient<IMessageHandler<WorkItem>>(sp => new WorkItemHandler(
                     handlerTag: "h2",
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<WorkItemCounters>()));
+                    sp.GetRequiredService<WorkItemCounters>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 services.AddTransient<IMessageHandler<PremiumOrder>>(sp => new PremiumOrderHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 services.AddTransient<IMessageHandler<StandardOrder>>(sp => new StandardOrderHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 services.AddTransient<IMessageHandler<DomainEvent>>(sp => new DomainEventHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 services.AddTransient<IMessageHandler<FilteredMessage>>(sp => new FilteredMessageHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<FilterTrail>()));
+                    sp.GetRequiredService<FilterTrail>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 // SagaHandler implements three IProcessHandler<SagaData, *> interfaces; each
                 // must be registered separately so the framework's per-message-type resolution
@@ -294,17 +312,23 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<SagaObservations>()));
+                    sp.GetRequiredService<SagaObservations>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
                 services.AddTransient<IProcessHandler<SagaData, SagaIntermediate>>(sp => new SagaHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<SagaObservations>()));
+                    sp.GetRequiredService<SagaObservations>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
                 services.AddTransient<IProcessHandler<SagaData, SagaCompleted>>(sp => new SagaHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<SagaObservations>()));
+                    sp.GetRequiredService<SagaObservations>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 // Aggregator is resolved by the framework via GetRequiredService<Aggregator<T>>
                 // for each batch flush — not IMessageHandler<T>. The per-bus factory closes
@@ -324,7 +348,9 @@ try
                 services.AddTransient<IMessageHandler<SearchRequest>>(sp => new SearchRequestHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 // SlipOrder handler runs once per hop on the routing-slip's current
                 // queue. The factory closes over busTag so the per-flow trail
@@ -336,7 +362,9 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<SlipTrail>()));
+                    sp.GetRequiredService<SlipTrail>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 // Stream handler runs once per reassembled stream. The framework
                 // resolves IStreamHandler<DocumentUploaded> via GetService when the
@@ -359,7 +387,9 @@ try
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
                     sp.GetRequiredService<PerHandlerSignal>(),
-                    sp.GetRequiredService<MiddlewareTrail>()));
+                    sp.GetRequiredService<MiddlewareTrail>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 // TracedEvent handler — its only job is to fire the rendezvous.
                 // The telemetry assertion lives in TelemetryObservations, which
@@ -370,7 +400,9 @@ try
                 services.AddTransient<IMessageHandler<TracedEvent>>(sp => new TracedEventHandler(
                     busTag,
                     sp.GetRequiredService<FlowAccounting>(),
-                    sp.GetRequiredService<PerHandlerSignal>()));
+                    sp.GetRequiredService<PerHandlerSignal>(),
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
             });
         },
         loggerFactory,
