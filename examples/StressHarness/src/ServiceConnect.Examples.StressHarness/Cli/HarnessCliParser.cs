@@ -40,6 +40,7 @@ public static class HarnessCliParser
                 "--chaos-interval" => opts with { ChaosInterval = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
                 "--chaos-downtime" => opts with { ChaosDowntime = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
                 "--chaos-recovery-budget" => opts with { ChaosRecoveryBudget = TimeSpan.Parse(Next(), CultureInfo.InvariantCulture) },
+                "--chaos-compose-file" => opts with { ChaosComposeFile = Next() },
                 _ => throw new ArgumentException($"unknown flag {flag}"),
             };
         }

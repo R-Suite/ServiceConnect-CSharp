@@ -375,13 +375,16 @@ try
     // into DI for handler-side observers; the dispatcher-side reference here
     // drives the scheduler that actually executes kill/restart cycles, so the
     // docker-compose implementation is materialised eagerly when --chaos
-    // docker is selected. The compose file lives alongside run.sh in
-    // examples/StressHarness/ and that's the cwd both run.sh and the launch
-    // scripts cd into before invoking dotnet run.
+    // docker is selected. The compose file path is resolved cwd-independently
+    // via ResolveComposeFile — the harness can be launched from either
+    // examples/StressHarness/ (run.sh's pattern) or the repo root (dotnet run
+    // --project examples/StressHarness/...) and either picks up the compose
+    // file beside the harness sources or accepts an explicit override via
+    // --chaos-compose-file.
     IBrokerChaos brokerChaos = opts.Chaos switch
     {
         "docker" => new DockerComposeBrokerChaos(
-            composeFile: "docker-compose.yml",
+            composeFile: ResolveComposeFile(opts.ChaosComposeFile),
             projectName: "stress-harness",
             runner: new SystemProcessRunner()),
         _ => new NoopBrokerChaos(),
@@ -424,4 +427,57 @@ catch (NotSupportedException ex)
 {
     Console.Error.WriteLine($"error: {ex.Message}");
     return 2;
+}
+catch (FileNotFoundException ex)
+{
+    // Surfaces ResolveComposeFile's not-found error when --chaos docker can't
+    // locate docker-compose.yml. Exit 2 matches the other CLI / startup errors
+    // (bad argument, broker unreachable) so callers can distinguish a
+    // configuration mistake from a soak-level failure (exit 1).
+    Console.Error.WriteLine($"error: {ex.Message}");
+    return 2;
+}
+
+// Resolves the docker-compose path used by DockerComposeBrokerChaos. The harness
+// is launched from two distinct cwds in practice — examples/StressHarness/
+// (run.sh) and the repo root (dotnet run --project ...) — and a relative path
+// works for only one of them. The resolver tries an explicit override first,
+// then walks a small set of candidate locations rooted at AppContext.BaseDirectory
+// (next to the harness binary, and four levels up — the typical
+// bin/<config>/net10.0/ to examples/StressHarness/ relationship) and at
+// Directory.GetCurrentDirectory(). First-match wins; the returned path is
+// always absolute so DockerComposeBrokerChaos's docker-compose invocation
+// does not depend on a particular cwd at runtime.
+static string ResolveComposeFile(string? explicitPath)
+{
+    if (!string.IsNullOrEmpty(explicitPath))
+    {
+        var resolved = Path.GetFullPath(explicitPath);
+        if (!File.Exists(resolved))
+        {
+            throw new FileNotFoundException(
+                $"--chaos-compose-file '{explicitPath}' does not exist (resolved to '{resolved}').");
+        }
+
+        return resolved;
+    }
+
+    string[] candidates =
+    [
+        Path.Combine(AppContext.BaseDirectory, "docker-compose.yml"),
+        Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "docker-compose.yml")),
+        Path.Combine(Directory.GetCurrentDirectory(), "docker-compose.yml"),
+        Path.Combine(Directory.GetCurrentDirectory(), "examples", "StressHarness", "docker-compose.yml"),
+    ];
+
+    foreach (var candidate in candidates)
+    {
+        if (File.Exists(candidate))
+        {
+            return Path.GetFullPath(candidate);
+        }
+    }
+
+    throw new FileNotFoundException(
+        $"--chaos docker could not find docker-compose.yml. Pass --chaos-compose-file explicitly, or run from a directory where the file is reachable. Tried: {string.Join(", ", candidates)}");
 }

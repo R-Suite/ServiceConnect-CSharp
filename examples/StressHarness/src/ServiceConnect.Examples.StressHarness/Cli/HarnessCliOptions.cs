@@ -13,7 +13,8 @@ public sealed record HarnessCliOptions(
     string ReportDir,
     TimeSpan ChaosInterval,
     TimeSpan ChaosDowntime,
-    TimeSpan ChaosRecoveryBudget)
+    TimeSpan ChaosRecoveryBudget,
+    string? ChaosComposeFile)
 {
     public static HarnessCliOptions Defaults() => new(
         Mode: "smoke",
@@ -28,5 +29,6 @@ public sealed record HarnessCliOptions(
         ReportDir: "out",
         ChaosInterval: TimeSpan.FromSeconds(30),
         ChaosDowntime: TimeSpan.FromSeconds(20),
-        ChaosRecoveryBudget: TimeSpan.FromSeconds(60));
+        ChaosRecoveryBudget: TimeSpan.FromSeconds(60),
+        ChaosComposeFile: null);
 }

@@ -47,6 +47,14 @@ public class HarnessCliOptionsTests
         Assert.Equal(TimeSpan.FromSeconds(30), opts.ChaosInterval);
         Assert.Equal(TimeSpan.FromSeconds(20), opts.ChaosDowntime);
         Assert.Equal(TimeSpan.FromSeconds(60), opts.ChaosRecoveryBudget);
+        Assert.Null(opts.ChaosComposeFile);
+    }
+
+    [Fact]
+    public void Parse_ChaosComposeFile_SetsField()
+    {
+        var opts = HarnessCliParser.Parse(["--chaos-compose-file", "/tmp/test.yml"]);
+        Assert.Equal("/tmp/test.yml", opts.ChaosComposeFile);
     }
 
     [Fact]
