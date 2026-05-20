@@ -1,4 +1,3 @@
-using FluentAssertions;
 using ServiceConnect.Examples.StressHarness.Assertions;
 using ServiceConnect.Examples.StressHarness.Chaos;
 using Xunit;
@@ -19,16 +18,15 @@ public sealed class MessageLedgerTests
         ledger.RecordPublishCompleted(msgId, completed: t0.AddMilliseconds(2), outcome: PublishOutcome.Acked);
 
         var snapshot = ledger.Snapshot();
-        snapshot.Publishes.Should().ContainSingle();
-        var row = snapshot.Publishes[0];
-        row.MessageId.Should().Be(msgId);
-        row.FlowId.Should().Be(flowId);
-        row.Pattern.Should().Be("p2p");
-        row.OriginBus.Should().Be("alpha");
-        row.PublishStarted.Should().Be(t0);
-        row.PublishCompleted.Should().Be(t0.AddMilliseconds(2));
-        row.Outcome.Should().Be(PublishOutcome.Acked);
-        row.Window.Should().Be(ChaosWindow.PreChaos);
+        var row = Assert.Single(snapshot.Publishes);
+        Assert.Equal(msgId, row.MessageId);
+        Assert.Equal(flowId, row.FlowId);
+        Assert.Equal("p2p", row.Pattern);
+        Assert.Equal("alpha", row.OriginBus);
+        Assert.Equal(t0, row.PublishStarted);
+        Assert.Equal(t0.AddMilliseconds(2), row.PublishCompleted);
+        Assert.Equal(PublishOutcome.Acked, row.Outcome);
+        Assert.Equal(ChaosWindow.PreChaos, row.Window);
     }
 
     [Fact]
@@ -42,14 +40,13 @@ public sealed class MessageLedgerTests
         ledger.RecordConsume(msgId, flowId, pattern: "p2p", consumingBus: "beta", consumed: ts, window: ChaosWindow.InRecovery);
 
         var snapshot = ledger.Snapshot();
-        snapshot.Consumes.Should().ContainSingle();
-        var row = snapshot.Consumes[0];
-        row.MessageId.Should().Be(msgId);
-        row.FlowId.Should().Be(flowId);
-        row.Pattern.Should().Be("p2p");
-        row.ConsumingBus.Should().Be("beta");
-        row.Consumed.Should().Be(ts);
-        row.Window.Should().Be(ChaosWindow.InRecovery);
+        var row = Assert.Single(snapshot.Consumes);
+        Assert.Equal(msgId, row.MessageId);
+        Assert.Equal(flowId, row.FlowId);
+        Assert.Equal("p2p", row.Pattern);
+        Assert.Equal("beta", row.ConsumingBus);
+        Assert.Equal(ts, row.Consumed);
+        Assert.Equal(ChaosWindow.InRecovery, row.Window);
     }
 
     [Fact]
@@ -63,16 +60,16 @@ public sealed class MessageLedgerTests
         ledger.RecordConsume(msgId, flowId, "p2p", "alpha", DateTimeOffset.UtcNow.AddMilliseconds(50), ChaosWindow.PreChaos);
 
         var snapshot = ledger.Snapshot();
-        snapshot.Consumes.Count.Should().Be(2);
-        snapshot.Consumes.Should().AllSatisfy(r => r.MessageId.Should().Be(msgId));
+        Assert.Equal(2, snapshot.Consumes.Count);
+        Assert.All(snapshot.Consumes, r => Assert.Equal(msgId, r.MessageId));
     }
 
     [Fact]
     public void RecordPublishCompleted_without_RecordPublishStart_throws()
     {
         var ledger = new MessageLedger();
-        var act = () => ledger.RecordPublishCompleted(Guid.NewGuid(), DateTimeOffset.UtcNow, PublishOutcome.Acked);
-        act.Should().Throw<InvalidOperationException>();
+        Assert.Throws<InvalidOperationException>(
+            () => ledger.RecordPublishCompleted(Guid.NewGuid(), DateTimeOffset.UtcNow, PublishOutcome.Acked));
     }
 
     [Fact]
@@ -95,15 +92,17 @@ public sealed class MessageLedgerTests
         ledger.TryRemoveCompleted([dropFlow]);
 
         var snapshot = ledger.Snapshot();
-        snapshot.Publishes.Should().ContainSingle().Which.FlowId.Should().Be(keepFlow);
-        snapshot.Consumes.Should().ContainSingle().Which.FlowId.Should().Be(keepFlow);
+        var keptPublish = Assert.Single(snapshot.Publishes);
+        Assert.Equal(keepFlow, keptPublish.FlowId);
+        var keptConsume = Assert.Single(snapshot.Consumes);
+        Assert.Equal(keepFlow, keptConsume.FlowId);
     }
 
     [Fact]
     public void TryRemoveCompleted_for_unseen_flow_ids_is_a_noop()
     {
         var ledger = new MessageLedger();
-        var act = () => ledger.TryRemoveCompleted([Guid.NewGuid(), Guid.NewGuid()]);
-        act.Should().NotThrow();
+        var ex = Record.Exception(() => ledger.TryRemoveCompleted([Guid.NewGuid(), Guid.NewGuid()]));
+        Assert.Null(ex);
     }
 }
