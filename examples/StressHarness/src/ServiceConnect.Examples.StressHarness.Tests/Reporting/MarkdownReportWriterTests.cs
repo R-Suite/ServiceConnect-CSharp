@@ -92,7 +92,8 @@ public class MarkdownReportWriterTests
                 PerPattern:
                 [
                     new ChaosPatternBreakdown("p2p", 1, 2, 1, 0),
-                ]));
+                ],
+                DuplicateHandlerInvocations: 5));
 
         var tempDir = Path.Combine(Path.GetTempPath(), $"stress-chaos-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
@@ -104,6 +105,7 @@ public class MarkdownReportWriterTests
             var md = await File.ReadAllTextAsync(path);
             Assert.Contains("## Chaos events", md);
             Assert.Contains("**Kill events:** 1", md);
+            Assert.Contains("**Duplicate handler invocations:** 5", md);
             Assert.Contains("rabbitmq", md);
             Assert.Contains("## Per-pattern chaos window breakdown", md);
             Assert.Contains("| p2p | 1 | 2 | 1 | 0 |", md);

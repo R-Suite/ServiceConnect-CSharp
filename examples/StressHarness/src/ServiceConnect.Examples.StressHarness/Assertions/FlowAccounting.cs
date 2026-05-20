@@ -6,7 +6,15 @@ public sealed record AccountingSummary(
     int SentCount,
     int HandledCount,
     IReadOnlyList<Guid> MissingFlows,
-    IReadOnlyList<Guid> UnexpectedFlows);
+    IReadOnlyList<Guid> UnexpectedFlows,
+    IReadOnlyList<DuplicatedFlow> DuplicatedFlows);
+
+/// <summary>
+/// A flow whose handler fired more times than the matching send recorded. Surfaces broker
+/// redelivery — under chaos this is the broker's expected behaviour after a killed handler
+/// failed to ack; outside the chaos window it would be a real exactly-once finding.
+/// </summary>
+public sealed record DuplicatedFlow(Guid FlowId, int Expected, int Observed);
 
 public sealed class FlowAccounting
 {
@@ -47,6 +55,7 @@ public sealed class FlowAccounting
     {
         var missing = new List<Guid>();
         var unexpected = new List<Guid>();
+        var duplicated = new List<DuplicatedFlow>();
 
         foreach (var kv in _expected)
         {
@@ -54,6 +63,10 @@ public sealed class FlowAccounting
             if (observed < kv.Value)
             {
                 missing.Add(kv.Key);
+            }
+            else if (observed > kv.Value)
+            {
+                duplicated.Add(new DuplicatedFlow(kv.Key, kv.Value, observed));
             }
         }
         foreach (var kv in _observed)
@@ -68,6 +81,7 @@ public sealed class FlowAccounting
             SentCount: _expected.Values.Sum(),
             HandledCount: _observed.Values.Sum(),
             MissingFlows: missing,
-            UnexpectedFlows: unexpected);
+            UnexpectedFlows: unexpected,
+            DuplicatedFlows: duplicated);
     }
 }

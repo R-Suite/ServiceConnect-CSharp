@@ -75,4 +75,5 @@ public sealed record ChaosPatternBreakdown(
 public sealed record ChaosWindowStats(
     int KillEventCount,
     IReadOnlyList<ChaosEventSummary> Events,
-    IReadOnlyList<ChaosPatternBreakdown> PerPattern);
+    IReadOnlyList<ChaosPatternBreakdown> PerPattern,
+    int DuplicateHandlerInvocations);

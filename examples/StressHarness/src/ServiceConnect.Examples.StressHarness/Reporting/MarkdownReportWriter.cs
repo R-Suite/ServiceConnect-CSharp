@@ -88,6 +88,7 @@ public static class MarkdownReportWriter
             sb.AppendLine("## Chaos events");
             sb.AppendLine();
             sb.AppendLine($"**Kill events:** {chaos.KillEventCount}");
+            sb.AppendLine($"**Duplicate handler invocations:** {chaos.DuplicateHandlerInvocations} (extra handler firings beyond expected — broker redelivery during chaos is expected; pre/post-chaos duplicates would be a real finding)");
             sb.AppendLine();
             sb.AppendLine("| Killed | Restarted | Node |");
             sb.AppendLine("|---|---|---|");

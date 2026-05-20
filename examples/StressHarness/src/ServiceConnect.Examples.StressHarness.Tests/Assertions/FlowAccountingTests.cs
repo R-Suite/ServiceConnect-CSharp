@@ -63,6 +63,59 @@ public class FlowAccountingTests
     }
 
     [Fact]
+    public void HandledTwice_ReportedAsDuplicated()
+    {
+        var acct = new FlowAccounting();
+        var flowId = Guid.NewGuid();
+
+        acct.RecordSend(flowId, expectedHandlerInvocations: 1);
+        acct.RecordHandled(flowId);
+        acct.RecordHandled(flowId);   // broker-redelivered duplicate
+
+        var summary = acct.Reconcile();
+        Assert.Empty(summary.MissingFlows);
+        Assert.Empty(summary.UnexpectedFlows);
+        var dup = Assert.Single(summary.DuplicatedFlows);
+        Assert.Equal(flowId, dup.FlowId);
+        Assert.Equal(1, dup.Expected);
+        Assert.Equal(2, dup.Observed);
+    }
+
+    [Fact]
+    public void FanOut_HandledExactlyExpected_NoDuplicate()
+    {
+        var acct = new FlowAccounting();
+        var flowId = Guid.NewGuid();
+
+        acct.RecordSend(flowId, expectedHandlerInvocations: 2);
+        acct.RecordHandled(flowId);
+        acct.RecordHandled(flowId);
+
+        var summary = acct.Reconcile();
+        Assert.Empty(summary.DuplicatedFlows);
+        Assert.Empty(summary.MissingFlows);
+    }
+
+    [Fact]
+    public void FanOutOver_HandledMoreThanExpected_ReportedAsDuplicated()
+    {
+        var acct = new FlowAccounting();
+        var flowId = Guid.NewGuid();
+
+        acct.RecordSend(flowId, expectedHandlerInvocations: 2);
+        acct.RecordHandled(flowId);
+        acct.RecordHandled(flowId);
+        acct.RecordHandled(flowId);   // redelivered fan-out
+
+        var summary = acct.Reconcile();
+        Assert.Empty(summary.MissingFlows);
+        Assert.Empty(summary.UnexpectedFlows);
+        var dup = Assert.Single(summary.DuplicatedFlows);
+        Assert.Equal(2, dup.Expected);
+        Assert.Equal(3, dup.Observed);
+    }
+
+    [Fact]
     public void TryRemoveCompleted_RemovesFullyHandledFlows_LeavesMissingIntact()
     {
         var acct = new FlowAccounting();

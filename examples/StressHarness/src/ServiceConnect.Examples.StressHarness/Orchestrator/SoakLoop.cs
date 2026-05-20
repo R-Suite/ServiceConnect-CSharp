@@ -201,6 +201,13 @@ public static class SoakLoop
                 $"flow accounting: {acct.MissingFlows.Count} flow(s) sent but under-handled at end of soak"));
         }
 
+        // "Extra handler firings beyond what was sent" — the per-flow excess summed
+        // across every flow whose observed handler count exceeded the expected. Directly
+        // comparable to the under-handled count: under-handled measures lost messages,
+        // this measures broker-redelivered ones. Under chaos both are expected; outside
+        // a chaos window a non-zero value here is an exactly-once finding.
+        var duplicateInvocations = acct.DuplicatedFlows.Sum(d => d.Observed - d.Expected);
+
         var completedAt = DateTimeOffset.UtcNow;
         var stats = perPatternResults.Select(kv =>
         {
@@ -263,7 +270,8 @@ public static class SoakLoop
             chaosStats = new ChaosWindowStats(
                 KillEventCount: events.Count,
                 Events: events,
-                PerPattern: perPatternBreakdown);
+                PerPattern: perPatternBreakdown,
+                DuplicateHandlerInvocations: duplicateInvocations);
         }
 
         return new Report(
