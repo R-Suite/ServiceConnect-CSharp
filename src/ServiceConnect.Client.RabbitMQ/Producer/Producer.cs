@@ -326,8 +326,7 @@ internal sealed class Producer : IProducer
         }
 
         // Capture timestamp before EnsureConnectedAsync — connect latency is part of the
-        // user-visible publish duration. exchangeName is resolved inside the locked action;
-        // see EmitPublishMetrics for the empty-destination fallback.
+        // user-visible publish duration. See EmitPublishMetrics for the empty-destination fallback.
         var startTimestamp = Stopwatch.GetTimestamp();
         string exchangeName = string.Empty;
         bool succeeded = false;
@@ -337,17 +336,22 @@ internal sealed class Producer : IProducer
         // routing keys; topic/direct exchanges use them for routing — the caller may have
         // configured a non-fanout exchange override and supplied a key via PublishOptions.RoutingKey.
         var resolvedRoutingKey = routingKey ?? string.Empty;
+
+        // Build BasicProperties once, outside the retry loop. The same MessageId is reused
+        // across all retry attempts so consumer-side dedup filters (BeforeConsuming +
+        // OnConsumedSuccessfully) can recognise duplicates by MessageId, per the at-least-once
+        // contract documented on IBus.
+        var messageHeaders = _headerBuilder.BuildHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
+        var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
+
+        // Compute the exchange name once per type and cache it.
+        exchangeName = GetExchangeName(type);
+
         try
         {
             await ExecuteRetryingPublishAsync(async ct =>
             {
-                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, _queueConfiguration.QueueName, "Publish");
-                var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
-
-                // Compute the exchange name once per type and cache it.
                 // Only issue ExchangeDeclareAsync once per connection — skip on subsequent publishes.
-                exchangeName = GetExchangeName(type);
-
                 await _producerConnection.EnsureExchangeDeclaredAsync(exchangeName, ExchangeType.Fanout, ct).ConfigureAwait(false);
                 await PublishWithTimeoutAsync(
                     _producerConnection.Channel,
@@ -534,12 +538,18 @@ internal sealed class Producer : IProducer
         var startTimestamp = Stopwatch.GetTimestamp();
         bool succeeded = false;
         Exception? failure = null;
+
+        // Build BasicProperties once, outside the retry loop. The same MessageId is reused
+        // across all retry attempts so consumer-side dedup filters (BeforeConsuming +
+        // OnConsumedSuccessfully) can recognise duplicates by MessageId, per the at-least-once
+        // contract documented on IBus.
+        var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send", routingSlipHopsCompleted);
+        var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
+
         try
         {
             await ExecuteRetryingPublishAsync(async ct =>
             {
-                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, "Send", routingSlipHopsCompleted);
-                var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
                 await PublishWithTimeoutAsync(
                     _producerConnection.Channel,
                     string.Empty,
@@ -592,12 +602,18 @@ internal sealed class Producer : IProducer
         var startTimestamp = Stopwatch.GetTimestamp();
         bool succeeded = false;
         Exception? failure = null;
+
+        // Build BasicProperties once, outside the retry loop. The same MessageId is reused
+        // across all retry attempts so consumer-side dedup filters (BeforeConsuming +
+        // OnConsumedSuccessfully) can recognise duplicates by MessageId, per the at-least-once
+        // contract documented on IBus.
+        var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
+        var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
+
         try
         {
             await ExecuteRetryingPublishAsync(async ct =>
             {
-                var messageHeaders = _headerBuilder.BuildHeaders(type, headers, endPoint, HeaderKeys.ByteStream);
-                var basicProperties = _headerBuilder.BuildBasicProperties(messageHeaders);
                 await PublishWithTimeoutAsync(
                     _producerConnection.Channel,
                     string.Empty,

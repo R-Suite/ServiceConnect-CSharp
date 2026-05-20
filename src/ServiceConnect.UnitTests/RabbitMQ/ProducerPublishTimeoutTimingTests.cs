@@ -26,10 +26,9 @@ public sealed class ProducerPublishTimeoutTimingTests
         //   publisherCount   = 5
         //
         // Threshold = 3 000 ms.
-        // Pre-Task-5 contract: TimeoutException was terminal; reconnect was deferred to the
-        // NEXT publish's EnsureConnectedAsync. Post-Task-5 contract: TimeoutException is
-        // retriable; the retry's EnsureConnectedAsync drives the reconnect in the SAME
-        // publish call. Both contracts require EnsureConnectedAsync to run outside _publishLock.
+        // TimeoutException is retriable; the retry's EnsureConnectedAsync drives the reconnect
+        // in the SAME publish call. EnsureConnectedAsync must run outside _publishLock so that
+        // concurrent publishers can reconnect independently.
         // If EnsureConnectedAsync ran inside _publishLock, 5 serialised 400ms reconnects would
         // push the worst publisher to ≥ 5 × (400 + 200) = 3 000 ms; with EnsureConnectedAsync
         // outside the lock publishers proceed independently after the wall-clock budget fires.
