@@ -14,6 +14,11 @@ public sealed record Report(
     IReadOnlyList<PatternStats> Patterns,
     IReadOnlyList<string> ProcessAssertionFailures);
 
+public sealed record FailedFlowDetail(
+    Guid FlowId,
+    string Direction,
+    IReadOnlyList<string> Failures);
+
 public sealed record PatternStats(
     string Name,
     int Runs,
@@ -26,4 +31,5 @@ public sealed record PatternStats(
     double LatencyP50Ms,
     double LatencyP95Ms,
     double LatencyP99Ms,
-    IReadOnlyList<string> AssertionFailures);
+    IReadOnlyList<string> AssertionFailures,
+    IReadOnlyList<FailedFlowDetail> FailedFlows);

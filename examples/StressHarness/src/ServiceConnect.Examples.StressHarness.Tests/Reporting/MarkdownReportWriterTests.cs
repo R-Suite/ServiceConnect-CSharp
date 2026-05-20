@@ -21,9 +21,13 @@ public class MarkdownReportWriterTests
             FailedFlows: 1,
             Patterns:
             [
-                new PatternStats("p2p", 2, 2, 0, 1, 0, 1, 0, 5.0, 10.0, 15.0, []),
+                new PatternStats("p2p", 2, 2, 0, 1, 0, 1, 0, 5.0, 10.0, 15.0, [], []),
                 new PatternStats("pubsub", 2, 1, 1, 1, 0, 0, 1, 8.0, 12.0, 20.0,
-                    ["α→β handler fired 1 time, expected 2"]),
+                    ["α→β handler fired 1 time, expected 2"],
+                    [new FailedFlowDetail(
+                        FlowId: Guid.Parse("12345678-1234-1234-1234-123456789abc"),
+                        Direction: "α→β",
+                        Failures: ["handler fired 1 time, expected 2"])]),
             ],
             ProcessAssertionFailures: []);
 
@@ -41,6 +45,9 @@ public class MarkdownReportWriterTests
             Assert.Contains("| pubsub | 2 | 1/1 | 1/0 | 0/1 | ", md);
             Assert.Contains("α→β handler fired 1 time, expected 2", md);
             Assert.Contains("KB", md);
+            Assert.Contains("## Failed flows", md);
+            Assert.Contains("### pubsub", md);
+            Assert.Contains("**α→β** `12345678-1234-1234-1234-123456789abc`", md);
         }
         finally
         {

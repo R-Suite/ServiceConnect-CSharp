@@ -116,6 +116,13 @@ public sealed class ModeDispatcher(
             var alphaFailed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Alpha && !d.Succeeded);
             var betaPassed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Beta && d.Succeeded);
             var betaFailed = dirs.Count(d => d.ExpectedReceiver == BusIdentity.Beta && !d.Succeeded);
+            var failedFlows = dirs
+                .Where(d => !d.Succeeded)
+                .Select(d => new FailedFlowDetail(
+                    FlowId: d.FlowId,
+                    Direction: d.DirectionLabel,
+                    Failures: d.AssertionFailures))
+                .ToList();
             return new PatternStats(
                 Name: kv.Key,
                 Runs: dirs.Count,
@@ -128,7 +135,8 @@ public sealed class ModeDispatcher(
                 LatencyP50Ms: Percentile(dirs, 0.50),
                 LatencyP95Ms: Percentile(dirs, 0.95),
                 LatencyP99Ms: Percentile(dirs, 0.99),
-                AssertionFailures: fails);
+                AssertionFailures: fails,
+                FailedFlows: failedFlows);
         }).ToList();
 
         var totalFlows = patternStats.Sum(p => p.Runs);

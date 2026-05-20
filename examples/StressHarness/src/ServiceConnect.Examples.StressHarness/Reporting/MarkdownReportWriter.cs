@@ -52,6 +52,24 @@ public static class MarkdownReportWriter
             }
         }
 
+        var anyFailedFlows = report.Patterns.Any(p => p.FailedFlows.Count > 0);
+        if (anyFailedFlows)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Failed flows");
+            foreach (var p in report.Patterns.Where(p => p.FailedFlows.Count > 0))
+            {
+                sb.AppendLine();
+                sb.AppendLine($"### {p.Name}");
+                foreach (var f in p.FailedFlows)
+                {
+                    var causes = string.Join("; ", f.Failures);
+                    sb.AppendLine(string.Create(CultureInfo.InvariantCulture,
+                        $"- **{f.Direction}** `{f.FlowId:D}` — {causes}"));
+                }
+            }
+        }
+
         await File.WriteAllTextAsync(filePath, sb.ToString(), cancellationToken);
     }
 }

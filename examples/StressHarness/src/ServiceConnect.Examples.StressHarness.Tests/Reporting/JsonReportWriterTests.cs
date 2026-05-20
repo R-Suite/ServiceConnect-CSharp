@@ -22,7 +22,7 @@ public class JsonReportWriterTests
             FailedFlows: 0,
             Patterns:
             [
-                new PatternStats("p2p", 2, 2, 0, 1, 0, 1, 0, 5.0, 10.0, 15.0, []),
+                new PatternStats("p2p", 2, 2, 0, 1, 0, 1, 0, 5.0, 10.0, 15.0, [], []),
             ],
             ProcessAssertionFailures: []);
 
@@ -42,6 +42,7 @@ public class JsonReportWriterTests
             Assert.Equal("p2p", doc.RootElement.GetProperty("patterns")[0].GetProperty("name").GetString());
             Assert.Equal(1, doc.RootElement.GetProperty("patterns")[0].GetProperty("alphaPassed").GetInt32());
             Assert.Equal(1, doc.RootElement.GetProperty("patterns")[0].GetProperty("betaPassed").GetInt32());
+            Assert.Equal(0, doc.RootElement.GetProperty("patterns")[0].GetProperty("failedFlows").GetArrayLength());
         }
         finally
         {
