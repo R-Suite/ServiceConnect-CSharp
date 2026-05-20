@@ -83,9 +83,12 @@ internal sealed class Producer : IProducer
         _retryCount = GetSetting(settings, RabbitMQSettingKeys.RetryCount, (ushort)60, Convert.ToUInt16);
         _retryTimeInSeconds = GetSetting(settings, RabbitMQSettingKeys.RetrySeconds, (ushort)10, Convert.ToUInt16);
         _maxPublishWaitTime = GetSetting(settings, RabbitMQSettingKeys.MaxPublishWaitTime, TimeSpan.FromSeconds(120), v => (TimeSpan)v);
-        // Reject the same invalid range as PublishTimeout — a value of zero or other negative
-        // would let the wall-clock cap fire immediately on every publish, burning the entire
-        // retry budget against an unreachable condition.
+        // Reject a zero or negative wall-clock cap — either would fire on the first
+        // iteration before any publish attempt, burning the entire retry budget against
+        // an unreachable condition. Timeout.InfiniteTimeSpan disables the cap and is the
+        // documented opt-out. This is stricter than _publishTimeout's predicate by
+        // intent: a zero confirm-ack wait can be legitimate (CancelAfter(Zero) cancels
+        // immediately), whereas a zero wall-clock cap can never succeed.
         if (_maxPublishWaitTime <= TimeSpan.Zero && _maxPublishWaitTime != Timeout.InfiniteTimeSpan)
         {
             throw new ArgumentOutOfRangeException(
@@ -147,12 +150,12 @@ internal sealed class Producer : IProducer
         CancellationToken cancellationToken)
     {
         Exception? lastException = null;
-        var publishStartedAt = Stopwatch.GetTimestamp();
+        var publishStartTimestamp = Stopwatch.GetTimestamp();
         for (int attempt = 0; attempt <= _retryCount; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (_maxPublishWaitTime != Timeout.InfiniteTimeSpan
-                && Stopwatch.GetElapsedTime(publishStartedAt) >= _maxPublishWaitTime)
+                && Stopwatch.GetElapsedTime(publishStartTimestamp) >= _maxPublishWaitTime)
             {
                 throw new TimeoutException(
                     $"Publish wall-clock budget {_maxPublishWaitTime.TotalSeconds:0.###}s exhausted " +
