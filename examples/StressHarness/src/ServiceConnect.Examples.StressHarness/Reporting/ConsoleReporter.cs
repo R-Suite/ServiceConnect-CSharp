@@ -35,12 +35,14 @@ public sealed class ConsoleReporter : IDisposable
 
     public void EndSoakMode()
     {
+        Timer? toDispose;
         lock (_gate)
         {
-            _heartbeatTimer?.Dispose();
+            toDispose = _heartbeatTimer;
             _heartbeatTimer = null;
             _soakMode = false;
         }
+        toDispose?.Dispose();
     }
 
     public void Heartbeat(int tick, int totalTicks, string currentPattern)
@@ -138,10 +140,12 @@ public sealed class ConsoleReporter : IDisposable
 
     public void Dispose()
     {
+        Timer? toDispose;
         lock (_gate)
         {
-            _heartbeatTimer?.Dispose();
+            toDispose = _heartbeatTimer;
             _heartbeatTimer = null;
         }
+        toDispose?.Dispose();
     }
 }
