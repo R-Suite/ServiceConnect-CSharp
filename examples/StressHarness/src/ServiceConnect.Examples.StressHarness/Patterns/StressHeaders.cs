@@ -5,6 +5,7 @@ public static class StressHeaders
     public const string FlowId = "X-Stress-FlowId";
     public const string OriginBus = "X-Stress-Origin-Bus";
     public const string Pattern = "X-Stress-Pattern";
+    public const string MessageId = "X-Stress-MessageId";
 }
 
 public enum BusIdentity { Alpha, Beta }
