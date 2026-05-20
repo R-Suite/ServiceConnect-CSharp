@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ServiceConnect.Examples.StressHarness.Assertions;
 
 namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 
@@ -19,12 +20,14 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 /// consistent view.
 /// </para>
 /// <para>
-/// Entries are never reclaimed for the lifetime of the harness process — flow ids
-/// are cryptographic GUIDs, so memory growth is bounded by the test run's total
-/// flow count.
+/// Per-flow entries are reclaimed by the dispatcher via
+/// <see cref="TryRemoveCompleted"/> at the end of each flow's lifecycle so a
+/// long-running soak does not accumulate one row per delivered slip; ids that
+/// were never observed (the dispatcher broadcasts the completion set to every
+/// flow-keyed singleton) are silently ignored.
 /// </para>
 /// </remarks>
-public sealed class SlipTrail
+public sealed class SlipTrail : IFlowKeyedSingleton
 {
     private readonly ConcurrentDictionary<Guid, List<string>> _trails = new();
 
@@ -63,6 +66,18 @@ public sealed class SlipTrail
         lock (trail)
         {
             return [.. trail];
+        }
+    }
+
+    /// <summary>
+    /// Drops the per-flow trail row for every id in
+    /// <paramref name="completedFlowIds"/>. Ids never observed are ignored.
+    /// </summary>
+    public void TryRemoveCompleted(IEnumerable<Guid> completedFlowIds)
+    {
+        foreach (var id in completedFlowIds)
+        {
+            _trails.TryRemove(id, out _);
         }
     }
 }

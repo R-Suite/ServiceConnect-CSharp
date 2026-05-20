@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ServiceConnect.Examples.StressHarness.Assertions;
 
 namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 
@@ -27,7 +28,7 @@ public sealed record StreamObservation(Guid FlowId, string BusTag, int Bytes, st
 /// against the first observation, which is the right invariant for the harness's
 /// integrity check.
 /// </remarks>
-public sealed class StreamObservations
+public sealed class StreamObservations : IFlowKeyedSingleton
 {
     private readonly ConcurrentDictionary<Guid, TaskCompletionSource<StreamObservation>> _waiters = new();
 
@@ -54,5 +55,18 @@ public sealed class StreamObservations
     {
         var tcs = _waiters.GetOrAdd(observation.FlowId, _ => new TaskCompletionSource<StreamObservation>(TaskCreationOptions.RunContinuationsAsynchronously));
         tcs.TrySetResult(observation);
+    }
+
+    /// <summary>
+    /// Drops the per-flow awaiter entry for every id in
+    /// <paramref name="completedFlowIds"/>. Re-awaiting a reclaimed flow id
+    /// yields a fresh pending TCS so a later redelivery completes cleanly.
+    /// </summary>
+    public void TryRemoveCompleted(IEnumerable<Guid> completedFlowIds)
+    {
+        foreach (var id in completedFlowIds)
+        {
+            _waiters.TryRemove(id, out _);
+        }
     }
 }

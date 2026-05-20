@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ServiceConnect.Examples.StressHarness.Assertions;
 
 namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 
@@ -17,10 +18,22 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Handlers;
 /// + <c>lock(list)</c>. Read-back via <see cref="Snapshot(Guid)"/> takes the same
 /// lock so the assertion cannot observe a partial append.
 /// </remarks>
-public sealed class SagaObservations
+public sealed class SagaObservations : IFlowKeyedSingleton
 {
     /// <summary>Per-saga ordered list of post-mutation stage values.</summary>
     public ConcurrentDictionary<Guid, List<int>> Stages { get; } = new();
+
+    /// <summary>
+    /// Drops the per-correlation row for every id in
+    /// <paramref name="completedFlowIds"/>. Ids never observed are ignored.
+    /// </summary>
+    public void TryRemoveCompleted(IEnumerable<Guid> completedFlowIds)
+    {
+        foreach (var id in completedFlowIds)
+        {
+            Stages.TryRemove(id, out _);
+        }
+    }
 
     public void Record(Guid correlationId, int stage)
     {

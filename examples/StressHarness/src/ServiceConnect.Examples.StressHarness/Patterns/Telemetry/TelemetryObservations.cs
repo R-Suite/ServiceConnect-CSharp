@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using ServiceConnect.Examples.StressHarness.Assertions;
 using ServiceConnect.Telemetry;
 
 namespace ServiceConnect.Examples.StressHarness.Patterns.Telemetry;
@@ -15,11 +16,19 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Telemetry;
 /// <para>
 /// The listener subscribes to <see cref="ServiceConnectActivitySource.ActivitySourceName"/>
 /// (currently <c>ServiceConnect.Telemetry.Bus</c>) and records every stopped
-/// activity into a <see cref="ConcurrentBag{T}"/>. The bag is read by the
-/// driver after the handler signal fires; reading does not drain, so subsequent
-/// drivers (in soak / throughput modes) could re-inspect the same observations
-/// — for smoke mode the bag grows by exactly four entries per flow direction
-/// (publish + consume on each bus), bounded by the total flow count.
+/// activity into a per-flow bag indexed by the
+/// <c>messaging.message.conversation_id</c> tag the framework stamps from the
+/// message's CorrelationId. Spans whose tag is missing or unparseable are
+/// dropped — the harness only emits activities under a fully populated flow id,
+/// so a missing tag indicates a span the driver does not own and would not
+/// inspect anyway.
+/// </para>
+/// <para>
+/// Per-flow rows are reclaimed by the dispatcher via
+/// <see cref="TryRemoveCompleted"/> at the end of each flow so a long-running
+/// soak does not retain one snapshot per delivered span; the driver looks up
+/// its flow via <see cref="GetActivitiesFor(Guid)"/> before the reclamation
+/// runs.
 /// </para>
 /// <para>
 /// <see cref="Dispose"/> tears down the listener subscription. The harness
@@ -29,10 +38,10 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Telemetry;
 /// IDisposable to keep the harness's shutdown story clean.
 /// </para>
 /// </remarks>
-public sealed class TelemetryObservations : IDisposable
+public sealed class TelemetryObservations : IDisposable, IFlowKeyedSingleton
 {
     private readonly ActivityListener _listener;
-    private readonly ConcurrentBag<ActivitySnapshot> _activities = [];
+    private readonly ConcurrentDictionary<Guid, ConcurrentBag<ActivitySnapshot>> _byFlow = new();
     private bool _disposed;
 
     public TelemetryObservations()
@@ -54,21 +63,59 @@ public sealed class TelemetryObservations : IDisposable
                 // stale tag values on instrumented builds. The snapshot is a
                 // shallow record and the activity itself is not retained.
                 var conversationId = activity.GetTagItem(MessagingAttributes.MessageConversationId) as string;
-                _activities.Add(new ActivitySnapshot(
+                if (string.IsNullOrEmpty(conversationId))
+                {
+                    return;
+                }
+
+                // Accept both the framework's default ("D" with dashes, written
+                // by ServiceConnectActivitySource via Guid.ToString()) and the
+                // dash-stripped "N" form that the harness uses in some
+                // adjacent headers. Anything else is a span this listener does
+                // not own and the driver would not inspect.
+                if (!Guid.TryParseExact(conversationId, "D", out var flowId)
+                    && !Guid.TryParseExact(conversationId, "N", out flowId))
+                {
+                    return;
+                }
+
+                var snapshot = new ActivitySnapshot(
                     Name: activity.OperationName,
                     Kind: activity.Kind,
                     DisplayName: activity.DisplayName,
-                    ConversationId: conversationId));
+                    ConversationId: conversationId);
+
+                var bag = _byFlow.GetOrAdd(flowId, _ => []);
+                bag.Add(snapshot);
             },
         };
         ActivitySource.AddActivityListener(_listener);
     }
 
     /// <summary>
-    /// Returns every span captured for the activity source so far. The snapshot
-    /// is taken at call time; subsequent emissions are observed on the next call.
+    /// Returns every span captured for <paramref name="flowId"/> so far. The
+    /// returned collection reflects the bag at call time; subsequent emissions
+    /// are observed on the next call. Empty if the flow has no captured spans
+    /// (e.g. the driver polled before the framework stopped the Consumer
+    /// activity).
     /// </summary>
-    public IReadOnlyList<ActivitySnapshot> Activities => [.. _activities];
+    public IReadOnlyCollection<ActivitySnapshot> GetActivitiesFor(Guid flowId) =>
+        _byFlow.TryGetValue(flowId, out var bag)
+            ? bag
+            : [];
+
+    /// <summary>
+    /// Drops the per-flow snapshot bag for every id in
+    /// <paramref name="completedFlowIds"/>. Ids the listener never observed are
+    /// ignored.
+    /// </summary>
+    public void TryRemoveCompleted(IEnumerable<Guid> completedFlowIds)
+    {
+        foreach (var id in completedFlowIds)
+        {
+            _byFlow.TryRemove(id, out _);
+        }
+    }
 
     public void Dispose()
     {

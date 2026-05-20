@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ServiceConnect.Examples.StressHarness.Assertions;
 
 namespace ServiceConnect.Examples.StressHarness.Patterns.Aggregators;
 
@@ -26,7 +27,7 @@ public sealed record AggregatorBatchObservation(Guid FlowId, string BusTag, int 
 /// the driver requires (subsequent observations are inspected but no longer gate
 /// the await).
 /// </remarks>
-public sealed class AggregatorObservations
+public sealed class AggregatorObservations : IFlowKeyedSingleton
 {
     /// <summary>Every dispatched batch observed across both buses.</summary>
     public ConcurrentBag<AggregatorBatchObservation> Batches { get; } = [];
@@ -55,5 +56,23 @@ public sealed class AggregatorObservations
         Batches.Add(observation);
         var tcs = _waiters.GetOrAdd(observation.FlowId, _ => new TaskCompletionSource<AggregatorBatchObservation>(TaskCreationOptions.RunContinuationsAsynchronously));
         tcs.TrySetResult(observation);
+    }
+
+    // The Batches bag is intentionally NOT cleaned: ConcurrentBag has no
+    // targeted removal, and per-batch payload (Guid + short bus-tag + int) is
+    // small enough that the unreclaimed observations stay well inside the soak
+    // budget. Only the awaiter dictionary — which is keyed by flow id and
+    // therefore grows with active flows — is reclaimed here.
+    /// <summary>
+    /// Drops the per-flow awaiter entry for every id in
+    /// <paramref name="completedFlowIds"/>. Re-awaiting a reclaimed flow id
+    /// yields a fresh pending TCS so a later redelivery completes cleanly.
+    /// </summary>
+    public void TryRemoveCompleted(IEnumerable<Guid> completedFlowIds)
+    {
+        foreach (var id in completedFlowIds)
+        {
+            _waiters.TryRemove(id, out _);
+        }
     }
 }

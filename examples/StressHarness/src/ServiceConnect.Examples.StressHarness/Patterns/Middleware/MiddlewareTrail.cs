@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ServiceConnect.Examples.StressHarness.Assertions;
 
 namespace ServiceConnect.Examples.StressHarness.Patterns.Middleware;
 
@@ -28,10 +29,23 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Middleware;
 /// partial append.
 /// </para>
 /// </remarks>
-public sealed class MiddlewareTrail
+public sealed class MiddlewareTrail : IFlowKeyedSingleton
 {
     /// <summary>Per-flow ordered list of stage markers.</summary>
     public ConcurrentDictionary<Guid, List<string>> Trails { get; } = new();
+
+    /// <summary>
+    /// Drops the per-flow trail row for every id in
+    /// <paramref name="completedFlowIds"/>. Ids the trail never observed are
+    /// ignored.
+    /// </summary>
+    public void TryRemoveCompleted(IEnumerable<Guid> completedFlowIds)
+    {
+        foreach (var id in completedFlowIds)
+        {
+            Trails.TryRemove(id, out _);
+        }
+    }
 
     /// <summary>
     /// Appends <paramref name="marker"/> to the trail for <paramref name="flowId"/>,

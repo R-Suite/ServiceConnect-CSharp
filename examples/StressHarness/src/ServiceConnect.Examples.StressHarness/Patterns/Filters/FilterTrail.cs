@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using ServiceConnect.Examples.StressHarness.Assertions;
 
 namespace ServiceConnect.Examples.StressHarness.Patterns.Filters;
 
@@ -26,10 +27,24 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Filters;
 /// partial append.
 /// </para>
 /// </remarks>
-public sealed class FilterTrail
+public sealed class FilterTrail : IFlowKeyedSingleton
 {
     /// <summary>Per-flow ordered list of stage markers.</summary>
     public ConcurrentDictionary<Guid, List<string>> Trails { get; } = new();
+
+    /// <summary>
+    /// Drops the per-flow trail row for every id in
+    /// <paramref name="completedFlowIds"/>. Ids the trail never observed are
+    /// ignored; the dispatcher does not know which accumulators a flow touched
+    /// so it broadcasts the completion set to every flow-keyed singleton.
+    /// </summary>
+    public void TryRemoveCompleted(IEnumerable<Guid> completedFlowIds)
+    {
+        foreach (var id in completedFlowIds)
+        {
+            Trails.TryRemove(id, out _);
+        }
+    }
 
     /// <summary>
     /// Appends <paramref name="marker"/> to the trail for <paramref name="flowId"/>,

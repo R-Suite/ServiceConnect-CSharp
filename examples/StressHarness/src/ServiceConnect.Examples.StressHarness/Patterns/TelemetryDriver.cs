@@ -29,9 +29,9 @@ namespace ServiceConnect.Examples.StressHarness.Patterns;
 /// </para>
 /// <para>
 /// The driver waits for the handler signal first to gate on dispatch completion,
-/// then polls <see cref="TelemetryObservations.Activities"/> until the
-/// per-flow span lands or the timeout expires. The poll is needed because the
-/// outer Consumer activity's <c>Stop()</c> is invoked by the framework's
+/// then polls <see cref="TelemetryObservations.GetActivitiesFor(Guid)"/> until
+/// the per-flow span lands or the timeout expires. The poll is needed because
+/// the outer Consumer activity's <c>Stop()</c> is invoked by the framework's
 /// processing pipeline after the handler returns; the rendezvous fires inside
 /// the handler so the listener's <c>ActivityStopped</c> callback runs strictly
 /// after the driver's await wakes.
@@ -78,17 +78,17 @@ public sealed class TelemetryDriver(FlowAccounting accounting, PerHandlerSignal 
             }
 
             // The framework stamps the message's CorrelationId onto the Producer
-            // and Consumer activities as messaging.message.conversation_id. The
-            // driver uses the flow id (which is the message's CorrelationId) as
-            // the per-flow span discriminator so concurrent direction siblings
-            // do not cross-contaminate the assertion.
-            var conversationId = context.FlowId.ToString();
-            var perFlowSpans = await WaitForFlowSpanAsync(conversationId, cancellationToken).ConfigureAwait(false);
+            // and Consumer activities as messaging.message.conversation_id; the
+            // observations singleton indexes captured spans by that id so the
+            // driver looks up its flow directly without scanning every emitted
+            // span. The flow id is the message's CorrelationId so concurrent
+            // direction siblings do not cross-contaminate the assertion.
+            var perFlowSpans = await WaitForFlowSpanAsync(context.FlowId, cancellationToken).ConfigureAwait(false);
 
             if (perFlowSpans.Count == 0)
             {
                 failures.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"telemetry {context.Origin.ToHeaderValue()}->{context.ExpectedReceiver.ToHeaderValue()}: no activity captured for conversation id {conversationId}"));
+                    $"telemetry {context.Origin.ToHeaderValue()}->{context.ExpectedReceiver.ToHeaderValue()}: no activity captured for flow {context.FlowId}"));
             }
         }
         catch (OperationCanceledException)
@@ -103,13 +103,11 @@ public sealed class TelemetryDriver(FlowAccounting accounting, PerHandlerSignal 
             : FlowResult.Fail(sw.Elapsed, sent: 1, handled: 0, [.. failures]);
     }
 
-    private async Task<IReadOnlyList<ActivitySnapshot>> WaitForFlowSpanAsync(string conversationId, CancellationToken cancellationToken)
+    private async Task<IReadOnlyCollection<ActivitySnapshot>> WaitForFlowSpanAsync(Guid flowId, CancellationToken cancellationToken)
     {
         while (true)
         {
-            var matches = observations.Activities
-                .Where(a => string.Equals(a.ConversationId, conversationId, StringComparison.Ordinal))
-                .ToList();
+            var matches = observations.GetActivitiesFor(flowId);
             if (matches.Count > 0)
             {
                 return matches;
