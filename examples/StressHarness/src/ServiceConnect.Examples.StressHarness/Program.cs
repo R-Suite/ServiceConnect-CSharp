@@ -64,6 +64,8 @@ try
     var slipTrail = new SlipTrail();
     var streamObservations = new StreamObservations();
     var middlewareTrail = new MiddlewareTrail();
+    var messageLedger = new MessageLedger();
+    var chaosClock = new ChaosClock();
     // Construct the telemetry observations singleton BEFORE the bus pair is
     // started so the process-global ActivityListener is subscribed in time to
     // observe the buses' first telemetry spans. The observations instance is
@@ -85,6 +87,7 @@ try
         slipTrail,
         streamObservations,
         telemetryObservations,
+        messageLedger,
     ];
 
     IReadOnlyList<IPatternDriver> drivers =
@@ -369,6 +372,8 @@ try
             });
         },
         loggerFactory,
+        messageLedger,
+        chaosClock,
         CancellationToken.None);
 
     // Broker-chaos singleton picks up the CLI choice. NoopBrokerChaos is wired
@@ -391,7 +396,6 @@ try
         _ => new NoopBrokerChaos(),
     };
 
-    var chaosClock = new ChaosClock();
     ChaosScheduler? chaosScheduler = opts.Chaos == "docker"
         ? new ChaosScheduler(brokerChaos, chaosClock, "rabbitmq", opts.ChaosInterval, opts.ChaosDowntime)
         : null;

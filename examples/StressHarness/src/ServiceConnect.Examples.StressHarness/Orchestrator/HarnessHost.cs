@@ -3,6 +3,8 @@ using Microsoft.Extensions.Logging;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.Client.RabbitMQ.Configuration;
 using ServiceConnect.DependencyInjection;
+using ServiceConnect.Examples.StressHarness.Assertions;
+using ServiceConnect.Examples.StressHarness.Chaos;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistence.InMemory;
 using ServiceConnect.Persistence.MongoDb;
@@ -64,6 +66,15 @@ public sealed class HarnessHost : IAsyncDisposable
     /// service collection.
     /// </param>
     /// <param name="loggerFactory">Logger factory shared across both service providers.</param>
+    /// <param name="ledger">
+    /// Shared <see cref="MessageLedger"/> instance that every wrapped <see cref="IBus"/>
+    /// records into. Registered as a singleton in both per-bus service providers so
+    /// handlers can inject it for consume-side recording.
+    /// </param>
+    /// <param name="chaosClock">
+    /// Shared chaos-window clock. The bus wrap reads the current window for each
+    /// publish row; tests substitute a fake implementation of <see cref="IChaosClock"/>.
+    /// </param>
     /// <param name="cancellationToken">
     /// Threaded into each <see cref="IBus.StartConsumingAsync"/> call so a slow broker
     /// handshake honours orchestrator-level cancellation.
@@ -72,22 +83,32 @@ public sealed class HarnessHost : IAsyncDisposable
         HarnessOptions options,
         Action<ServiceConnectBuilder, string> registerPerBus,
         ILoggerFactory loggerFactory,
+        MessageLedger ledger,
+        IChaosClock chaosClock,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(registerPerBus);
         ArgumentNullException.ThrowIfNull(loggerFactory);
+        ArgumentNullException.ThrowIfNull(ledger);
+        ArgumentNullException.ThrowIfNull(chaosClock);
 
-        var alphaServices = BuildServices(options, loggerFactory, busTag: "alpha", queuePrefix: "stress-a", registerPerBus);
+        var alphaServices = BuildServices(options, loggerFactory, busTag: "alpha", queuePrefix: "stress-a", registerPerBus, ledger, chaosClock);
         ServiceProvider? betaServices = null;
         IBus? alpha = null;
         IBus? beta = null;
         try
         {
-            betaServices = BuildServices(options, loggerFactory, busTag: "beta", queuePrefix: "stress-b", registerPerBus);
+            betaServices = BuildServices(options, loggerFactory, busTag: "beta", queuePrefix: "stress-b", registerPerBus, ledger, chaosClock);
 
             alpha = alphaServices.GetRequiredService<IBus>();
             beta = betaServices.GetRequiredService<IBus>();
+
+            // Wrap each resolved bus in a LedgeredSender BEFORE StartConsumingAsync so the
+            // per-bus consumer pump and the harness drivers both see the wrapped instance.
+            // StartConsumingAsync forwards to inner — no state change on the wrap.
+            alpha = new LedgeredSender(alpha, ledger, chaosClock);
+            beta = new LedgeredSender(beta, ledger, chaosClock);
 
             await alpha.StartConsumingAsync(cancellationToken).ConfigureAwait(false);
             await beta.StartConsumingAsync(cancellationToken).ConfigureAwait(false);
@@ -122,7 +143,9 @@ public sealed class HarnessHost : IAsyncDisposable
         ILoggerFactory loggerFactory,
         string busTag,
         string queuePrefix,
-        Action<ServiceConnectBuilder, string> registerPerBus)
+        Action<ServiceConnectBuilder, string> registerPerBus,
+        MessageLedger ledger,
+        IChaosClock chaosClock)
     {
         var services = new ServiceCollection();
 
@@ -140,6 +163,14 @@ public sealed class HarnessHost : IAsyncDisposable
         // registration). Adding the singleton up-front avoids forcing every driver to
         // remember to do this themselves.
         services.AddSingleton<IReadOnlyList<HandlerReference>>([]);
+
+        // Shared ledger and clock are registered into each per-bus provider so handlers
+        // resolved from either provider can inject MessageLedger and IChaosClock directly
+        // for consume-side recording. The same instances are used by the LedgeredSender
+        // wraps constructed in StartAsync, keeping publish and consume rows in one shared
+        // ledger.
+        services.AddSingleton(ledger);
+        services.AddSingleton(chaosClock);
 
         services.AddServiceConnect(builder =>
         {
