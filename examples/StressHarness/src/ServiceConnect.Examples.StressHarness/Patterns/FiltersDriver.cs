@@ -71,12 +71,14 @@ public sealed class FiltersDriver(FlowAccounting accounting, PerHandlerSignal si
 
             // Snapshot the trail under its per-list lock so a concurrently-running
             // direction (the sibling α↔β flow) cannot make this assertion observe a
-            // partial append. The expected order is filter then handler; anything else
-            // — missing markers, reversed order, extra entries — is a failure.
+            // partial append. The expected progression is filter then handler as an
+            // ordered subsequence — publisher retry or broker redelivery can re-fire
+            // both stages, producing trails like [filter, handler, filter, handler].
+            // Reversed order or missing markers remain failures.
             var snapshot = trail.Snapshot(context.FlowId);
-            if (snapshot.Count != 2 || snapshot[0] != "filter" || snapshot[1] != "handler")
+            if (!ContainsOrderedSubsequence(snapshot, "filter", "handler"))
             {
-                failures.Add($"filters {context.Origin.ToHeaderValue()}->{context.ExpectedReceiver.ToHeaderValue()}: expected trail [filter, handler] but observed [{string.Join(", ", snapshot)}]");
+                failures.Add($"filters {context.Origin.ToHeaderValue()}->{context.ExpectedReceiver.ToHeaderValue()}: expected trail [filter, handler] as ordered subsequence but observed [{string.Join(", ", snapshot)}]");
             }
         }
         catch (OperationCanceledException)
@@ -88,5 +90,25 @@ public sealed class FiltersDriver(FlowAccounting accounting, PerHandlerSignal si
         return failures.Count == 0
             ? FlowResult.Pass(sw.Elapsed, sent: 1, handled: 1)
             : FlowResult.Fail(sw.Elapsed, sent: 1, handled: 0, [.. failures]);
+    }
+
+    private static bool ContainsOrderedSubsequence(IReadOnlyList<string> observed, string first, string second)
+    {
+        var seenFirst = false;
+        foreach (var entry in observed)
+        {
+            if (!seenFirst)
+            {
+                if (string.Equals(entry, first, StringComparison.Ordinal))
+                {
+                    seenFirst = true;
+                }
+            }
+            else if (string.Equals(entry, second, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 }
