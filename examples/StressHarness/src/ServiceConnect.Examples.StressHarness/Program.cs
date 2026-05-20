@@ -201,6 +201,8 @@ try
                 services.TryAddSingleton(streamObservations);
                 services.TryAddSingleton(middlewareTrail);
                 services.TryAddSingleton(telemetryObservations);
+                services.TryAddSingleton(messageLedger);
+                services.TryAddSingleton(chaosClock);
 
                 // Filter is resolved per dispatch via GetRequiredService; transient
                 // lifetime matches its observational role (no state held on the filter
