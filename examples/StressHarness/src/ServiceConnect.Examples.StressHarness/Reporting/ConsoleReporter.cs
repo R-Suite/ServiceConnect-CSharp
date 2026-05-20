@@ -36,8 +36,7 @@ public sealed class ConsoleReporter
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Duration: {report.Duration}"));
             Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
                 $"Flows:    {report.PassedFlows} passed, {report.FailedFlows} failed of {report.TotalFlows}"));
-            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"Memory:   baseline {report.MemoryBaselineBytes:N0} → final {report.MemoryFinalBytes:N0} bytes"));
+            Console.WriteLine($"Memory:   baseline {Bytes.Format(report.MemoryBaselineBytes)} → final {Bytes.Format(report.MemoryFinalBytes)}");
 
             var anyFailures = report.Patterns.Any(p => p.AssertionFailures.Count > 0)
                 || report.ProcessAssertionFailures.Count > 0;

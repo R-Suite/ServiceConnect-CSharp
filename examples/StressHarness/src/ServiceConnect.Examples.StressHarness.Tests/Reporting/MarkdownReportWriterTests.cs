@@ -14,8 +14,8 @@ public class MarkdownReportWriterTests
             StartedAtUtc: DateTimeOffset.UnixEpoch,
             CompletedAtUtc: DateTimeOffset.UnixEpoch.AddSeconds(30),
             Duration: TimeSpan.FromSeconds(30),
-            MemoryBaselineBytes: 100_000_000,
-            MemoryFinalBytes: 105_000_000,
+            MemoryBaselineBytes: 800_000,
+            MemoryFinalBytes: 900_000,
             TotalFlows: 28,
             PassedFlows: 27,
             FailedFlows: 1,
@@ -37,9 +37,10 @@ public class MarkdownReportWriterTests
             var md = await File.ReadAllTextAsync(path);
             Assert.Contains("**Mode:** smoke", md);
             Assert.Contains("27 / 28", md);
-            Assert.Contains("| p2p ", md);
-            Assert.Contains("| pubsub ", md);
+            Assert.Contains("| p2p | 2 | 2/0 | 1/0 | 1/0 | ", md);
+            Assert.Contains("| pubsub | 2 | 1/1 | 1/0 | 0/1 | ", md);
             Assert.Contains("α→β handler fired 1 time, expected 2", md);
+            Assert.Contains("KB", md);
         }
         finally
         {
