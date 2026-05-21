@@ -506,10 +506,15 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
     {
         // _subscribedUnderlyingConnection was populated by PrepareAsync; reuse the same captured
         // reference here so the matching unsubscribe in DisposeAsync targets the right instance.
+        //
+        // IDE0031's `?.E += h` rewrite needs C# 14 null-conditional compound assignment; this
+        // file also compiles under net8.0/C# 12, so the rewrite is unavailable there.
+#pragma warning disable IDE0031
         if (_subscribedUnderlyingConnection is not null)
         {
             _subscribedUnderlyingConnection.ConsumerTagChangeAfterRecoveryAsync += OnConsumerTagChangedAfterRecoveryAsync;
         }
+#pragma warning restore IDE0031
     }
 
     private void SubscribeToRecoveryReset()
@@ -526,10 +531,15 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
         // ConsumerTagChangeAfterRecoveryAsync fires only when the tag actually changes, which
         // is too narrow for the reset: we want to clear the flag on EVERY successful recovery,
         // not just those where the broker happened to reassign the tag.
+        //
+        // IDE0031's `?.E += h` rewrite needs C# 14 null-conditional compound assignment; this
+        // file also compiles under net8.0/C# 12, so the rewrite is unavailable there.
+#pragma warning disable IDE0031
         if (_subscribedUnderlyingConnection is not null)
         {
             _subscribedUnderlyingConnection.RecoverySucceededAsync += OnConnectionRecoverySucceededAsync;
         }
+#pragma warning restore IDE0031
     }
 
     private Task OnConnectionRecoverySucceededAsync(object? sender, AsyncEventArgs args)

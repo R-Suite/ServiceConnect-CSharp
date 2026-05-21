@@ -81,6 +81,10 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
     /// </summary>
     internal void UnsubscribeShutdownHandlers()
     {
+        // IDE0031 wants `_model?.ChannelShutdownAsync -= …`, but null-conditional compound
+        // assignment is a C# 14 feature and this file also compiles under net8.0/C# 12, so
+        // the suggested rewrite is unavailable on that TFM. Suppress at the call sites.
+#pragma warning disable IDE0031
         if (_model is not null)
         {
             _model.ChannelShutdownAsync -= OnChannelShutdownAsync;
@@ -89,6 +93,7 @@ internal sealed class RabbitMqChannelHost : IAsyncDisposable
         {
             _publishChannel.ChannelShutdownAsync -= OnPublishChannelShutdownAsync;
         }
+#pragma warning restore IDE0031
     }
 
     /// <summary>
