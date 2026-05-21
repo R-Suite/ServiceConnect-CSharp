@@ -38,17 +38,28 @@ public sealed class FlowAccounting
     /// set. Flows still short of their expected fan-out are left in place so the next
     /// <see cref="Reconcile"/> still reports them as missing.
     /// </summary>
-    public void TryRemoveCompleted()
+    /// <returns>
+    /// The flow ids that were reclaimed in this pass. Callers (the dispatch loops) feed
+    /// this list into every <see cref="IFlowKeyedSingleton.TryRemoveCompleted"/> so
+    /// per-flow rows recorded against driver-side sub-flow ids (e.g. saga stage ids)
+    /// are reclaimed alongside the direction-level ids the dispatcher already passes.
+    /// </returns>
+    public IReadOnlyList<Guid> TryRemoveCompleted()
     {
+        var removed = new List<Guid>();
         foreach (var kv in _expected)
         {
             var observed = _observed.GetValueOrDefault(kv.Key, 0);
             if (observed >= kv.Value)
             {
-                _expected.TryRemove(kv.Key, out _);
-                _observed.TryRemove(kv.Key, out _);
+                if (_expected.TryRemove(kv.Key, out _))
+                {
+                    _observed.TryRemove(kv.Key, out _);
+                    removed.Add(kv.Key);
+                }
             }
         }
+        return removed;
     }
 
     public AccountingSummary Reconcile()

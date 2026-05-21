@@ -135,4 +135,22 @@ public class FlowAccountingTests
         Assert.Single(summary.MissingFlows, missing);
         Assert.Empty(summary.UnexpectedFlows);
     }
+
+    [Fact]
+    public void TryRemoveCompleted_ReturnsIdsOfReclaimedFlows()
+    {
+        var acct = new FlowAccounting();
+        var done = Guid.NewGuid();
+        var inflight = Guid.NewGuid();
+
+        acct.RecordSend(done, expectedHandlerInvocations: 1);
+        acct.RecordSend(inflight, expectedHandlerInvocations: 1);
+        acct.RecordHandled(done);
+
+        var removed = acct.TryRemoveCompleted();
+
+        Assert.Single(removed);
+        Assert.Contains(done, removed);
+        Assert.DoesNotContain(inflight, removed);
+    }
 }
