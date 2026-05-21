@@ -1,2 +1,0 @@
-- Remove co-authorored by claude in commits
-- Rewrite history to remove passwords, references to Ruffer
