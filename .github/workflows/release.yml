@@ -71,6 +71,26 @@ jobs:
         working-directory: src
         run: dotnet build ServiceConnect.slnx --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
 
+      # Re-run the full test suite against the exact tagged commit before pushing to NuGet.org.
+      # CI already gates merges to master, but a tag can point at any commit and NuGet packages
+      # cannot be unpublished — only delisted — so a green test run here is the last line of defence.
+      - name: Unit tests
+        working-directory: src
+        run: dotnet test ServiceConnect.UnitTests/ServiceConnect.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unittests.trx"
+
+      - name: E2E tests
+        working-directory: src
+        run: dotnet test ServiceConnect.EndToEndTests/ServiceConnect.EndToEndTests.csproj --configuration Release --no-build --logger "trx;LogFileName=e2e.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-results-${{ steps.version.outputs.version }}
+          path: src/**/TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 90
+
       - name: Pack
         working-directory: src
         run: dotnet pack ServiceConnect.slnx --configuration Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ../artifacts
