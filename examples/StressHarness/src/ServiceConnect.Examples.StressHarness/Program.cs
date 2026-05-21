@@ -155,6 +155,7 @@ try
             // call at dispatch time resolves to an instance closing over the shared
             // FilterTrail singleton.
             builder.AddBeforeConsumingFilter<StressTrailFilter>();
+            builder.AddBeforeConsumingFilter<AggregatorLedgerFilter>();
 
             // Custom-filter-and-middleware driver wires every stage of the inbound
             // pipeline: a BeforeConsuming filter, a MessageProcessing middleware
@@ -209,6 +210,10 @@ try
                 // itself, all state lives on the shared FilterTrail singleton).
                 services.AddTransient<StressTrailFilter>(sp => new StressTrailFilter(
                     sp.GetRequiredService<FilterTrail>()));
+                services.AddTransient<AggregatorLedgerFilter>(sp => new AggregatorLedgerFilter(
+                    busTag,
+                    sp.GetRequiredService<MessageLedger>(),
+                    sp.GetRequiredService<IChaosClock>()));
 
                 // BeforeConsuming, MessageProcessing, and OnConsumedSuccessfully
                 // stages for the pipeline-ordering driver. All three close over the
