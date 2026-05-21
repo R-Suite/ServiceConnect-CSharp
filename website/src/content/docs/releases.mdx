@@ -23,743 +23,144 @@ Match the major versions of the packages you reference. `ServiceConnect` 7.x exp
 
 For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
 
-## v7 — public-API tightening
+## v7
 
-This pass shrinks the public surface, removes legacy abstractions, and replaces Newtonsoft.Json with System.Text.Json across the shipped packages. The breaking-change list below covers every API change in the tightening pass; the second v7 section ([v7 — reliability, security, observability](#v7--reliability-security-observability)) covers the orthogonal work that landed in the same release.
+v7 is a clean-architecture rewrite. The legacy static `Bus` is gone; configuration is fluent and DI-wired; every public path is async with `CancellationToken`; the wire format is System.Text.Json; OpenTelemetry instrumentation is operator-grade; and the solution is consolidated to seven shipping packages. It is **not source- or binary-compatible with v6** — read this entry before upgrading.
 
-### Breaking — `IHasCorrelationId` interface
-
-A new interface in `ServiceConnect.Interfaces`:
-
-```csharp
-public interface IHasCorrelationId
-{
-    Guid CorrelationId { get; }
-}
-```
-
-`Message` implements it — anything deriving from `Message` picks up the contract automatically with no code change. **Custom non-`Message` aggregator data types must implement `IHasCorrelationId` explicitly.** The previous reflection-based discovery of a `public Guid CorrelationId` property is gone; missing the interface now produces a compile error.
-
-### Breaking — `TimeoutData.Destination` is nullable
-
-```csharp
-// Before:
-public string Destination { get; set; } = string.Empty;
-
-// After:
-public string? Destination { get; set; }
-```
-
-Callers reading `Destination` must handle null. The empty-string sentinel is replaced by an honest null. `ProcessManagerTimeoutService` already treats null-or-empty as "no recipient" (skips dispatch) — same semantics, type now expresses them.
-
-### Breaking — `IAggregatorPersistor` parameter and return types tightened
-
-```csharp
-Task InsertDataAsync(IHasCorrelationId data, ...);                       // was: object data
-Task<IReadOnlyList<IHasCorrelationId>> GetDataAsync(...);                // was: Task<IList<object>>
-```
-
-`RemoveDataAsync(string name, Guid correlationId, ...)` is unchanged. `IAggregatorSnapshot.ResolvedMessages` and the `AggregatorSnapshot` record's first parameter are tightened to `IReadOnlyList<IHasCorrelationId>` to match.
-
-`InMemoryAggregatorPersistor` ctor drops three unused string parameters: `(string connectionString, string databaseName, string collectionName, TimeProvider?)` becomes `(TimeProvider?)`. Callers using DI via `UseInMemoryPersistence()` need no change.
-
-### Breaking — `IMessageSerializer` reduced to four methods
-
-```csharp
-public interface IMessageSerializer
-{
-    void Serialize<T>(T message, IBufferWriter<byte> output) where T : Message;
-    T Deserialize<T>(ReadOnlyMemory<byte> data) where T : Message;
-    object Deserialize(ReadOnlyMemory<byte> data, Type type);
-
-    // Default impl flattens; SystemTextJsonMessageSerializer overrides for zero-copy.
-    object Deserialize(in ReadOnlySequence<byte> data, Type type) => ...;
-}
-```
-
-Down from nine. The `byte[] Serialize<T>(T)` overload, the `byte[]`/`ReadOnlySpan<byte>` deserialize overloads — gone. Migration:
-
-| Was | Now |
-|---|---|
-| `byte[] bytes = serializer.Serialize(msg);` | `var bw = new ArrayBufferWriter<byte>(); serializer.Serialize(msg, bw); var bytes = bw.WrittenMemory.ToArray();` |
-| `T msg = serializer.Deserialize<T>(byteArray);` | `T msg = serializer.Deserialize<T>(byteArray.AsMemory());` |
-| `T msg = serializer.Deserialize<T>(span);` | (collect into `ROM<byte>` first, or use the `Type`-taking overload) |
-
-### Breaking — System.Text.Json replaces Newtonsoft.Json in shipped packages
-
-The production `ServiceConnect` package no longer pulls `Newtonsoft.Json`. Consumers that relied on the transitive flow must add their own `<PackageReference Include="Newtonsoft.Json" />`.
-
-Wire format is JSON-equivalent to the v6 Newtonsoft default for typical messages. Cross-version round-trip is enforced on every PR by `ServiceConnect.SerializationCompatTests` (10 representative `Message` types × 4 round-trip channels + pathological-input tests). The corpus is the safety net for v6↔v7 mixed deployments.
-
-**Documented behaviour changes** versus the v6 Newtonsoft default (inputs the v7 serialiser rejects):
-
-- **`NaN` / `Infinity` doubles in JSON** — STJ rejects; Newtonsoft tolerated. Producers emitting these must serialise as `null` or use a custom converter.
-- **JSON nesting deeper than 32 levels** — STJ rejects via `MaxDepth = 32` (matches `HeaderDecoder` cap). Newtonsoft tolerated.
-- **Trailing commas** — STJ rejects. Newtonsoft tolerated. Lax JSON producers must clean their output.
-- **JavaScript-style `/* comments */`** — STJ rejects. Newtonsoft tolerated.
-
-**Behaviour preserved** by explicit `JsonSerializerOptions` settings:
-
-- `MaxDepth = 32` (HeaderDecoder cap parity)
-- `Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping` (literal Unicode like Newtonsoft)
-- `NumberHandling.AllowReadingFromString` (`"42" → int` like Newtonsoft)
-- `DefaultIgnoreCondition = Never` (emit nulls like `NullValueHandling.Include`)
-- ISO 8601 round-trip dates with `DateTimeKind` preservation
-
-`Newtonsoft.Json` has been removed from every production package; `ServiceConnect.Persistence.InMemory`'s `DeepClone` helper and `ServiceConnect.Client.RabbitMQ`'s `MessageRetryHandler` both use `System.Text.Json` directly. The reference remains only in the `ServiceConnect.SerializationCompatTests` test project, which keeps a Newtonsoft channel alive specifically to enforce v6↔v7 wire compatibility.
-
-### Breaking — `IProducer` body parameters are `ReadOnlyMemory<byte>`; headers are `IReadOnlyDictionary<string,string>?`
-
-```csharp
-public interface IProducer : IAsyncDisposable
-{
-    Task PublishAsync(Type type, ReadOnlyMemory<byte> body,
-        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
-    Task SendAsync(Type type, ReadOnlyMemory<byte> body,
-        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
-    Task SendAsync(string endPoint, Type type, ReadOnlyMemory<byte> body,
-        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
-    Task SendBytesAsync(string endPoint, Type type, ReadOnlyMemory<byte> packet,
-        IReadOnlyDictionary<string,string>? headers = null, CancellationToken ct = default);
-    // ... rest unchanged
-}
-```
-
-Callers passing `byte[]` get the implicit conversion to `ReadOnlyMemory<byte>` for free; callers using `null` for the body are no longer expressible because `ReadOnlyMemory<byte>` is a value type. A `default(ReadOnlyMemory<byte>)` (or `ReadOnlyMemory<byte>.Empty`) is now a valid empty body — the `MessageBusWriteStream.CloseAsync` close-packet path relies on this.
-
-### Internal — `SendContext.MessageBytes` is `ReadOnlyMemory<byte>`
-
-`SendContext.MessageBytes` is `init`-only `ReadOnlyMemory<byte>`. Custom `ISendMessageMiddleware` implementations that previously read `byte[] context.MessageBytes` get the same wire bytes; middleware that needs to *replace* the body must construct a new `SendContext` (the property is init-only by design — middleware mutates `Headers`, never bytes).
-
-### Breaking — `IConsumeContext.ReplyAsync` uses `ReplyOptions`
-
-```csharp
-// Before:
-Task ReplyAsync<TReply>(TReply message, IDictionary<string,string>? headers = null, CancellationToken ct = default);
-
-// After:
-Task ReplyAsync<TReply>(TReply message, ReplyOptions? options = null, CancellationToken ct = default);
-```
-
-Mirrors the `PublishOptions`/`SendOptions` shape. Migration:
-
-```csharp
-// Was:
-await ctx.ReplyAsync(reply, new Dictionary<string,string> { ["X-Trace"] = "abc" });
-
-// Now:
-await ctx.ReplyAsync(reply, new ReplyOptions { Headers = new Dictionary<string,string> { ["X-Trace"] = "abc" } });
-```
-
-### Breaking — `IConsumer.StartConsumingAsync` and `IMessageDispatcher.DispatchAsync` use `IReadOnly*`
-
-```csharp
-// IConsumer.StartConsumingAsync messageTypes:
-//   IList<string> -> IReadOnlyList<string>
-// IMessageDispatcher.DispatchAsync headers:
-//   IDictionary<string, object> -> IReadOnlyDictionary<string, object>
-```
-
-`List<string>` and `Dictionary<string, object>` continue to compile as arguments via implicit conversion. Mock setups using `It.IsAny<IList<string>>()` / `It.IsAny<IDictionary<string,object>>()` must update to the readonly variants.
-
-### Breaking — `IBus.RouteAsync` destinations is `IReadOnlyList<string>`
-
-`IBus.RouteAsync(T, IList<string>, CT)` becomes `RouteAsync(T, IReadOnlyList<string>, CT)`. `List<string>` arguments continue to work via implicit conversion.
-
-### Breaking — `SendOptions.EndPoints` and `RequestOptions.EndPoints` removed; `IBus.SendToManyAsync` added
-
-`SendOptions` and `RequestOptions` no longer carry an `EndPoints` field. Migration:
-
-| Was | Now |
-|---|---|
-| `bus.SendAsync(msg, new SendOptions { EndPoints = ["a", "b"] })` | `bus.SendToManyAsync(msg, ["a", "b"])` |
-| `bus.SendRequestAsync(msg, new RequestOptions { EndPoints = ["a", "b"] })` | `bus.PublishRequestAsync(msg, onReply, options)` (broadcast pattern) |
-
-The previous runtime guard preventing both `EndPoint` and `EndPoints` from being set is gone — the trap is no longer reachable.
-
-`RequestOptions.ExpectedReplyCount`'s "fall back to `EndPoints.Count`" clause is gone; it now defaults to "wait the full Timeout, return every reply" when null/zero/negative.
-
-### Breaking — Streaming body-type cascade
-
-`IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` align with the `ROM<byte>`-typed surface:
-
-```csharp
-// IMessageBusReadStream.Write:
-//   void Write(byte[] data, long packetNumber)
-//   -> void Write(ReadOnlyMemory<byte> data, long packetNumber)
-
-// IMessageBusWriteStream.WriteAsync:
-//   Task WriteAsync(byte[] buffer, int offset, int count, CT ct)
-//   -> Task WriteAsync(ReadOnlyMemory<byte> buffer, CT ct)
-```
-
-`IMessageBusWriteStream.WriteAsync` migration is mechanical:
-- `WriteAsync(buf, 0, buf.Length, ct)` → `WriteAsync(buf, ct)` (implicit `byte[]` → `ROM<byte>`)
-- `WriteAsync(buf, off, cnt, ct)` → `WriteAsync(buf.AsMemory(off, cnt), ct)`
-
-The outbound write path is now genuinely zero-copy (no internal buffer copy between user write and producer publish). The inbound read path retains its internal copy because RabbitMQ.Client v7 does not extend buffer lifetimes past the consumer callback.
-
-### Breaking — TLS is on by default
-
-`TransportConfiguration.SslEnabled` now defaults to `true` (was `false` in v6). The framework connects on AMQPS port 5671 by default; production deployments with TLS-configured brokers no longer need any transport setup beyond `Host` and credentials.
-
-**Migration.** If your broker runs without TLS — most localhost dev setups do — explicitly opt out:
-
-```csharp
-builder.ConfigureTransport(t =>
-{
-    t.Host = "localhost";
-    t.SslEnabled = false;        // local-dev plaintext; production must use TLS
-});
-```
-
-ServiceConnect emits a `Warning`-level log under the `ServiceConnect.Client.RabbitMQ` category when plaintext is configured against a non-loopback host. The warning is filterable via standard `Microsoft.Extensions.Logging` category configuration; it is NOT an error and the framework still connects.
-
-**Why.** v6 defaulted to plaintext for ergonomic localhost dev. v7 inverts the default to align with secure-by-default norms — production deployments connecting over plaintext to a non-loopback broker are almost always a misconfiguration, and the warning catches the rest.
-
-### Breaking — Aggregator persistor `Name` partition value changed
-
-The `name` partition key passed to `IAggregatorPersistor` changed from the closed-generic base type's `FullName` to the concrete user-subclass `FullName`.
-
-**Before (v6):** the framework called `typeof(Aggregator<OrderShipped>).FullName`, which embeds the full assembly-qualified type argument:
-
-```
-ServiceConnect.Aggregator`1[[MyApp.Sagas.OrderShipped, MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]
-```
-
-**After (v7):** the framework calls `typeof(OrderShippedAggregator).FullName`, which is just the concrete subclass name:
-
-```
-MyApp.Sagas.OrderShippedAggregator
-```
-
-Any MongoDB rows (or other persistent store rows) written by v6 carry the old `Name` value. v7 code queries on the new value and never sees those rows — they accumulate indefinitely, consuming storage and causing aggregation conditions to stall.
-
-#### Migration — rename existing aggregator state
-
-**Run this BEFORE restarting your services on v7.** Rows under the old `Name` are invisible to v7 code and accumulate indefinitely.
-
-For each aggregator in your codebase, find the old name (`typeof(Aggregator<YourMessage>).FullName`, with the embedded assembly-qualified type argument) and the new name (`typeof(YourConcreteAggregator).FullName`), then run the following against your MongoDB database. The collection name is `Aggregator` (the default; substitute if you passed a custom collection name to the persistor constructor).
-
-```javascript
-// Old name: typeof(Aggregator<MyApp.Sagas.OrderShipped>).FullName
-//   "ServiceConnect.Aggregator`1[[MyApp.Sagas.OrderShipped, MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]"
-// New name: typeof(MyApp.Sagas.OrderShippedAggregator).FullName
-//   "MyApp.Sagas.OrderShippedAggregator"
-
-db.Aggregator.updateMany(
-  { Name: "ServiceConnect.Aggregator`1[[MyApp.Sagas.OrderShipped, MyApp, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null]]" },
-  { $set: { Name: "MyApp.Sagas.OrderShippedAggregator" } }
-);
-```
-
-Repeat once per aggregator type. After renaming, verify with:
-
-```javascript
-// Confirm no rows remain under the old name:
-db.Aggregator.countDocuments({ Name: { $regex: /^ServiceConnect\.Aggregator`1\[/ } });
-// Should return 0.
-```
-
-### Feature — operator metrics + connection-lifecycle logs
-
-ServiceConnect now emits operator-grade metrics via `System.Diagnostics.Metrics`. Four instruments under the OTel `messaging.*` namespace (publish/process duration histograms, published/consumed message counters with outcome dimensions) plus five ServiceConnect-specific extensions (`messaging.serviceconnect.retry.attempts / retry.drops / publish.confirm_timeouts / audit.drops / outgoing_filters.blocked`) and an in-flight UpDownCounter.
-
-OpenTelemetry users wire them with `MeterProvider.AddServiceConnectInstrumentation()` from the `ServiceConnect.Telemetry` package — which transitively brings `OpenTelemetry.Api` ≥ 1.15.3 (the patched line for [GHSA-g94r-2vxg-569j](https://github.com/advisories/GHSA-g94r-2vxg-569j)). Apps pinning an older `OpenTelemetry` line will see a NuGet downgrade warning during restore; bump the pin to a 1.11+ release alongside the v7 upgrade. Without OTel, attach a `MeterListener` to the `ServiceConnect.Bus` meter.
-
-Always-on: instruments are zero-cost when no listener subscribes — operator opt-in is wiring the listener, not changing config. See [Observability — Metrics](/ServiceConnect-CSharp/learn/operations/observability/#metrics) for the full catalogue and tag schema.
-
-Bundled: connection-lifecycle Info logs (`ConnectionOpened` / `ProducerConnectionOpened` / `ConnectionRecovered` / `ConnectionLost`) and ack/nack failure logs now carry the `MessageId` for correlation.
-
-Additive — no API breaks.
-
-## v7 — reliability, security, observability
-
-A reliability, security, and observability pass across the core bus, the RabbitMQ transport, and the persistence providers. Bundled into the same v7 release as the [public-API tightening](#v7--public-api-tightening) section above. If you are upgrading from v6, read both sections plus the GitHub Release body for the full breaking-change list; the material user-visible shifts are summarised here.
-
-### Supported runtimes
-
-ServiceConnect targets modern .NET only — by design.
-
-- **`net8.0`** — previous LTS. End of Microsoft support: **November 10, 2026**.
-- **`net10.0`** — current LTS. End of Microsoft support: November 14, 2028. The library opts into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; `net8.0` paths take guarded fallbacks.
-
-All published packages multi-target both: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, and `ServiceConnect.HealthChecks`.
-
-We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
-
-- The hot paths use BCL features that are awkward to polyfill cleanly.
-- The remaining LTS surface (.NET 8 + .NET 10) covers every Microsoft runtime with active patch coverage at the time of writing.
-- Consumers on .NET Framework or out-of-support .NET Core SKUs can pin earlier ServiceConnect releases that targeted those runtimes; we are not adding support back to the current line.
-
-If your scenario needs `netstandard2.1` (or you'd like to upstream the work), please open an issue.
-
-#### When `net8.0` will be dropped
-
-.NET 8 reaches end of Microsoft support on **November 10, 2026**. ServiceConnect will drop the `net8.0` target framework in the first major version released after that date — current consumers on .NET 8 should plan their migration to .NET 10 LTS during the second half of 2026 or pin to a pre-drop ServiceConnect major.
-
-### Breaking — public API surface tightened to extension contracts only
-
-The v7 surface keeps only what third-party persistor / transport authors and end-user app code need. Implementation-detail types are now `internal`. Specifically:
-
-- **Now `internal`:** `MessageDispatcher` (concrete), `FilterPipeline`, `SendMessagePipeline`, `RequestReplyManager`, `Bus`, `HandlerScanner`, `MessageTypeRegistry`, `ConsumeContext`, `ConsumeScopeAccessor`, `MessageBusReadStream`, `MessageBusWriteStream`, `BusHostedService`, `ProcessManagerTimeoutService`, `SystemTextJsonMessageSerializer`, every `*Configuration` concrete class (`BusConfiguration`, `TransportConfiguration`, `QueueConfiguration`, `PipelineConfiguration`, `PersistenceConfiguration`), every concrete persistor (`MongoDbProcessManagerFinder`, `MongoDbAggregatorPersistor`, `MongoDbTimeoutStore`, `MongoClientFactory`, `InMemoryProcessManagerFinder`, `InMemoryAggregatorPersistor`, `InMemoryTimeoutStore`, `CacheProvider`), all RabbitMQ concrete impls (`Producer`, `Consumer`, `Connection`, `IServiceConnectConnection`, `RabbitMqTopologyProvisioner`).
-- **`IRegistryInitializer` moved.** Was a public interface in `ServiceConnect.Interfaces`; now an internal interface in `ServiceConnect.Services`. The framework's own bootstrap hook, not an extension point.
-- **`MessageTypeExchangeName` stays public.** It is the wire-protocol-stable shared helper between the core bus and adapter packages; a third-party RabbitMQ-shaped transport must derive the same exchange name as the bundled one.
-- **`[Obsolete] IProducer.DisconnectAsync` removed.** Lifecycle is owned exclusively by `IAsyncDisposable.DisposeAsync`. Migration: replace any `await producer.DisconnectAsync()` with `await producer.DisposeAsync()` (or rely on DI to dispose).
-- **`SendEventArgs.EndPoints` (plural) removed.** Multi-endpoint sends now raise one `SendEventArgs` per destination, each carrying the singular `EndPoint`. Correlate fan-out via `CorrelationId` (stable across the deliveries).
-- **`ConsumeEventResult` is `init`-only.** The properties are now `{ get; init; }` rather than `{ get; set; }` — framework-produced, consumer-observed only.
-- **`RequestOptions.DefaultTimeoutMs` is `static readonly` (not `const`).** A future tuning of the default no longer requires every consumer to recompile to pick it up.
-- **`ConfigurePipeline(Action<PipelineConfiguration>)` is now `internal`.** Public callers must use the typed builder methods: `AddOutgoingFilter<T>`, `AddBeforeConsumingFilter<T>`, `AddOnConsumedSuccessfullyFilter<T>`, `AddAfterConsumingFilter<T>`, `AddSendMessageMiddleware<T>`, `AddMessageProcessingMiddleware<T>`. Two new public helpers cover the outermost-position case: `InsertSendMessageMiddlewareOutermost<T>` and `InsertMessageProcessingMiddlewareOutermost<T>` (with type-dedup, so a repeat `AddTelemetry()` is safe).
-
-### Build and packaging
-
-- **MongoDB.Driver bumped to 3.8.0** (from 2.23.1). The 2.x → 3.x migration replaces `BsonDefaults.GuidRepresentationMode` (now always V3) and adopts the `RenderArgs<T>` shape for filter/sort/update rendering. The bundled MongoDB persistor handles both transparently; consumers running custom MongoDB code may need to follow MongoDB's [2.x → 3.x migration guide](https://www.mongodb.com/docs/drivers/csharp/current/upgrade/).
-- **Explicit `SharpCompress 1.0.0` and `Snappier 1.3.1`** pinned by `ServiceConnect.Persistence.MongoDb` to replace audit-suppressed GHSA-6c8g-7p36-r338 and GHSA-pggp-6c3x-2xmx — the driver still bundles older versions; the explicit pins force a vuln-free graph into consumer projects.
-- **Csproj-driven `dotnet pack`.** The seven `.nuspec` files were deleted; package metadata (Version=7.0.0, Authors, Copyright, license, project URL, repository URL, tags, README) now lives in `src/Directory.Build.props`.
-- **SourceLink + `.snupkg` symbol packages.** All shippable packages embed source and produce sidecar `.snupkg` files; debugger step-into works from any consumer with a SymbolSource configured.
-- **CI workflows.** `.github/workflows/ci.yml` runs build + unit + E2E + pack-validate on Linux and Windows; `release.yml` tags drive NuGet pushes with a version-vs-tag guard.
-
-### Behaviour fixes
-
-- **`Bus.SendToManyAsync` OCE filter on caller-token.** A middleware-internal `OperationCanceledException` whose token differs from the caller's no longer aborts the per-endpoint loop as if the caller cancelled; it falls through to the per-endpoint aggregate-failure path.
-- **Saga BSON / FormatException → `PersistenceException`.** The MongoDB process-manager finder now wraps BSON-layer failures so a poison row is quarantined to the error queue rather than NACK-looping forever.
-- **`ProcessManagerHandlerRegistry` dedup by `HandlerType`.** Dual-interface saga handlers and repeat-assembly scans no longer crash startup with a duplicate-key dictionary throw.
-- **`AddServiceConnect` re-entry guard.** Calling `services.AddServiceConnect(...)` twice on the same `IServiceCollection` now throws `InvalidOperationException` with a clear remediation — the second call's handler scan would otherwise have been silently dropped.
-- **`ProcessManagerTimeoutService.PollLoop` catch-up.** Up to 32 batches drain per tick when a brief outage backed up the timeout store, so timeout dispatch latency does not lag the deadline by N polls after a recovery.
-- **`ProducerConnection._declaredExchanges` generation-stamped.** Concurrent declared-exchange cache lookups now match against a monotonic generation counter bumped on every (re)connect — a stale entry from before a reset can no longer trick a publisher into skipping the re-declare on the new channel.
-- **`RabbitMqConsumerHost._consumerTag` reads/writes are `Volatile`.** Auto-recovery's tag-swap and StopAsync's `BasicCancelAsync` no longer admit a torn-read race where the framework cancels a tag the broker has already replaced.
-- **`PublishConfirmTimeouts` counter tag schema.** Now tagged with `messaging.operation.type=publish` and emits the routing key (when exchange is empty) as `messaging.destination.name`, so `SendAsync` per-queue alerting works against the conventional default-exchange + routing-key shape.
-- **`ConsumeContextPool.Initialize` publish ordering.** Fields are written before the rent-token bump, so an ARM64 reader who sees the new token via `Volatile.Read` is guaranteed (under release/acquire semantics) to see the fresh `BusUnsafe` / `CancellationTokenUnsafe` / headers.
-
-### New — `messaging.serviceconnect.outgoing_filters.blocked` metric
-
-A counter that increments every time an outgoing filter returns `FilterAction.Stop`. The blocked operation never enters the send-message middleware, so no publish/send span is emitted — this counter is the operator-visible signal for filter-suppressed deliveries. Tagged with `messaging.system=serviceconnect` and (when the type is known) `messaging.message.type`.
-
-### Observability — semconv 1.x messaging attributes
-
-Spans emit `messaging.operation.type` (`publish` for sends/publishes, `process` for consumes) and `messaging.operation.name` (`publish` for sends/publishes, `receive` for consumes). The pre-1.x `messaging.operation` attribute is no longer emitted. Dashboards that filtered on the legacy attribute should switch to `messaging.operation.type`.
-
-### Breaking — `ServiceConnect.Filters.MessageDeduplication` removed
-
-The package shipped redelivery dedup in a way that silently dropped legitimate broker redeliveries after a handler crash, recorded keys before the handler ran, and shared in-memory state across instances via a static field. v7 deletes the package outright. Build per-consumer dedupe using the new `OnConsumedSuccessfully` pipeline stage; see the [`CustomFilterAndMiddleware` sample](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CustomFilterAndMiddleware) for a worked implementation. Handler-side idempotency remains the canonical answer.
-
-### New — `OnConsumedSuccessfully` filter stage
-
-A fourth pipeline stage that runs only after a successful handler invocation (`result.Success && !result.NotHandled`). Register filters via `builder.AddOnConsumedSuccessfullyFilter<T>()`. Use for at-most-once side effects that depend on the handler having completed: dedupe-key recording, outbox writes, audit events.
-
-### Repository consolidation: 17 projects down to 8
-
-The solution has been pared back from 17 projects to 8: `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Telemetry`, `ServiceConnect.HealthChecks`, and the test project. The dropped projects were either experimental transports, abandoned persistence providers, or internal utilities that had no external consumers — removing them cuts build time and clarifies the supported surface.
-
-### MIT relicense
-
-ServiceConnect is now MIT-licensed. Previously the project carried a more restrictive licence that blocked some commercial embedding scenarios; MIT removes that ambiguity.
-
-### Trust boundary on inbound headers
-
-Caller-supplied headers can no longer override the framework's reserved keys. `DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, and `FullTypeName` are now server-authoritative on outbound, and the reply-routing path resolves types through the registered handlers only — the previous fallback to `Type.GetType` on an assembly-qualified wire header is gone. A malicious or buggy publisher can no longer redirect replies or force type loads on consumers.
-
-### End-to-end distributed tracing
-
-`ServiceConnect.Telemetry` now injects the W3C `traceparent`/`tracestate` onto outgoing messages (it already extracted on consume). Spans are tagged with the correct OTel messaging semconv — `publish` for pub/sub and `send` for point-to-point — so dashboards aggregate each traffic shape separately. Trace-context extraction now iterates via the dictionary interface, so header bags wrapped as `ReadOnlyDictionary` no longer silently lose the trace context. See [Observability](/ServiceConnect-CSharp/learn/operations/observability/).
-
-### Breaking — telemetry static state removed
-
-`ServiceConnectActivitySource.Options` and `ServiceConnectActivitySource.MessagingSystemAttributes` are gone. The public `Publish`/`Send`/`Consume`/`SetError` methods now take `ServiceConnectInstrumentationOptions options` and `IMessagingSystemAttributes attributes` as parameters. Two buses in the same process can now have truly independent enrichment delegates and enable-flags. The middlewares pick both up via DI; user code calling `ServiceConnectActivitySource` directly must update.
-
-### Breaking — single ActivitySource
-
-The three sources `ServiceConnect.Bus.Publish`, `ServiceConnect.Bus.Consume`, and `ServiceConnect.Bus.Send` collapse into one named `"ServiceConnect.Bus"`. OTel listener config simplifies to `AddSource("ServiceConnect.Bus")` (or `AddSource(ServiceConnectActivitySource.ActivitySourceName)`). Per-direction enablement remains via `EnablePublishTelemetry` / `EnableConsumeTelemetry` / `EnableSendTelemetry` flags.
-
-### New — `MaxTagValueLength` and `ExceptionMessageSanitiser` options
-
-`MaxTagValueLength` (default 256) bounds user-controlled string tags (destination, routing key, MessageId, conversation id) for cardinality safety. `ExceptionMessageSanitiser` (default null) lets callers redact PII in exception messages before they reach activity status descriptions and `exception.message` event tags. On .NET 9+, when a sanitiser is set, `SetError` opts out of `Activity.AddException` and writes the `exception.*` event attributes manually using the sanitised string.
-
-### Fix — telemetry activity leak on enricher OCE
-
-The user-supplied `EnrichWithMessage`/`EnrichWithMessageBytes` delegate rethrows `OperationCanceledException` by design. Previously, an OCE from the enricher leaked the started activity (the call site never reached the middleware's `finally { activity?.Dispose(); }`). The fix wraps post-`StartActivity` work in `try { ... } catch { activity.Dispose(); throw; }` at all three call sites.
-
-### Fix — body copy gated on listener presence
-
-`TelemetryProcessingMiddleware` previously copied `envelope.Body.ToArray()` for every consumed message regardless of whether any `ActivityListener` was attached. The fix gates the allocation on `ServiceConnectActivitySource.IsConsumeTelemetryEnabled(options)`, which checks both the enable-flag and `ActivitySource.HasListeners()`.
-
-### Health checks
-
-`ServiceConnect.HealthChecks` is a new optional package that ships three opt-in `IHealthCheck` classes for `Microsoft.Extensions.Diagnostics.HealthChecks`: `BusConsumingHealthCheck` (observes `IBus.IsConsuming`), `ConsumerConnectionHealthCheck` (observes `IConsumer.IsConnected`), and `ProducerConnectionHealthCheck` (observes `IProducer.IsHealthy` — a new property promoted to the `IProducer` interface in this release, mirroring the existing `IConsumer.IsConnected`). The package is transport-agnostic and registered through standard `IHealthChecksBuilder` extension methods. See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/#health-checks) for wiring and the [`ServiceConnect.HealthChecks` reference](/ServiceConnect-CSharp/reference/healthchecks/) for the full API surface.
-
-### Correlation ID reliably on the wire
-
-Outbound paths now stamp `HeaderKeys.CorrelationId` from `message.CorrelationId`. Previously the body-level correlation id was present but the header wasn't, so `IConsumeContext.CorrelationId` defaulted to `Guid.Empty` on the consume side.
-
-### Delivery semantics: audit failures no longer cause redelivery
-
-When auditing was enabled, an audit-publish failure after a successful handler would flip the message into the retry loop and re-run the handler. Audit is now a side-effect on the success path — audit failures are swallowed and logged, never fed back as delivery failures. Malformed `RetryCount` headers route to the error queue instead of silently resetting the retry budget. `HeaderDecoder` tolerates unexpected AMQP header types (interop `long`, `IDictionary`, short-string) instead of throwing and triggering an infinite redelivery loop.
-
-### In-memory persistence no longer drops long-running state at 2 days
-
-The in-memory process-manager and aggregator stores previously set an absolute 2-day expiry on every entry — long-running sagas and slow aggregators silently vanished. The TTL is removed; state lives for the bus lifetime. In-memory persistence now also deep-clones on read to stop caller mutation from corrupting stored state, and the `InMemoryAggregatorPersistor`/`InMemoryPersistenceState` types are disposable so DI rebuilds do not leak timers.
-
-### Process-manager correctness
-
-`DeleteDataAsync` on both the in-memory and MongoDB providers now enforces optimistic concurrency via the `Version` predicate — a concurrent delete racing an update no longer silently wins. The process-manager retry path no longer replays handler side-effects on `ConcurrencyException` — only the state write is retried. MongoDB process-manager collections are keyed on fully-qualified type names; short-name collisions between types in different namespaces no longer share a collection.
-
-### Pipeline lifetimes
-
-Inbound middleware and filters are now resolved per-message from a scoped `IServiceProvider` rather than pinning a transient or scoped instance for the bus lifetime. Startup validation mirrors this on the inbound side — lifetime misconfigurations fail fast instead of manifesting as stale dependencies at runtime.
-
-### RabbitMQ producer and topology hardening
-
-A pass over the RabbitMQ producer's outbound path and the retry-queue declaration. None of these are wire-breaking; they fix observable behaviour, improve diagnostics, or remove surprises latent in earlier point releases.
-
-**Behaviour changes — upgrading operators must read these**
-
-- **`PublisherAcknowledgements` now defaults to `true`.** Pre-v7.x the default was `false` (fire-and-forget sends). The new default means every publish waits for a broker ack before returning. Throughput-sensitive operators who relied on the old default should benchmark with the new default before deploying; if needed, set `PublisherAcknowledgements = false` explicitly. Note: `PublisherAcknowledgements=false` combined with a finite `PublishTimeout` is now a configuration error — the `Producer` constructor rejects this combination at startup.
-
-- **`IProducer.SendAsync(Type)` fan-out now surfaces an `AggregateException` when prior endpoint failures preceded a cancellation.** Previously, `OperationCanceledException` always propagated directly regardless of whether earlier endpoints had already failed. Now, if one or more endpoints fail before a subsequent cancellation, callers see `AggregateException` whose `InnerExceptions` include both the prior endpoint failures and the `OperationCanceledException`. Plain `OperationCanceledException` still propagates when the cancellation occurs before any endpoint failure.
-
-- **`messaging.publish.duration` does not add `error.type=timeout` for `TimeoutException`.** A publish-confirm timeout means the broker acknowledgement did not arrive within the configured window — delivery may still succeed. The `error.type` tag is deliberately suppressed for this case to avoid misleading "publish failed" signals in duration-based dashboards. Use the `messaging.serviceconnect.publish.confirm_timeouts` counter as the authoritative signal for confirm-timeouts. All other failure types continue to carry `error.type` as documented.
-
-**Per-delivery `MessageId` for multi-endpoint Send.** Every endpoint resolved by `AddQueueMapping` (or supplied through `IBus.SendToManyAsync`) now receives a delivery with a distinct `MessageId` and `TimeSent`. Correlate cross-endpoint deliveries via `CorrelationId`, which remains constant across the fan-out.
-
-**Retry DLX always durable.** The retry dead-letter exchange is now always declared with `autoDelete: false`, regardless of the consumer queue's auto-delete setting. Without this invariant, messages dwelling in the retry queue would be silently dropped after the consumer disconnected. Pre-existing topologies are unaffected on next provisioning.
-
-**Caller-supplied retry args overridden with framework values.** `x-dead-letter-exchange` and `x-message-ttl` in `RabbitMQSettingKeys.RetryQueueArguments` are now overridden silently with framework values at retry-queue provisioning time. A Debug log records each override. Pre-fix, supplying either key threw `ArgumentException` from the AMQP arg merge.
-
-**Publish timeout no longer holds the publish lock during reconnect.** A timed-out publish now marks the connection for reset; the next publish drives the actual reconnect off-lock. Concurrent publishers are no longer blocked behind the worst-case retry budget (~10 minutes by default).
-
-**Producer entry-point null guards.** `Producer.PublishAsync` / `SendAsync` / `SendBytesAsync` now throw `ArgumentNullException` with a useful `ParamName` for null `type` / `message` / `packet` arguments, instead of `NullReferenceException` from later array access.
-
-**Priority-conversion error context.** When a `Priority` header value is non-convertible, the log now includes the offending value and its runtime type instead of a generic "Error setting message priority". The publish continues without priority (advisory semantics preserved).
-
-**Reserved header overwrite warning.** `OutboundHeaderBuilder` now logs a Warning when a caller supplies a reserved header (`DestinationAddress`, `MessageType`, `SourceAddress`, `TimeSent`, `SourceMachine`, `TypeName`, `FullTypeName`, `ConsumerType`, `Language`) — same behaviour as the Bus's reserved-header check, just at a different layer. `MessageId` is preserved for callers that pre-stamp it (e.g. the Bus's authoritative stamp).
-
-**Connection-factory setting errors include key context.** Setting-conversion failures (`Port`, `HeartbeatTime`) now throw `InvalidOperationException` with the setting key, value, and runtime type instead of the raw `FormatException` / `InvalidCastException` / `OverflowException`. The original exception is preserved as `InnerException`.
-
-**`MessageType` header semantics formalised.** The `MessageType` header is the **operation flag** — `"Publish"`, `"Send"`, or `"ByteStream"` — not a CLR type name. **No observable wire change**: the on-wire value has always been one of those three strings. For type information, read `TypeName` (the type's `FullName`) or `FullTypeName` (its `AssemblyQualifiedName`). Downstream auditors that read `MessageType` expecting a type FullName based on out-of-date documentation should switch to `FullTypeName`. Caller-supplied `MessageType` in `IBus.Publish`/`Send` `options.Headers` now flows through to the producer instead of being silently dropped (the producer continues to overwrite it before the wire) — no code-level breakage; existing callers see no change.
-
-### RabbitMQ consumer-host hardening
-
-A pass over the RabbitMQ consumer host: shutdown safety, broker-cancel observability, retry/error publish visibility, and a handful of latent races. Mirrors the producer-side pass above.
-
-**Bug fixes**
-
-- **Atomic in-flight counter.** `_messagesBeingProcessed` is now consistently mutated via `Interlocked` operations under the same admission lock as the shutdown latch; the previous mix of lock-protected `++` and lock-free `Interlocked.Decrement` could lose updates under contention.
-- **Broker `basic.cancel` reports unhealthy.** When the broker cancels the consumer (queue deleted, policy expired, mirror promoted), `IBus.IsConsuming` now returns `false` and `BusConsumingHealthCheck` reports `Unhealthy`. Pre-v7.x the consumer was silently dead while the health check still reported healthy.
-- **Retry/error publishes use `mandatory:true`.** Unroutable retry/error publishes now surface as `PublishException` (logged at Error, original message acked to break the loop). Pre-v7.x they were silently dropped.
-- **Bind queues before `BasicConsume`.** Per-queue bindings now run on the consumer channel BEFORE `BasicConsumeAsync` is issued, honouring RabbitMQ.Client's per-channel serialisation contract.
-- **Synthetic exception when handler is null.** A misconfigured consumer (no `ConsumerEventHandler` registered) now stamps a synthetic `InvalidOperationException` into the error-queue header instead of writing a `null` JSON value.
-- **Null-aware `FullTypeName` fallback in not-handled path.** Defensive symmetry with the equivalent pattern at the dispatch site; protects against any future path that bypasses the upstream null filter.
-- **String header values are size-bounded.** `RabbitMqConsumerHost`'s header-size guard now bounds string headers (UTF-8 byte count) in addition to byte-array headers.
-- **Ack/nack channel-state log levels.** Concurrent-teardown ack/nack races now log at `Debug` (expected race) instead of `Warning`. An `IsOpen` pre-check skips the call entirely when the channel is known-closed.
-- **Defensive null-check on `_messageProcessor`.** A null processor now logs `Warning` and nacks-with-requeue instead of throwing `NullReferenceException`.
-- **Off-by-one retry-count validation.** `RetryCount = maxRetries + 1` (which the framework never legitimately stamps) is now rejected as malformed.
-- **Explicit-field `BasicProperties` copy.** `MessageRetryHandler` now copies `BasicProperties` field-by-field instead of using the copy-constructor; protects against malformed source-property fields throwing inside the copy.
-- **Consumer-tag refresh on auto-recovery.** `RabbitMqConsumerHost` now subscribes to `IConnection.ConsumerTagChangeAfterRecoveryAsync` and refreshes its cached tag when RabbitMQ.Client's auto-recovery re-issues `BasicConsumeAsync` with a different tag.
-
-**Behaviour changes**
-
-- **`IConsumer` gains a new `IsCancelledByBroker` property.** External implementations of `IConsumer` (custom transport adapters) MUST add this property; the default implementation should return `false`. Consumed by `IBus.IsConsuming` to short-circuit to `false` on broker-cancel.
-- **`IBus.IsConsuming` semantic expansion.** Now returns `false` not just before `StartConsumingAsync` / after `StopConsumingAsync`, but ALSO when the broker has cancelled the consumer. Callers using `IsConsuming` for purposes other than health-checking should be aware of this expanded semantic.
-- **Retry/error publishes now use `mandatory:true`.** Operators who relied on the pre-v7.x silent-drop behaviour to mask missing topology will see new `PublishException` Error logs; the topology gap should be fixed.
-
-### Behaviour changes — RabbitMQ consumer hardening (Phase 3)
-
-- **`RabbitMqHeaderValidator` rejects oversized nested AMQP table/array header values.** The per-value byte cap (default 8 KB) previously inspected only top-level `byte[]` and `string`; nested `IDictionary` (table) and `IList` (array) values bypassed the cap entirely. The validator now descends recursively and rejects payloads that exceed the budget at any depth. Pathologically deep nesting (>32 levels) is also rejected to prevent stack exhaustion. Producers sending such payloads will see the message routed to the error exchange instead of silently admitted.
-- **`Consumer.StartConsumingAsync` recovers from startup failure.** A failure between the start CAS and the final `BeginConsumingAsync` previously left the consumer in a half-built "already consuming" state — a subsequent `StartConsumingAsync` threw `InvalidOperationException("Consumer is already consuming")` even though nothing was actually running. The internal `_started` flag is now reset on failure, partial hosts are disposed, and the owned `IServiceConnectConnection` (when this `Consumer` created it) is disposed too. Callers that previously needed to call `DisposeAsync` after a failure can now just retry `StartConsumingAsync`.
-- **`Connection.CreateChannelAsync` throws the canonical `ObjectDisposedException` on a dispose race.** A narrow race where `DisposeAsync` set `_disposed=1` and nulled `_connection` between `ConnectAsync`'s lock release and the post-await re-read previously surfaced as `InvalidOperationException("Connection was not initialized.")`. Code that catches `ObjectDisposedException` for graceful shutdown now sees the canonical signal.
-
-### Connection-lifecycle hygiene
-
-- **Parallel host disposal.** `Consumer.DisposeAsync` now disposes its hosts in parallel rather than sequentially. Aggregate dispose latency drops from `O(N × gracefulShutdownTimeout)` to `O(gracefulShutdownTimeout)` when `ConsumerCount > 1`.
-- **`Connection.DisposeAsync` no longer disposes the internal semaphore.** A concurrent `ConnectAsync` whose acquisition raced past the dispose-time semaphore-release window could observe `ObjectDisposedException` from its own `finally { Release(); }`. The semaphore is now left to GC, mirroring `ProducerConnection`. No public-API change.
-- **Connection-event subscriptions captured at subscribe time.** `RabbitMqConsumerHost` now captures the `IConnection` reference when subscribing to `ConnectionShutdownAsync` / `ConnectionBlockedAsync` / `ConnectionUnblockedAsync` / `ConsumerTagChangeAfterRecoveryAsync`, and unsubscribes against the captured reference. Pre-v7.x the unsubscribe re-fetched via the parent `Connection`, which could return `null` if the parent's dispose ran first, leaking handlers on the original `IConnection`.
-- **Internal log/`Volatile.Read` alignment.** `Connection.IsConnected` now reads `_connection` via `Volatile.Read`, matching the rest of the class. `Connection.DisposeAsync` now logs teardown failures at `Warning` (was `Debug`), matching `Producer.DisposeAsync` and `RabbitMqConsumerHost.DisposeAsync`.
-
-### Bus, dispatcher, and request-reply correctness
-
-**Bug fixes**
-
-- **Unresolved message types no longer drive retry loops.** `MessageDispatcher` previously returned `Success=false` when the inbound type was not in the registry, causing the consumer host to nack-with-requeue → exhaust the retry budget → land in the error queue. Unresolved types are terminal — retrying never resolves them. They now route via the existing not-handled path: dead-letter when `DeadLetterUnhandledMessages` is enabled, otherwise ack-and-drop.
-- **Request-reply state-machine race.** The `_inFlightReplies` counter could underflow when concurrent or duplicate replies arrived after a request closed, causing the close action to fire spuriously or leak. The state machine has been redesigned around a single internal lock; the underflow is structurally impossible.
-- **Send-time cancellation distinguishable from timeout.** When the request-reply send pipeline cancels before the request reaches the broker, callers now receive `RequestSendCancelledException` immediately rather than waiting the full timeout. Inherits from `OperationCanceledException` so existing `catch (OperationCanceledException)` handlers continue to work.
-- **Bus stops disposing transport singletons.** `Bus.DisposeAsync` and `Bus.StopConsumingCoreAsync` no longer call `IConsumer.DisposeAsync` / `IProducer.DisposeAsync`. The DI container owns those singletons and disposes them on host shutdown; the previous double-dispose path was harmless but architecturally wrong.
-- **Bus lifecycle cancellation hardened.** `Bus.StopConsumingCoreAsync` now propagates cancellation cleanly without mutating lifecycle state under partial-acquisition.
-- **Routing-slip validation.** `IBus.RouteAsync` and `BuildRoutingSlip` now throw `ArgumentException` for null, empty/whitespace, or comma-containing destinations. Pre-v7.x these inputs silently corrupted the routing slip or demoted the route to a single-destination send.
-- **Internal hygiene.** `Bus._lifecycleSemaphore` no longer disposed (mirrors Connection pattern); `Bus.CreateStream<T>` validates endpoint; `QueueConfiguration.QueueMappings` caches the wrapper instead of allocating per access; `SendMessagePipeline` lifetime validation now covers middleware registered directly via DI.
-
-**Behaviour changes**
-
-- `IBus.RouteAsync(destinations: ["", "queue-2"])` previously routed silently (or corrupted the slip); now throws `ArgumentException`. Operators relying on the old lenient behaviour should validate destinations at the call site.
-- Request-reply callers can now catch `RequestSendCancelledException` to react specifically to send-layer cancellation. Existing `catch (OperationCanceledException)` handlers continue to catch it (the new type derives from `OperationCanceledException`).
-- `IConsumer` / `IProducer` lifetime is now solely owned by the DI container. External implementations that previously expected `Bus.DisposeAsync` to call their `DisposeAsync` should register them as singletons in DI (or verify the DI container disposes them).
-
-### API-shape changes
-
-- **`PublishOptions`** is now a `readonly record struct` matching `SendOptions`. Concurrent `PublishAsync` callers can no longer mutate a shared instance between construction and the async read.
-- **`SendOptions.Headers`** and **`PublishOptions.Headers`** are typed as `IReadOnlyDictionary<string, string>?`. Pass any `Dictionary<string, string>`; the framework will not iterate a dictionary another thread might be mutating.
-- **`IMessageHandler<T>.Context`** and **`IProcessHandler<T>.Context`** are declared non-nullable. Initialise with `= null!;` to satisfy the nullable-reference analyser — the framework guarantees `Context` is populated before `HandleAsync`.
-- **`OutgoingEventArgs.Headers`** is `init`-only — subscribers can mutate individual entries (e.g. stamp a `traceparent`) but cannot swap the whole dictionary out.
-- **`RequestOptions.Default`** returns a fresh instance per access; the previous singleton was mutable and leaked between callers.
-
-### Mongo timeout-store + lease guards
-
-**Bug fixes**
-
-- **Lease-expiry semantics restored across both persistors.** `MongoDbTimeoutStore.RemoveDispatchedTimeoutAsync` and `ReleaseDispatchedTimeoutAsync` now reject calls whose lease has expired, throwing `ConcurrencyException`. `InMemoryTimeoutStore` matches the contract exactly (cross-persistor parity). The owned-row read-back inside `GetTimeoutsBatchAsync` also re-checks the lease before returning rows.
-- **Mongo timeout-store indexes match the actual due query.** Added composite index `(Time, Locked, LockExpiresAt)` covering both branches of the OR-shaped due filter. The legacy `(Locked, Time)` index is dropped on first startup after upgrading (idempotent over `IndexNotFound`).
-- **Mongo session-establishment fallback broadened.** Standalone-mongod / configuration / transient driver errors during `StartSessionAsync` no longer fail the whole poll — the persistor falls back to the unsessioned path with a Warning log.
-- **Cancellation between UpdateMany and FindAsync no longer orphans leases.** A best-effort lease release runs in a `catch (OperationCanceledException)` block before propagating the cancellation. Recovery is immediate; reaper / lease-expiry remains the ultimate fallback.
-- **Candidate sort tie-breaker.** Timeouts with identical `Time` are now ordered by `Id` ascending, eliminating starvation under heavy bursts.
-- **InMemory parity tightening.** `InsertTimeoutAsync` rejects `Guid.Empty` Id (parity with Mongo); a `Debug.Assert` documents the SortedSet-removal invariant; an in-place-mutation comment documents the under-lock single-source-of-truth design.
-
-**Behaviour changes**
-
-- **Mongo index migration on first startup.** v6 deployments upgrading to v7 issue `DropOneAsync("Locked_1_Time_1")` once on first startup. Idempotent over `IndexNotFound`.
-- **`InMemoryPersistenceOptions` (breaking).** `InMemoryTimeoutStore`'s ctor changes to take `InMemoryPersistenceOptions` (and an internal `(options, state, timeProvider)` overload). Callers using `new InMemoryTimeoutStore("", "", clock)` must pass `new InMemoryPersistenceOptions()` instead. `UseInMemoryPersistence` accepts an optional `Action<InMemoryPersistenceOptions>? configure = null` delegate (mirrors `UseMongoDbPersistence`). The DI registration honours the existing default lease duration (`TimeSpan.FromMinutes(5)`) so most users see no change.
-- **Expired-lease tolerance removed.** Workers holding a stale lease that previously got away with `Remove`/`Release` now observe `ConcurrencyException`. This matches the documented contract; callers were silently incorrect under v6.
-
-### Mongo aggregator + process-manager + serializer
-
-**Bug fixes**
-
-- **Saga property-hierarchy queries handle type coercion.** `MongoDbProcessManagerFinder.FindDataAsync` now wraps the message-side property value in `Expression.Convert` against the saga property's declared type. Previously, a message-side `int` against a saga-side `long` (or `Nullable<T>`, or interface-typed) silently missed.
-- **Guid serializer registration fails loudly on conflict.** `EnsureGuidSerializerRegistered` now throws `InvalidOperationException` if another component has registered a different Guid serializer first. Pre-fix, the registration was silently skipped while the aggregator's filter literals still used `GuidRepresentation.Standard` — causing reads to silently miss writes.
-- **Saga store rejects unacknowledged WriteConcern at startup.** `MongoDbProcessManagerFinder` now throws `InvalidOperationException` if the supplied `IMongoClient` has `WriteConcern.Unacknowledged` (w:0). Pre-fix, the persistor logged a Warning and disabled concurrency guards — silently advancing the version on missed updates and wedging sagas on the next real conflict.
-- **CorrelationId unique index pre-created at startup.** A new `IHostedService` enumerates registered saga data types via the new `IProcessManagerTypeRegistry` and pre-creates the unique CorrelationId index for each before any consumer host begins polling. Closes the cross-process startup race that admitted duplicate saga rows.
-- **Aggregator `RemoveDataAsync` distinguishes structural from concurrency errors.** `KeyNotFoundException` is now thrown when no rows exist for the given Name (caller error / cleanup race); `ConcurrencyException` retains its meaning of "rows for Name exist but not for this CorrelationId" (genuine race). The `ConcurrencyException` message includes the row count.
-- **Aggregator `InsertSequence` tie-break.** Inserts sharing an `InsertedAtTicks` value (e.g., two messages within a single `DateTime.Tick`) now sort in actual insertion order via a per-process monotonic counter. Cross-process ties remain unsolved; per-process correctness matches the actual aggregator usage pattern.
-- **Aggregator catches `BsonException` in the persistence contract.** `BsonSerializationException` (and other `BsonException` subtypes) now wrap as `PersistenceException` rather than escaping to the caller raw.
-- **Aggregator `EnsureIndexesAsync` cached after first success.** Index creation runs once per persistor instance instead of on every operation. Round-trip per message on the hot path is eliminated.
-- **Constructors null-check the logger.** Both `MongoDbAggregatorPersistor` and `MongoDbProcessManagerFinder` now throw `ArgumentNullException` on null `logger`.
-- **Cert selection callback bounds-checked.** `MongoClientFactory.ClientCertificateSelectionCallback` now falls back to the server-supplied certificate parameter when the client-cert collection is null or empty. Pre-fix it dereferenced `[0]` and threw `NullReferenceException` / `IndexOutOfRangeException`.
-- **Generic saga collection names sanitized.** Mongo collection names produced from `typeof(T).FullName` for generic saga types contained `+`, backticks, `[`, `]`, `,` — illegal in mongosh autocomplete and various Mongo tooling. v7 sanitizes these to `_`. **Migration required**: deployments with generic saga types must rename existing collections to the sanitized form before upgrading from v6.
-- **Internal hygiene.** `MongoDbProcessManagerFinder._indexCreationSemaphore` no longer disposed (mirrors Connection / Producer / Bus pattern).
-
-**Behaviour changes**
-
-- **`WriteConcern.Unacknowledged` rejected at startup.** Existing deployments using w:0 with the saga store break loudly. Configure `mongoClient.Settings.WriteConcern` to `WriteConcern.W1` or higher.
-- **Conflicting Guid serializer registration rejected at startup.** Existing deployments with a custom Guid serializer registered before ServiceConnect break loudly. Either skip your existing registration or register `GuidRepresentation.Standard` to match.
-- **Generic saga collection names changed.** Deployments with generic saga data types had data in collection names containing `+`/backtick/`[`/`]`/`,`. v7 reads from sanitized names. **Manual migration required**: rename existing collections via `db.runCommand({ renameCollection: "old", to: "new" })`.
-
-**New surface**
-
-- `IProcessManagerTypeRegistry` (in `ServiceConnect.Interfaces`) — enumerates registered saga data types. Implemented by `ProcessManagerHandlerRegistry`. Used by Mongo's index initializer; downstream persistence providers can consume the same enumeration.
-
-### InMemory persistence
-
-**Bug fixes**
-
-- **Saga state isolated from public `IKeyValueStore`.** `InMemoryProcessManagerFinder` now uses a private `SagaProvider` distinct from the public `Provider` exposed via `IKeyValueStore` / `ICacheProvider`. User code reading or writing through `IKeyValueStore` cannot accidentally observe or corrupt saga state.
-- **`Update` throws on missing key.** `CacheProvider.Update<TKey,TValue>` throws `KeyNotFoundException` when the key is absent. Pre-fix it was a silent no-op while the caller advanced version state — sagas could wedge on the next real conflict.
-- **Saga store rejects polymorphic-T mismatches.** `InMemoryProcessManagerFinder.FindData<T>` throws `InvalidOperationException` when the stored row's data type doesn't match `T`. Pre-fix the fallback path silently rewrote the type via reflection-cached accessors, masking caller errors.
-- **`MemoryData<T>.Id` stable across reads and updates.** Insert stamps a fresh `Guid.NewGuid()`; updates preserve it; reads detach a copy carrying the original Id. Pre-fix it was `Guid.Empty` after every update. Mirrors Mongo's `_id` contract.
-- **Aggregator missing-`CorrelationId` errors are loud.** Inserting an aggregator data type without a public `Guid CorrelationId` property no longer cached a silent-null accessor. `RemoveDataAsync` now throws `InvalidOperationException` naming the offending type on every call; pre-fix the negative result was cached and `RemoveDataAsync` silently returned no-match.
-- **Aggregator `GetSnapshotAsync` no longer holds the lock during clone.** Snapshot copies entry references under `_memoryCacheLock`; `DeepClone.Clone` runs outside, so concurrent inserts/removes proceed during long snapshot operations.
-- **Saga predicate handles explicit-interface impls.** Both InMemory and Mongo finders resolve the `PropertyInfo` via the type and its implemented interfaces, then emit via `Expression.MakeMemberAccess` — fixes silent no-match when a saga maps an explicit-interface property.
-- **CacheProvider mechanical hardening.** `Add` reads the clock once (was twice — non-monotonic test `TimeProvider`s could produce a negative diff); `TryPurgeItem` swallows `ObjectDisposedException` during dispose race; the timer callback no longer re-installs after dispose; `Update`'s missing-key check moved inside the CAS retry loop to close a TOCTOU window where a concurrent removal between the guard and the loop would silently no-op; `Clear`'s race semantics are documented.
-- **`MongoDbData<T>` implements `IIdentified`.** Mirrors the new InMemory contract — Mongo rows already had a stable `Id`, only the interface declaration was missing.
-
-**Breaking API changes**
-
-- **`Get<TKey,TValue>` replaced with `TryGet<TKey,TValue>(key, out value)`.** Both `ICacheProvider` and `IKeyValueStore` switch to the `TryGet` shape so callers can distinguish "key absent" from "key present with null value." External consumers using `Get<>` must migrate.
-- **`InMemoryProcessManagerFinder(string, string)` ctor removed.** Production callers must use DI registration; tests use the internal `(ProcessManagerPredicateCache, InMemoryPersistenceState)` ctor. Mirrors Phase 8's `InMemoryTimeoutStore` ctor cleanup.
-- **`InMemoryPersistenceState.Provider` no longer holds saga state.** External code reaching into `Provider` looking for saga keys finds nothing; saga keys live in the private `SagaProvider`.
-
-**New surface**
-
-- `IIdentified` (in `ServiceConnect.Interfaces.Persistence`) — getter-only `Guid Id { get; }`. `MemoryData<T>` and `MongoDbData<T>` now implement it; callers can extract Id without a concrete-type cast.
-- `InMemoryPersistenceState.SagaProvider` — dedicated saga store separate from the public `Provider`. Internal-only access (the type is `internal sealed`).
-- `ICacheProvider.TryGet<TKey,TValue>(key, out value)` and `IKeyValueStore.TryGet<TKey,TValue>(key, out value)` — replace `Get<TKey,TValue>`.
-
-**Documentation**
-
-- `DeepClone` now documents its security boundary (BSON's `_t` discriminator is in-process-trusted-data-only — do not extend the helper to deserialise external input). See **Phase 4 — Persistence correctness + Newtonsoft.Json removal** below for the rewrite.
-
-### Phase 4 — Persistence correctness + Newtonsoft.Json removal
-
-**Bug fixes**
-
-- **`MessageRetryHandler` exception-header serialisation switched to `System.Text.Json`.** `Newtonsoft.Json` is removed from `ServiceConnect.Client.RabbitMQ`'s package references. The exception envelope shape (`{ TimeStamp, ExceptionType, Message }`) is unchanged on the wire.
-- **`InMemoryTimeoutStore` disposes its owned `InMemoryPersistenceState`.** The store now implements `IDisposable`. The owning ctor disposes the state it created; the internal test-seam ctor (caller-provided state) does not — caller owns lifetime.
-- **`InMemoryAggregatorPersistor.GetSnapshotAsync` clones inside the lock.** A previous version released `_memoryCacheLock` before `DeepClone.Clone` ran, relying on the invariant "no aggregator-update path mutates `Entry.Data` in place" — fragile against future changes; risked serialising a torn object. Cloning under the lock guarantees per-entry consistency.
-- **`CacheProvider` sliding-eviction generation-guard.** A stale timer callback whose `Add` raced with a concurrent re-Add could evict the new value. Each `Add` now bumps a per-key generation counter; the timer's eviction path fast-fails on a generation mismatch.
-- **`MongoDbAggregatorPersistor.EnsureIndexesAsync` is single-flight.** Concurrent first-write inserts no longer fan out N parallel `CreateManyAsync` calls. `Volatile.Read(ref _indexed)` fast-path + `SemaphoreSlim`-protected first call + double-check; on success `Volatile.Write(ref _indexed, 1)` flips the cache; benign `IndexOptionsConflict (85) / IndexKeySpecsConflict (86)` exceptions are swallowed for cross-process coexistence.
-- **`MongoDbTimeoutStore.GetTimeoutsBatchAsync` read-back `FindAsync` sorts by `(Time, Id)`.** The candidate sort and the read-back sort now match. Pre-fix the read-back returned rows in unspecified order, masking the candidate-sort tie-breaker (Group D Mongo timeout-store fixes) and risking starvation under concurrent batch claims.
-- **`MongoDbTimeoutStore` orphan-lease cleanup widens from `OperationCanceledException` to any error.** A transient `MongoException` between successful claim (`UpdateManyAsync`) and read-back (`FindAsync`) previously propagated as `PersistenceException` while leaving rows locked under `sessionId` until `LockExpiresAt` or the reaper ran. Best-effort cleanup now triggers on any failure between claim and read-back.
-- **`MongoDbTimeoutStore.EnsureTimeoutIndexAsync` cached per-instance.** Pre-fix every `Insert`/`Get`/`Remove`/`Release`/`Reap` round-tripped `DropOneAsync("Locked_1_Time_1")` (404'ing every steady-state call) plus `CreateManyAsync` of three index specs. The cache mirrors the saga finder and aggregator persistor patterns; on success `Volatile.Write(ref _indexed, 1)`. Concurrent multi-process index creation across replicas is benign (`MongoCommandException` codes 85/86 are swallowed).
-- **Production `DeepClone` switches from `Newtonsoft.Json` to `System.Text.Json` round-trip.** Removes the security-flagged `TypeNameHandling.Auto` deserialisation-gadget surface from `ServiceConnect.Persistence.InMemory`, and drops the `MongoDB.Bson` package coupling so a project that wants the in-memory persistor for tests no longer pulls a MongoDB dependency. STJ handles every saga and aggregator shape used in the codebase. Two limitations are intentional and documented in `DeepClone`'s xmldoc: polymorphic nested values require `[JsonDerivedType]` attributes (STJ does not auto-discriminate the way BSON's `_t` did), and saga data with explicit-interface auto-properties (`Guid IFoo.FooId { get; set; }`) is not supported by the in-memory persistor — use the MongoDB persistor for that edge case, or expose the backing field via a public property.
-
-**Documentation / contract clarifications (non-breaking)**
-
-- **`MongoDbProcessManagerFinder.UpdateDataAsync` cancellation retry contract.** xmldoc now states: a caller catching `OperationCanceledException` and intending to retry MUST call `FindDataAsync` first to refresh the version before rebuilding the write record. Pre-fix the inline comment claimed a cancelled update always left the caller's `Version` matching the server, but a cancellation that fires AFTER server-commit but BEFORE client-ack leaves the server at `Version N+1` while the caller still believes `N` — the retry's filter misses and surfaces a spurious `ConcurrencyException` for what was actually a successful write. The fix is documentation-only; behaviour is unchanged.
-
-**Behaviour changes**
-
-- **`Newtonsoft.Json` removed from production packages.** `ServiceConnect.Client.RabbitMQ` and `ServiceConnect.Persistence.InMemory` no longer reference `Newtonsoft.Json`. `ServiceConnect.Persistence.InMemory` also drops its `MongoDB.Bson` dependency — the in-memory deep-clone uses `System.Text.Json` (BCL, no extra package).
-- **`InMemoryTimeoutStore` is now `IDisposable`.** Direct callers (tests, custom hosts that bypass DI) should `using` the store or call `Dispose()` to release the owned `InMemoryPersistenceState` (timer registrations, kernel lock handles). DI consumers via `UseInMemoryPersistence()` see no change — the container handles disposal.
-- **`MongoDbTimeoutStore` indexes no longer self-heal after admin-drop.** Once `_indexed=1` (set after first successful `CreateManyAsync`), an admin dropping the database while the process is running requires a process restart to re-create the indexes. Mirrors the `MongoDbAggregatorPersistor` cache contract (Group F). The trade-off vs the per-message round-trip is documented; pin tests guard against future regression.
-
-### Phase 5 — Core bus, DI, dispatch, lifecycle hardening
-
-**Bug fixes**
-
-- **`SystemTextJsonMessageSerializer` sequence overload honours configured `MaxDepth`.** `Deserialize(in ReadOnlySequence<byte>, Type)` constructed `Utf8JsonReader` with `state: default` whose internal `MaxDepth = 64` ignored the serializer's configured `MaxDepth = 32`. The byte-span overload threaded `_options` through `JsonSerializer.Deserialize` and rejected deep payloads correctly; the streaming sequence overload (the consume hot path) silently accepted them. The reader state now carries `MaxDepth` from `_options`; both overloads enforce the same boundary.
-- **Reply path invokes `OnConsumedSuccessfullyFilters`.** `MessageDispatcher` returned `Success=true` on the reply branch without invoking `_filterPipeline.ExecuteOnConsumedSuccessfullyFiltersAsync`. Audit and telemetry filters counting successful consumes silently under-counted reply messages. The reply branch now mirrors the non-reply success path's call shape.
-- **Reply-shaped messages route safely when no `IRequestReplyManager` is registered.** Pre-fix, a reply whose CLR type was locally registered as a regular message bypassed the reply branch and dispatched to the regular handler — no correlation, possible duplicate processing. The dispatcher now intercepts reply-shaped messages (those with a `ResponseMessageId` header) when no reply manager is available and ack-and-drops with a warning log explaining the message can't be correlated.
-- **`HandlerScanner` widens `Assembly.GetTypes()` catch.** Only `ReflectionTypeLoadException` was caught. With the `AppDomain.CurrentDomain.GetAssemblies()` fallback, one bad assembly raising `FileNotFoundException`, `FileLoadException`, `BadImageFormatException`, or `TypeLoadException` aborted startup. The new multi-catch logs the assembly name + exception type and continues per-assembly.
-- **`Bus.IsConsuming` returns false once `_disposed` is set.** A health probe straddling dispose previously returned Healthy on a Bus already mid-teardown. The getter now reads `_consuming && Volatile.Read(ref _disposed) == 0` so the disposed-but-still-flagging window is closed.
-- **`Bus.IsConsuming` reports true during `StartConsumingAsync` await.** The flag was flipped AFTER the await, so the broker could begin dispatching while `IsConsuming` reported false — spurious health-check Unhealthy at startup. Flag is now set BEFORE the await with a `try/catch` that resets it to false on failure.
-- **`Bus.StopConsumingAsync` is idempotent on disposed.** Previously called `ThrowIfDisposed` first, surfacing a spurious `ObjectDisposedException` at error level if a sibling already disposed the Bus. The redundant call now early-returns silently.
-- **`Bus.DisposeAsync` bounds the lifecycle-semaphore wait.** `StopConsumingCoreAsync()` was called with no timeout; `_lifecycleSemaphore.WaitAsync` could block indefinitely if a concurrent `StartConsumingAsync` was mid-handshake — container shutdown hung on broker partition. Dispose now uses an options-configurable timeout (default 30 s) and proceeds with teardown plus a warning log on timeout.
-- **`ProcessManagerTimeoutService` poll-loop hardening.** Three coupled fixes: (a) the loop's `CancellationTokenSource` is no longer linked to the `IHostedService.StartAsync` startup token, so a cancel-after-StartAsync-returns no longer kills the loop; (b) the outer catch is split into clean-shutdown OCE (silent), foreign OCE (log warning), and other exceptions (log error) — pre-fix a foreign OCE escaped silently; (c) the `PeriodicTimer` is now constructed with the injected `TimeProvider`, so tests with `FakeTimeProvider` can drive the loop deterministically.
-
-**Behaviour changes**
-
-- **`SendRequestMultiAsync` throws `RequestTimeoutException` on under-delivery.** The timeout/cancel registration always called `TrySetResult(null!)` when the caller's token wasn't cancelled. A caller asking for 5 replies in 10 s that received 3 silently got the partials with no signal of under-delivery. Now mirrors `PublishRequestAsync`: if `ExpectedReplyCount > 0` and not all replies arrived, the call throws `RequestTimeoutException` with a new `PartialReplies` property carrying the partials. Caller-token cancellation still surfaces as `OperationCanceledException`. **Migration:** callers relying on silent partial-return must catch `RequestTimeoutException` and read `PartialReplies` to recover the partials.
-- **Opt-in `BusConfiguration.StrictReplyValidation` flag tightens reply-envelope trust.** The legacy fallback in `IsTrustedRequestReplyEnvelope` trusts any envelope whose headers (`RequestMessageId`, `MessageId`, `SourceAddress`, `DestinationAddress == our queue`) match the cross-bus reply pattern — none prove WE originated the request. An external producer that knows our queue name can craft envelopes that bypass `ValidateReplyDestinations` and redirect our reply elsewhere. Setting `BusConfiguration.StrictReplyValidation = true` disables the fallback; only the tracked-request primary path is trusted. Default `false` preserves current behaviour. Document the security boundary and consider enabling strict mode in deployments that don't participate in cross-bus request-reply.
-- **`PersistenceConfiguration.ConnectionString` no longer defaults to `mongodb://localhost/`.** The legacy field defaulted to a literal `mongodb://localhost/`, misleading any custom wiring that read it. The Mongo persistor itself uses `MongoDbPersistenceOptions.ConnectionString` (validated at `MongoClientFactory.Create` and required to be non-empty), so the legacy default was already dead from the persistor's perspective. Default is now `string.Empty`. Custom wiring depending on the implicit localhost default must now configure the connection string explicitly.
-
-**Verify-and-pin (no behavioural change in this phase — fixes shipped earlier and are now regression-tested)**
-
-- **`OnConsumedSuccessfullyFilters` startup validation** (originally H10; landed in `bbe849af`).
-- **`default(RequestOptions)` rejection** (originally H13; landed in `58707bcb`). Callers must use `RequestOptions.Default`; the `default(T)` literal short-circuits the parameterless ctor, leaving `Timeout = 0`.
-- **`AggregatorRegistry` no longer captures the root provider** (originally H8; landed in `cd384748`). Aggregators with scoped dependencies resolve correctly without leaking through the root scope.
-- **`MessageTypeRegistry` weak-ordering window** (originally M11; landed in `8fd055d4`). A concurrent `Register` between snapshot and CAS now invalidates the cache so the next `TryResolve` re-snapshots and sees the racingly-registered type.
-
-### Phase 6 — Aggregator, stream, process-manager lifecycle hardening
-
-Internal concurrency hardening across the aggregator processor, stream lifecycle, the consume-context pool, and the process-manager processor. No public-API behaviour changes; one additive interface method (`IAggregatorPersistor.CountResolvedAsync`) with a back-compat default implementation.
-
-**Bug fixes**
-
-- **`AggregatorProcessor.OnTimerFired` register-before-recheck (M14).** A timer callback that passed the `_disposed` guard but `TryAdd`d into `_activeFlushes` *after* `DisposeAsync` snapshotted the dictionary was missed by Dispose's drain loop. The callback now `TryAdd`s before re-reading `_disposed`; if the recheck reads `_disposed != 0`, the callback completes the tcs as cancelled, removes the entry, and returns without invoking `RunFlushAsync`. Combined with M15's lock-gate, the disposal-snapshot race is closed.
-- **`AggregatorProcessor.ResetTimer` consults `_disposed` under lock (M15).** A `ProcessAsync` racing past the early-return guard could land in `ResetTimer` after `DisposeAsync` cleared `_timers`, inserting a fresh `Timer` that nobody disposed. `ResetTimer` now reads `Volatile.Read(ref _disposed)` inside `_resetTimerLock`; `DisposeAsync` takes the same lock around the `_timers` cleanup. Bounded post-dispose timer leak per distinct aggregator-name is closed.
-- **Aggregator batch flush gates on `CountResolvedAsync` (M16).** Pre-fix the per-message gate read `CountAsync` (total rows including unresolved). When a batch contained only unresolved records (e.g. type renamed, version drifted), the gate fired every message; the flush returned no-op (`ResolvedMessages.Count == 0`) but each iteration acquired the per-aggregator semaphore and made a `GetSnapshotAsync` round-trip. New additive `IAggregatorPersistor.CountResolvedAsync` is the cheap typed-count shape; the interface default delegates to `GetSnapshotAsync` for back-compat with third-party persistors. First-party persistors override with cheap typed queries (Mongo `$in` over registered type-names; InMemory pass-through because eager-deserialise on insert means no unresolved state). The processor gates on `CountResolvedAsync`. Unresolved-only batches accumulate quietly.
-- **`StreamProcessor` touches entry before write commits packet bytes (M17).** `state.Stream.Write` committed the packet before the touch CAS at lines 165-180. If `EvictStaleStreams` removed the entry between Write and the CAS, the touch loop returned `HandledTask` (entry gone) and the broker was acked with the packet silently dropped. The touch CAS now runs first; if `TryGetValue` returns false (entry evicted), the method returns without committing any bytes. Eviction sweep cadence (~1 min) is no longer a packet-drop window.
-- **`MessageBusWriteStream._closedFlag` deferred until close packet ships (M18).** `_closedFlag` was CAS-set to 1 *before* the close packet was sent. If `SendBytesAsync` threw, the flag stayed set, retry `CloseAsync` short-circuited, and the receiver-side `StreamProcessor` entry sat in `_activeStreams` with no terminal packet until the 5-min eviction sweep. The flag is split into three: `_closeStarted` (set on entry to `CloseAsync`, never resets, gates `WriteAsync`); `_closeInProgress` (CAS single-flight over the drain+send body); `_closedFlag` (set only after `SendBytesAsync` returns successfully — durable success indicator). A failed close leaves `_closedFlag = 0`, so a retry can run the send again.
-- **`ConsumeContextPool.Release` is idempotent (M19).** Pre-fix a defensive double-release pushed the same instance to the pool twice. Production paths use a single try/finally so the bug was dormant, but a future caller adding a defensive double-release could corrupt the pool. New `_pooled` CAS gates `_owner.Return(this)` behind `Interlocked.Exchange(ref _pooled, 1) == 0`; the field is reset on `Initialize` (acquire/release) so a re-rented instance can be released again.
-- **`ProcessManagerProcessor` doesn't log cooperative-shutdown OCEs at error (M20).** The generic `catch (Exception ex)` in `RunPipelineOnceAsync` logged `OperationCanceledException` at `LogError` during cooperative shutdown — false alerting noise. A new `catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }` block before the generic catch lets cooperative-shutdown OCEs propagate silently; foreign OCEs (caller's CT not cancelled) still LogError-path. Mirrors Phase 5's M22 fix shape.
-
-### Phase 7 — Observability polish + final cleanup
-
-The final phase of the v7 bug-consolidation roadmap. Telemetry and health-check correctness fixes, request-reply defensive hardening, and removal of the last `Newtonsoft.Json` references from production-adjacent test projects.
-
-**Bug fixes**
-
-- **`TelemetryProcessingMiddleware` defensive `Headers` copy (M3).** The middleware did `(IReadOnlyDictionary<string, object>)headers` — public contract is `IDictionary<,>`. Third-party transports supplying a non-`Dictionary<,>` impl threw `InvalidCastException` mid-pipeline. The middleware now snapshots into a fresh `Dictionary<string, object>(headers, StringComparer.Ordinal)` regardless of supplier shape.
-- **`ProducerConnectionHealthCheck` atomic `IsHealthy` + `HasAttemptedConnection` snapshot (M5).** Pre-fix the check read the two fields non-atomically. A producer that flipped `IsHealthy` between the reads (transient broker disconnect) appeared as `(IsHealthy=false, HasAttemptedConnection=false)` and was reported as Healthy (lazy-state) rather than Unhealthy. New `IProducer.GetHealthSnapshot()` returns a `ProducerHealthSnapshot` `readonly record struct`. Default-interface-method preserves third-party-producer back-compat; the in-tree RabbitMQ producer overrides for atomic reads.
-- **Health-check registrations resolve fresh per probe (M6).** `HealthChecksBuilderExtensions` previously captured a `cached` instance via `LazyInitializer.EnsureInitialized`. The closure outlived the `IServiceProvider` that resolved the original dependency, so a host that rebuilt its provider (test rigs, hot-reload, multi-tenant patterns) probed the OLD disposed bus from a stale check instance. The factory lambda now resolves fresh from the supplied `sp` on every probe; the underlying singleton is cached by DI.
-- **Consumer-side recovery-grace window (M4).** `BusConsumingHealthCheck` and `ConsumerConnectionHealthCheck` previously flipped Unhealthy on any momentary disconnect — pods wired to liveness probes crash-looped on transient broker disconnects. Both checks now ship a configurable `recoveryGraceWindow` (default 30 s); transient unhealth within the window continues to report Healthy. New `IBus.IsCancelledByBroker` (default-interface-method returns false; in-tree Bus mirrors `_consumer.IsCancelledByBroker`) lets the check distinguish permanent broker-cancellation (queue deleted, policy expired, mirror promoted) from transient flap and bypass grace immediately for the permanent-failure case. **Operator note:** wire consumer-side health checks on **readiness** probes; liveness probes still risk crash-loops if the underlying broker outage exceeds the grace window.
-- **`SendRequestAsync` / `SendRequestMultiAsync` / `PublishRequestAsync` install unobserved-fault observer on every catch arm (U1).** Pre-fix only the linked-CTS catch installed the `tcs.Task.ContinueWith(static t => _ = t.Exception, OnlyOnFaulted | ExecuteSynchronously)` observer; the user-token catch and catch-all rethrew without observing a faulting completion. On caller-cancellation `TrySetCanceled` is used (not `TrySetException`), so the catch-all path was a defensive correctness gap rather than a present-day leak — but the contract is now self-enforcing for future maintainers across all six catch arms.
-- **`TryHandleReply` lock-window tightened (U2).** Pre-fix the manager set `_closed = true` under `_stateLock`, exited the lock, then completed the TCS via `TrySetResult` outside the lock. A caller-CT firing in that window observed `_closed = true` and the registration callback no-opped — the caller awaited success despite cancellation. The TCS completion now runs inside the same `_stateLock` block so the registration's `_closed` read is consistent with the observed completion state.
-
-**Behaviour changes**
-
-- **OTel semantic-convention rename — clean replace (M1, M2).** ServiceConnect previously stamped `messaging.destination.name = MessageType.FullName` (CLR type, not broker exchange) and `messaging.operation = "publish"` (deprecated single-attribute form). Both stop emitting in v7. Spans and metrics now stamp the OTel-current pair `messaging.operation.type` (e.g. `publish`, `receive`, `process`) + `messaging.operation.name`; `messaging.destination.name` is sourced from the broker exchange or routing key (anonymous when neither is supplied — operators populate via `OutgoingEventArgs.Exchange`). **Migration:** dashboards filtering on `messaging.operation` or `messaging.destination.name = <CLR type name>` need updating. The rename applies to both span and metric tags for cross-signal consistency.
-- **`Newtonsoft.Json` removed from `ServiceConnect.UnitTests` and `ServiceConnect.EndToEndTests/Streaming`.** Earlier in the v7 work, Newtonsoft was removed from production packages; this phase completes the removal at the test layer. `JToken`/`JObject` assertions migrated to `System.Text.Json`'s `JsonNode`/`JsonObject`. `ServiceConnect.SerializationCompatTests` retains its Newtonsoft dep as the intentional v6-wire holdout — the only remaining Newtonsoft reference in the repo.
-
-### Roadmap closed
-
-Phase 7 closes the [v7 source-bug consolidation roadmap](https://github.com/R-Suite/ServiceConnect-CSharp/blob/master/consolidated-issues/2026-05-06-src-bugs-roadmap.md). The seven phases addressed 58+ verified issues plus two production Newtonsoft.Json removals across telemetry, the bus, the dispatcher, request-reply, persistence (Mongo + InMemory), the RabbitMQ producer / consumer / connection layers, the aggregator / stream / process-manager processors, and the health-check surface. Source bug catalog: `consolidated-issues/2026-05-05-src-bugs-consolidated.md`.
-
-### Processor cleanups (Aggregator, Stream, Handler, ProcessManagerTimeout)
-
-**Bug fixes**
-
-- **Saga timeout dispatch is at-most-once when the lease holds.** `ProcessManagerTimeoutService` now re-checks the lease deadline after `SendAsync` returns; if the lease expired during the send, the row is left for the lease-expiry sweep to reclaim instead of `Remove`-ing under a peer poller. Net effect: at worst one duplicate send (already documented at-least-once timeout semantics), no double-`Remove` racing a peer's reclaim.
-- **`ConsumeScopeAccessor` scopes are per-instance.** Pre-fix the `AsyncLocal` was a static field shared across every accessor in the AppDomain; two `Bus` instances dispatching concurrently saw each other's scopes. The class is registered as a DI singleton, so the field's lifetime is unchanged.
-- **`StreamProcessor` admission cap closed under concurrency.** The pre-existing speculative `GetOrAdd` + `TryRemove`-rollback path briefly admitted a rejected stream into `_activeStreams`; concurrent packets for the same `sequenceId` could observe the rejected entry. Reorder: the `Interlocked` counter is the gate; the dictionary insert happens only on a successful counter bump.
-- **`StreamProcessor.DisposeAsync` rejects late packets.** Pre-fix only the cleanup timer was disposed; late-arriving packets still populated `_activeStreams` indefinitely. Add a `_disposed` flag, guard `ProcessAsync`, and drain the dictionary on dispose.
-- **`MessageBusReadStream.SetLastPacketNumber` validates before AND after the CAS.** A concurrent `Write` that read the pre-CAS sentinel could `TryAdd` an out-of-range packet; the post-CAS validation pass now catches it.
-- **`MessageBusReadStream.Write` null-guards `data`.** `ArgumentNullException` instead of `NullReferenceException`.
-- **`MessageBusReadStream.Read` and `ReadSequence` capture `LastPacketNumber` once.** Defense-in-depth: a future regression introducing a false-positive `IsComplete` would surface immediately rather than producing a silently truncated read.
-- **`ConsumeContext` cached fields use the volatile-publication pattern.** `_messageIdCached` / `_correlationIdCached` are `volatile bool`; payload fields are written before the flag (release barrier) and read after (acquire barrier). Guarantees non-torn reads on weakly-ordered architectures.
-- **`HandlerProcessor` allows cross-service routing slips.** The `IsKnownQueue` check that rejected destinations not in the local queue config is removed; format validation (`IsValidRoutingSlipDestination`) remains. RabbitMQ's alternate-exchange / mandatory-return is the right error surface for unknown destinations.
-
-**Breaking API changes**
-
-- **`IBusConfiguration.ExceptionHandler` is async.** Signature changes from `Action<Exception>?` to `Func<Exception, CancellationToken, ValueTask>?`. Migration shim:
-
-```csharp
-// before (v6)
-cfg.ExceptionHandler = ex => Log.Error(ex);
-// after (v7)
-cfg.ExceptionHandler = (ex, _) => { Log.Error(ex); return ValueTask.CompletedTask; };
-```
-
-The dispatcher `await`s the handler and passes the shutdown cancellation token. Slow user code no longer blocks the consumer thread or throttles RabbitMQ prefetch. Handler-thrown exceptions are logged at warning level and not propagated.
-
-**Deployment-visible changes**
-
-- **`MessageTypeExchangeName` hash drops `AssemblyQualifiedName`.** The eight-hex-character suffix is now derived from `type.FullName + ", " + assembly.GetName().Name` — version-stable across assembly bumps. In v6 the hash included version + culture + PublicKeyToken; producers and consumers built against different assembly versions of the same logical type derived different exchange names. **Migration:** existing exchanges named under the v6 hash will need to be re-declared (or re-bound) on first v7 deployment. Apps using a single exchange-naming source (one repo, one assembly version per environment) will see no observable change; apps with version skew will see new exchange names appear.
-
-**Contract clarifications (non-breaking)**
-
-- **`IProcessManagerFinder.FindDataAsync<T>` MUST return a fresh `Data` reference per call.** Both built-in persistors comply (InMemory clones via `DeepClone`; Mongo via BSON deserialize). Third-party persistors that cache rows internally MUST clone before returning. The `ProcessManagerProcessor` dispatch loop's retry path depends on this so handler-mutated `Data` doesn't leak across retries.
-- **`HandlerProcessor` drops the routing slip from in-flight forward on any handler throw.** The slip data is preserved in the message envelope (the `RoutingSlip` header is not stripped); DLQ-routed messages and manual retries can still resume the chain.
-
-### Interfaces + health checks + remaining polish
-
-**Breaking changes**
-
-- **`IMessageHandler` / `IProcessHandler` / `IStreamHandler` signatures.** `HandleAsync` (and `IStreamHandler.ExecuteAsync`) now take the per-message context as a parameter; the `Context` (or `Stream`) property is removed. In v6 the framework wrote `handler.Context = ...` before each call, which was unsafe for singleton-registered handlers (concurrent dispatches raced). Migration:
-
-```csharp
-// before (v6)
-public class OrderHandler : IMessageHandler<OrderPlaced>
-{
-    public IConsumeContext Context { get; set; } = null!;
-    public Task HandleAsync(OrderPlaced msg, CancellationToken ct = default)
-    {
-        var bus = Context.Bus;
-        // ...
-    }
-}
-
-// after (v7)
-public class OrderHandler : IMessageHandler<OrderPlaced>
-{
-    public Task HandleAsync(OrderPlaced msg, IConsumeContext context, CancellationToken ct = default)
-    {
-        var bus = context.Bus;
-        // ...
-    }
-}
-```
-
-- **`Message.CorrelationId`** is now `init`-only (was `private set`). Object-initializer syntax still works; in-class post-construction reassignment no longer compiles.
-
-- **`TimeoutData.Headers`** and **`ConsumeEventArgs.Headers`** are now `IReadOnlyDictionary<string, object>`. Producers construct via init; consumers read only. Middleware that mutates these headers post-receive must construct a new instance with the modified dictionary.
-
-- **`TimeoutsBatch.DueTimeouts`** is now `IReadOnlyList<TimeoutData>` with an `init` accessor (was mutable `IList<TimeoutData>` with a public setter). Producers (timeout-store implementations) construct via init; consumers read only. Closes the asymmetry with the Phase 12 `Headers` tightenings — every list/dictionary-shaped DTO that flows from the framework to user code is now read-only.
-
-**Contract clarifications (non-breaking)**
-
-- **`Aggregator<T>.Timeout()`** is now `abstract` and must be overridden (was `virtual` with a `default(TimeSpan)` = `TimeSpan.Zero` default that silently disabled timeout-based flushing). The registry rejects subclasses whose `Timeout()` returns zero or `Timeout.InfiniteTimeSpan`, and whose `BatchSize()` returns a non-positive value, with `InvalidOperationException` at startup — every aggregator now declares an explicit, finite flush policy.
-
-- **`ProducerConnectionHealthCheck`** returns `Healthy` for the lazy-not-yet-tried state. Once the producer attempts a publish/send and fails, it transitions to `Unhealthy`. Readiness probes no longer crash-loop pods that haven't published at startup. New API: `IProducer.HasAttemptedConnection`.
-
-- **`HeaderDecoder.Render`** throws `InvalidOperationException` for header values nested deeper than 32 levels. The existing `Decode` catch swallows the throw and falls back to `type.FullName`, so a pathological header degrades gracefully.
-
-- **`HeaderDecoder.Render`** now emits valid JSON for all input. In v6 only `"` was escaped; `\`, `\n`, `\r`, `\t`, and U+0000-U+001F control characters were emitted raw, breaking downstream JSON parsing.
-
-- **`IBus.RequestTimeoutAsync`** default-interface-method now defers the `NotSupportedException` via `Task.FromException` (was synchronous throw).
-
-- **`RequestTimeoutException`** message uses invariant culture for the elapsed-milliseconds value (was current culture).
-
-**Bug fixes**
-
-- **Health checks honour `cancellationToken`** — `BusConsumingHealthCheck`, `ConsumerConnectionHealthCheck`, `ProducerConnectionHealthCheck` all call `ThrowIfCancellationRequested()` at entry.
-
-- **Health-check instances cached per registration** — `LazyInitializer.EnsureInitialized` ensures the check object is constructed once per `AddServiceConnect*` call, not per probe.
-
-**New API**
-
-- **Multi-bus health-check overloads.** `AddServiceConnectBus`, `AddServiceConnectConsumer`, `AddServiceConnectProducer` each gain:
-  - A factory overload: `(string name, Func<IServiceProvider, IBus> busFactory, ...)`.
-  - A keyed-services convenience overload: `(string name, object serviceKey, ...)` resolving via `GetRequiredKeyedService<IBus>(serviceKey)`.
-
-- **`IProducer.HasAttemptedConnection`** — `true` once a publish/send call has begun (whether or not it succeeded), `false` for a freshly-constructed producer. Used by `ProducerConnectionHealthCheck` to distinguish lazy-state from failure.
+### What v7 ships
+
+- **Target frameworks:** `net8.0` and `net10.0` on every package. `net8.0` will be dropped in the first major after Microsoft's EoL (November 10, 2026).
+- **Packages (all version 7.0.0):** `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Telemetry`, and the new `ServiceConnect.HealthChecks`.
+- **Dropped from the solution:** `ServiceConnect.Persistence.SqlServer`, `ServiceConnect.Persistence.Redis`, `ServiceConnect.Filters.MessageDeduplication`, and a long tail of internal/experimental projects (17 production projects collapsed to seven).
+- **License:** MIT (relicensed from the prior more-restrictive license).
+- **SourceLink + `.snupkg`** ship on every package; step-into works from any consumer.
+
+### Breaking changes
+
+#### Bus, configuration, and handlers
+
+- **Static `Bus` is gone.** Use `AddServiceConnect(...)` + the fluent `ServiceConnectBuilder` from DI. `IBus` is `IAsyncDisposable`; once stopped or disposed, the instance is latched — restart requires a new instance from DI.
+- **Async-first everywhere.** `IBus`, `IProducer`, `IConsumer`, `IConsumeContext`, `IProcessManagerFinder`, `ITimeoutStore`, `IAggregatorPersistor`, middleware, and filters all return `Task`/`ValueTask` and take a `CancellationToken`. The sync-over-async paths in the RabbitMQ transport have been removed.
+- **Handler signatures take the context as a parameter.** `IMessageHandler<T>.HandleAsync(T message, IConsumeContext ctx, CancellationToken ct)` (and the equivalents on `IProcessHandler<T>` / `IStreamHandler<T>`) replace the previous settable `Context`/`Stream` properties, which were unsafe for singleton handlers.
+- **Public surface tightened to extension contracts only.** `Bus`, `MessageDispatcher`, every concrete persistor, every concrete RabbitMQ class, every `*Configuration` type, and all hosted services are now `internal`. Public API is interfaces in `ServiceConnect.Interfaces` plus the builder/extension methods on the bus configuration root.
+- **`ConfigurePipeline(Action<PipelineConfiguration>)` is internal.** Use the typed builders: `AddOutgoingFilter<T>`, `AddBeforeConsumingFilter<T>`, `AddOnConsumedSuccessfullyFilter<T>`, `AddAfterConsumingFilter<T>`, `AddSendMessageMiddleware<T>`, `AddMessageProcessingMiddleware<T>`, plus outermost-position helpers.
+- **Request fan-out is explicit.** `SendOptions.EndPoints` and `RequestOptions.EndPoints` are removed; use `bus.SendToManyAsync(msg, ["a","b"])` for fan-out and `PublishRequestAsync` for broadcast request. `SendRequestMultiAsync` with a positive `ExpectedReplyCount` now throws `RequestTimeoutException` (with `PartialReplies`) instead of silently returning under-delivery.
+- **`PublishOptions` is a `readonly record struct`; `RequestOptions` requires `RequestOptions.Default`.** Mutable-shared-instance races are closed; `default(RequestOptions)` is rejected so the parameterless ctor's defaults always apply.
+- **Read-only collections on the wire.** `TimeoutData.Headers`, `ConsumeEventArgs.Headers`, `TimeoutsBatch.DueTimeouts`, `IBus.RouteAsync` destinations, `IConsumer.StartConsumingAsync` message-type lists, and `IMessageDispatcher.DispatchAsync` headers are now `IReadOnly*`. Mutating middleware constructs a new instance.
+- **`IConsumeContext.ReplyAsync` uses `ReplyOptions`** in place of `(message, headers, ct)`. `IBusConfiguration.ExceptionHandler` is `Func<Exception, CancellationToken, ValueTask>?` (was `Action<Exception>?`).
+- **`IRegistryInitializer` is internal**, and `IProducer.DisconnectAsync` is removed — dispose via `IAsyncDisposable.DisposeAsync` (or rely on DI).
+
+#### Transport
+
+- **TLS is on by default.** `SslEnabled = true` (AMQPS port 5671). For local plaintext dev, set `t.SslEnabled = false`; a non-loopback plaintext connection logs a `Warning` you can suppress with `SuppressPlaintextWarning`.
+- **Publisher confirms are on by default.** Every publish waits for a broker ack before returning. Benchmark throughput-sensitive paths; configuring `PublisherAcknowledgements=false` together with a finite `PublishTimeout` is now a startup error.
+- **`IProducer` body is `ReadOnlyMemory<byte>`; headers are `IReadOnlyDictionary<string,string>?`.** `byte[]` converts implicitly; a `null` body is no longer expressible — use `ReadOnlyMemory<byte>.Empty`.
+- **External `IConsumer` implementations must add `IsCancelledByBroker`** (default `false`); the bus uses it to flip `IsConsuming` to `false` when the broker has cancelled the consumer (queue deleted, policy expired, mirror promoted).
+- **`MessageTypeExchangeName` hash dropped `AssemblyQualifiedName`.** Exchanges are derived from `type.FullName + assembly.GetName().Name` — version-stable. Single-source apps see no change; apps with broker-shared version skew will see new exchange names on first v7 deploy.
+- **Retry and error publishes use `mandatory:true`.** Topology gaps that pre-v7 silently dropped messages now surface as `PublishException` — fix the topology rather than relying on the drop.
+
+#### Persistence
+
+- **`IHasCorrelationId` is required for aggregator data types.** Replaces v6's reflection-based discovery. `Message` already implements it; custom non-`Message` data types now fail to compile until they implement it.
+- **`IAggregatorPersistor` tightened.** `InsertDataAsync(IHasCorrelationId data, …)`; `GetDataAsync` returns `Task<IReadOnlyList<IHasCorrelationId>>`. `AggregatorSnapshot.ResolvedMessages` matches.
+- **Mongo aggregator `Name` partition value changed** from `typeof(Aggregator<T>).FullName` to `typeof(ConcreteAggregator).FullName`. Existing rows must be renamed before restarting on v7 or they will be invisible and accumulate.
+- **Generic saga collection names sanitized** — `+` / backtick / `[` / `]` / `,` in generic-type `FullName` become `_`. Rename existing generic-saga collections with `renameCollection` before deploy.
+- **MongoDB.Driver bumped to 3.8.0** (from 2.23.1). The bundled persistor handles `GuidRepresentationMode = V3` and `RenderArgs<T>` transparently; consumers using `MongoDB.Driver` directly should follow the official 2.x→3.x guide.
+- **Startup guards on Mongo persistence:** `WriteConcern.Unacknowledged` (w:0) is rejected; conflicting Guid-serializer registrations are rejected; the legacy `(Locked, Time)` timeout index is dropped and `(Time, Locked, LockExpiresAt)` is created.
+- **System.Text.Json replaces Newtonsoft.Json** in all shipped packages. Newtonsoft is no longer transitive; add an explicit reference if you relied on transitive flow. The wire format is JSON-equivalent for typical messages but STJ rejects `NaN`/`Infinity` doubles, nesting > 32 levels, trailing commas, and JS-style comments. A `SerializationCompatTests` project enforces v6↔v7 round-trip on every PR.
+- **`IMessageSerializer` reduced to four methods**: `Serialize<T>(T, IBufferWriter<byte>)`, `Deserialize<T>(ReadOnlyMemory<byte>)`, `Deserialize(ReadOnlyMemory<byte>, Type)`, and a default `ReadOnlySequence<byte>` overload. The `byte[]` / `ReadOnlySpan<byte>` overloads are gone.
+- **`TimeoutData.Destination` is nullable.** `IKeyValueStore` / `ICacheProvider` swap `Get<>` for `TryGet<>` to distinguish "absent" from "present-with-null".
+
+#### Streaming
+
+- **Body type cascades to `ReadOnlyMemory<byte>`.** `IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` no longer take `(byte[], offset, count)`; pass `buf.AsMemory(0, len)` instead.
+- **Streams latch on first transport failure.** A faulted write makes the stream unusable; create a fresh stream to recover. Caps: `MaxStreamSizeBytes`, `MaxActiveStreams`.
+
+#### Telemetry
+
+- **No more static telemetry state.** `ServiceConnectActivitySource.Options` / `MessagingSystemAttributes` are gone; instrumentation methods take options + attributes as parameters, so two buses in one process can have independent enrichment.
+- **One ActivitySource: `"ServiceConnect.Bus"`** (was three). Per-direction toggles via `EnablePublishTelemetry` / `EnableConsumeTelemetry` / `EnableSendTelemetry`.
+- **OTel semconv 1.x messaging attributes.** Spans/metrics emit `messaging.operation.type` (`publish`/`process`) and `messaging.operation.name`; the pre-1.x `messaging.operation` attribute is gone. `messaging.destination.name` reflects the broker exchange/routing key, not the CLR type's `FullName`. Dashboards filtering on the legacy attributes must update.
+
+### What's new
+
+#### Bus and pipeline
+
+- **`OnConsumedSuccessfully` filter stage** — fourth pipeline stage that runs only after a successful handler invocation. The canonical building block for at-most-once side effects and for the dedupe pattern that replaces the removed `MessageDeduplication` package.
+- **DI-first builder.** Multi-bus and keyed-services registration via `AddServiceConnectBus` / `AddServiceConnectConsumer` / `AddServiceConnectProducer`.
+- **Configurable caps.** `MaxInflightRequests`, `MaxStreamSizeBytes`, `MaxActiveStreams`, `MaxRoutingSlipHops`, `DisposeTimeout`.
+- **Lifecycle flags.** `AllowMissingProducer` (consume-only buses), `DeadLetterUnhandledMessages` (explicit error-queue routing), `StrictReplyValidation` (rejects the cross-bus fallback that a queue-name-aware producer could spoof), `IncludeMachineNameInHeaders` (default `false` to avoid hostname leakage on shared brokers).
+- **`IBus.RequestTimeoutAsync(correlationId, delay, ct)`** for scheduling saga timeouts.
+- **`IBus.IsCancelledByBroker` / `IBus.IsStopped` / `IConsumer.IsStopped` / `IProducer.HasAttemptedConnection` / `IProducer.IsHealthy` / `IProducer.GetHealthSnapshot()`** for health-check semantics.
+- **`RequestSendCancelledException`** (inherits `OperationCanceledException`) distinguishes send-pipeline cancel from caller-token cancel and from timeout.
+- **Native streaming.** `bus.CreateStream<T>(endpoint)` → `IMessageBusWriteStream` with zero-copy write path; `IStreamHandler<T>.ExecuteAsync(IMessageBusReadStream stream, ...)`.
+- **Polymorphic dispatch with type-hierarchy walking.** New processor chain (`HandlerProcessor`, `ReplyProcessor`, `ProcessManagerProcessor`, `AggregatorProcessor`, `StreamProcessor`) backed by pluggable registries — no more per-message reflection.
+
+#### Transport
+
+- **`PublishOptions.RoutingKey`** is honoured by the RabbitMQ transport (with `IProducer.SupportsRoutingKey` as a capability flag for third-party transports).
+- **`RabbitMqOptions.MaxPublishWaitTime`** caps the wall-clock budget for publish-confirm retries.
+- **`MessageId` survives publish retries.** Constructed once per public call and captured into the retry closure — consumer-side dedupe under retries is now meaningful.
+- **`TimeoutException` is retriable** under the at-least-once publish contract: a publish-confirm timeout drives a channel reset and re-submits the same `BasicProperties`.
+
+#### Persistence
+
+- **`IProcessManagerTypeRegistry`** (in `ServiceConnect.Interfaces`) enumerates registered saga data types. The Mongo persistor uses it to pre-create `CorrelationId` unique indexes via a hosted service at startup — closes the cross-process startup race.
+- **`IIdentified`** (`Guid Id` getter) on `MemoryData<T>` and `MongoDbData<T>` for stable identity across stores.
+- **`IAggregatorPersistor.CountResolvedAsync`** and **`ReleaseSnapshotAsync`** — additive default-interface-method members for cheap typed-count gating and lease release.
+
+#### Observability and operations
+
+- **`ServiceConnect.HealthChecks`** package with `BusConsumingHealthCheck`, `ConsumerConnectionHealthCheck`, and `ProducerConnectionHealthCheck`. Configurable `recoveryGraceWindow` (default 30s) absorbs transient broker flap; permanent broker-cancel bypasses the grace.
+- **Operator-grade metrics via `System.Diagnostics.Metrics`.** Four OTel `messaging.*` instruments (publish/process duration histograms + published/consumed counters) plus ServiceConnect counters (`retry.attempts`, `retry.drops`, `publish.confirm_timeouts`, `audit.drops`, `outgoing_filters.blocked`) and an in-flight UpDownCounter.
+- **W3C `traceparent`/`tracestate`** injected on outgoing messages (already extracted on consume — end-to-end distributed tracing works out of the box).
+- **`MaxTagValueLength`** (default 256) bounds user-controlled string tags for cardinality safety. **`ExceptionMessageSanitiser`** redacts PII in exception messages before they reach activity status and `exception.message` event tags.
+- **Connection-lifecycle Info logs** (`ConnectionOpened` / `ProducerConnectionOpened` / `ConnectionRecovered` / `ConnectionLost`) carry the connection's `MessageId`.
+
+### Hardening
+
+The bulk of the v7 work landed under hardening: trust boundaries on inbound headers, caps against amplification, persistence-lease correctness under cancellation and reaper paths, and a long tail of races in lifecycle, recovery, dispatch, and disposal.
+
+- **Server-authoritative wire headers.** `DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, and `FullTypeName` are stamped on outbound; reply routing resolves through registered handlers only (no `Type.GetType` on caller-supplied wire headers). `StrictReplyValidation` opts into the tightest mode.
+- **Cardinality and DoS caps.** Message-size, header-count, header-size, routing-slip-hop, active-stream, in-flight-request, packet-number, and stream-size caps. Recursive byte budget on AMQP table/array nested header values. Gzip magic-byte check + decompression size cap.
+- **Newtonsoft → STJ removes the `TypeNameHandling.Auto` deserialisation-gadget surface** in `DeepClone` and elsewhere.
+- **Audit-publish failures no longer trigger redelivery.** Audit is a success-side effect; malformed `RetryCount` headers route to the error queue rather than silently resetting the retry budget; unresolved message types are terminal.
+- **Bus lifecycle is single-use and DI-owned.** `Bus` no longer disposes transport singletons; `StartConsumingAsync` after stop is latched; `DisposeAsync` is bounded by `DisposeTimeout`; the lifecycle semaphore won't deadlock on shutdown.
+- **Mongo timeout-store correctness.** Candidate ordering tie-broken by `Id` (eliminates starvation under saturation); cancellation between `UpdateMany` and `FindAsync` performs best-effort lease cleanup; `$facet` aggregation removes the second round-trip.
+- **Aggregator correctness.** `RemoveDataAsync` distinguishes `KeyNotFoundException` (structural) from `ConcurrencyException` (race); batch-size flushes gate on resolved-count (no more spinning on unresolved-only batches); `OnTimerFired` registers-before-rechecks to close a disposal-snapshot race.
+- **In-memory persistence** no longer drops state at 2 days; deep-clones on read; types are `IDisposable` so DI rebuilds don't leak timers.
+- **Consumer-host recovery.** Auto-recovery refreshes the consumer tag via `ConsumerTagChangeAfterRecoveryAsync`; stale `UnregisteredAsync` events whose tag has been superseded by recovery are ignored; queues are bound before `BasicConsume` (per-channel serialisation contract).
+- **Telemetry correctness.** Enricher `OperationCanceledException` no longer leaks an activity; body copy is gated on listener presence; tag values are length-bounded; exception messages are sanitised.
+- **Saga / process-manager.** Poison rows wrap to `PersistenceException` and route to error queue rather than NACK-looping; saga predicates handle explicit-interface property impls (Mongo + InMemory); `ProcessManagerHandlerRegistry` dedupes by `HandlerType` to handle dual-interface sagas and repeat-assembly scans.
+
+### Removed
+
+- **`ServiceConnect.Filters.MessageDeduplication` package** — the old implementation silently dropped legitimate broker redeliveries and shared in-memory state via a static field. No replacement; use the new `OnConsumedSuccessfully` stage for per-consumer dedupe. See the `CustomFilterAndMiddleware` example.
+- **`ServiceConnect.Persistence.SqlServer` and `ServiceConnect.Persistence.Redis`** — no replacement.
+- **Static `Bus`** — use `AddServiceConnect(...)` from DI.
+- **`IProducer.DisconnectAsync`** — dispose via `IAsyncDisposable.DisposeAsync`.
+- **`SendOptions.EndPoints` and `RequestOptions.EndPoints`** — use `SendToManyAsync` / `PublishRequestAsync`.
+- **`SendEventArgs.EndPoints` (plural)** — multi-endpoint sends raise one event per destination; correlate by `CorrelationId`.
+- **`IProcessMessageMiddleware`** — superseded by `IMessageProcessingMiddleware`.
+- **`Get<TKey,TValue>` on `IKeyValueStore` / `ICacheProvider`** — use `TryGet`.
+- **`byte[]` / `ReadOnlySpan<byte>` overloads on `IMessageSerializer`** — use the `ROM<byte>` / `ROSequence<byte>` shape.
+- **Pre-1.x `messaging.operation` OTel attribute** — replaced by `messaging.operation.type` + `messaging.operation.name`.
+- **Newtonsoft.Json** from all production packages.
+
+### Migration
+
+For application code, the upgrade path is roughly:
+
+1. Replace static `Bus.Initialize(...)` with `AddServiceConnect(builder => ...)` in your composition root; resolve `IBus` from DI.
+2. Convert handlers to `HandleAsync(T message, IConsumeContext ctx, CancellationToken ct)`; drop any settable `Context`/`Stream` property usage.
+3. Replace `SendOptions.EndPoints` and `RequestOptions.EndPoints` usage with `SendToManyAsync` / `PublishRequestAsync` / `SendRequestMultiAsync`.
+4. Convert pipeline registration to the typed `AddOutgoingFilter<T>` / `AddBeforeConsumingFilter<T>` / `AddOnConsumedSuccessfullyFilter<T>` / `AddAfterConsumingFilter<T>` / `AddSendMessageMiddleware<T>` / `AddMessageProcessingMiddleware<T>` builders.
+5. Set `t.SslEnabled = false` explicitly for plaintext local dev; keep TLS on for everything else.
+6. If you ship custom non-`Message` aggregator data, implement `IHasCorrelationId` on it.
+7. If you query `Aggregator<T>`-named partitions or generic-saga collections directly, run the rename scripts before deploying.
+8. If your dashboards filter on the old `messaging.operation` attribute or on `messaging.destination.name = "<CLR type FullName>"`, update them.
+
+For full per-commit context, see the v7 release on GitHub and the `git log master..v7.0.0` range.
 
 ## Source and tags
 

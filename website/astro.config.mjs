@@ -189,6 +189,10 @@ export default defineConfig({
           label: 'Releases',
           link: '/releases/',
         },
+        {
+          label: 'Migrating from v6',
+          link: '/migrating-v6-to-v7/',
+        },
       ],
     }),
   ],
