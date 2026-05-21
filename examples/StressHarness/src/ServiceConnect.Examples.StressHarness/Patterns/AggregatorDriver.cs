@@ -84,10 +84,15 @@ public sealed class AggregatorDriver(FlowAccounting accounting, AggregatorObserv
             // that call accounting.RecordHandled inside their handler.
             accounting.RecordHandled(context.FlowId);
 
-            if (batch.Count != BatchSize)
+            // Under the at-least-once contract, the framework may dispatch a flow's
+            // items across multiple partial batches if a broker kill fires the flush
+            // timer before all items arrive. Any size in [1, BatchSize] is a valid
+            // outcome; sizes above BatchSize would indicate the framework over-collected
+            // and remain a failure.
+            if (batch.Count is < 1 or > BatchSize)
             {
                 failures.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"aggregator {context.Origin.ToHeaderValue()}->{receiverBusTag}: expected batch of {BatchSize} but observed {batch.Count}"));
+                    $"aggregator {context.Origin.ToHeaderValue()}->{receiverBusTag}: expected batch size in [1, {BatchSize}] but observed {batch.Count}"));
             }
             if (!string.Equals(batch.BusTag, receiverBusTag, StringComparison.Ordinal))
             {
