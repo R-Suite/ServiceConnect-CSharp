@@ -112,12 +112,18 @@ public static class SoakLoop
                                 dir.AssertionFailures.Count > 0 ? string.Join("; ", dir.AssertionFailures) : null);
                         }
 
-                        // Reclaim per-flow accumulator rows for the flows that succeeded on
-                        // this driver this tick. Failed flows are deliberately retained so
-                        // their per-flow detail survives into report.md. Each accumulator's
-                        // TryRemoveCompleted is idempotent and tolerates ids it never saw,
-                        // so the loop sweeps every singleton without per-driver routing.
-                        var completedIds = directions.Where(d => d.Succeeded).Select(d => d.FlowId).ToList();
+                        // FlowAccounting tracks every flow id the drivers booked via RecordSend —
+                        // including driver-side sub-flow ids (e.g. saga stage ids) that the
+                        // direction-level d.FlowId never covers. Concatenating the accounting-
+                        // reclaimed ids ensures every IFlowKeyedSingleton sees the full set; the
+                        // singletons' TryRemoveCompleted implementations are idempotent and
+                        // tolerate ids they never observed, so duplicates are harmless. The
+                        // end-of-run Reconcile() still sees any under-handled flows because
+                        // FlowAccounting.TryRemoveCompleted only evicts rows where observed >=
+                        // expected.
+                        var directionCompletedIds = directions.Where(d => d.Succeeded).Select(d => d.FlowId);
+                        var accountingCompletedIds = accounting.TryRemoveCompleted();
+                        var completedIds = directionCompletedIds.Concat(accountingCompletedIds).ToList();
                         if (completedIds.Count > 0)
                         {
                             foreach (var singleton in flowKeyedSingletons)
@@ -126,12 +132,6 @@ public static class SoakLoop
                             }
                         }
                     }
-
-                    // Drop accounting entries for flows that have already reached their expected
-                    // handler count so the per-flow dictionaries stay bounded by the in-flight set.
-                    // The end-of-run Reconcile() still sees any under-handled flows because
-                    // TryRemoveCompleted only evicts rows where observed >= expected.
-                    accounting.TryRemoveCompleted();
                 }
             }
             finally

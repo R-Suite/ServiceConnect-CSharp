@@ -96,12 +96,14 @@ public sealed class ModeDispatcher(
                     dir.AssertionFailures.Count > 0 ? string.Join("; ", dir.AssertionFailures) : null);
             }
 
-            // Reclaim per-flow accumulator rows for the flows that succeeded on this
-            // driver. Failed flows are deliberately retained so the per-flow detail
-            // survives into report.md. Each accumulator's TryRemoveCompleted is
-            // idempotent and tolerates ids it never saw, so the loop sweeps every
-            // singleton without needing to know which one each flow touched.
-            var completedIds = directions.Where(d => d.Succeeded).Select(d => d.FlowId).ToList();
+            // Smoke mode runs a single tick across every pattern; reclaim alongside the
+            // soak / throughput loops so a smoke run that exercises the saga pattern also
+            // sweeps the sub-flow ids before Reconcile inspects what's left. Reconcile
+            // only reports under-handled / over-handled flows, which are disjoint from the
+            // reclaimed-complete set.
+            var directionCompletedIds = directions.Where(d => d.Succeeded).Select(d => d.FlowId);
+            var accountingCompletedIds = _accounting.TryRemoveCompleted();
+            var completedIds = directionCompletedIds.Concat(accountingCompletedIds).ToList();
             if (completedIds.Count > 0)
             {
                 foreach (var singleton in _flowKeyedSingletons)
