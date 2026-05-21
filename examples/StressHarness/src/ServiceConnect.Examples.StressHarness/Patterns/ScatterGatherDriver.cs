@@ -60,10 +60,19 @@ public sealed class ScatterGatherDriver(FlowAccounting accounting, PerHandlerSig
         var repliesLock = new object();
 
         var request = new SearchRequest(context.FlowId) { Query = context.FlowId.ToString("N") };
+        // Scatter-gather is uniquely sensitive to chaos cycles: a flow needs BOTH replies,
+        // each carried by its own handler-dispatch chain that can stack one publisher
+        // retry budget (~30s ack-wait + ~10s inter-attempt delay) plus the consumer-side
+        // retry-queue delay. A single ill-aligned chaos cycle is absorbed by the publish
+        // retry; two consecutive cycles bracketing the same request-reply window can push
+        // a single reply past the per-flow timeout — at which point the framework's
+        // RequestReplyManager evicts the correlation entry and any late-arriving reply is
+        // silently dropped (no entry to match against). Doubling the request-reply timeout
+        // gives the second reply enough wall-clock to ride out a two-cycle alignment.
         var options = new RequestOptions
         {
             ExpectedReplyCount = 2,
-            Timeout = (int)context.FlowTimeout.TotalMilliseconds,
+            Timeout = (int)(context.FlowTimeout.TotalMilliseconds * 2),
             Headers = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [StressHeaders.FlowId] = context.FlowId.ToString("N"),
