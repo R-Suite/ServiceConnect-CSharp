@@ -435,14 +435,47 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
 
     private Task OnConsumerUnregisteredAsync(object? sender, ConsumerEventArgs args)
     {
-        // Fires on broker-initiated basic.cancel (e.g. queue deleted while consuming).
+        HandleConsumerUnregistered(args);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Test seam: synchronous body of <see cref="OnConsumerUnregisteredAsync"/>.
+    /// Exposed as <c>internal</c> so unit tests can drive the handler with synthetic
+    /// <see cref="ConsumerEventArgs"/> without needing to invoke the consumer's
+    /// async event delegate through reflection.
+    /// </summary>
+    /// <remarks>
+    /// Stale events from prior chaos cycles can land AFTER topology recovery has
+    /// re-issued <c>BasicConsumeAsync</c> with a new tag. RabbitMQ.Client's async
+    /// event dispatch does not strictly order <c>UnregisteredAsync</c> against
+    /// <c>RecoverySucceededAsync</c>, so a late unregistered notification for a
+    /// tag we no longer own can clobber the post-recovery healthy state. The
+    /// live-tag gate compares <c>args.ConsumerTags</c> against
+    /// <see cref="_consumerTag"/>; an event for a tag we don't own is observational
+    /// only and does not flip the channel host's cancelled flag.
+    /// </remarks>
+    internal void HandleConsumerUnregistered(ConsumerEventArgs args)
+    {
+        var liveTag = Volatile.Read(ref _consumerTag);
+        if (!string.IsNullOrEmpty(liveTag)
+            && args.ConsumerTags is { Length: > 0 } tags
+            && !tags.Contains(liveTag, StringComparer.Ordinal))
+        {
+            _logger.LogDebug(
+                "Ignoring stale AMQP consumer unregistered event on queue '{Queue}' for tags [{StaleTags}]; live tag is '{LiveTag}'",
+                _queueName,
+                string.Join(", ", tags),
+                liveTag);
+            return;
+        }
+
         // Set the flag *before* logging so a downstream health probe racing with the log call
         // observes Unhealthy on the same tick the operator first sees the warning.
         _channelHost.NotifyBrokerCancelled();
         _logger.LogWarning(
             "AMQP consumer '{ConsumerTag}' unregistered by broker (broker-initiated shutdown) on queue '{Queue}'; reporting unhealthy via BusConsumingHealthCheck",
             _consumerTag, _queueName);
-        return Task.CompletedTask;
     }
 
     private Task OnConnectionShutdownAsync(object? sender, ShutdownEventArgs args)
