@@ -1,0 +1,143 @@
+---
+title: Clustering & Quorum Queues
+description: Connecting ServiceConnect to a RabbitMQ cluster — host-list format, failover behaviour, and how to declare quorum queues for replicated durability.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+ServiceConnect connects to a RabbitMQ cluster the same way it connects to a single broker — you list multiple hosts on `Transport.Host` and the RabbitMQ.Client library handles failover. Replicated queue durability is a separate, orthogonal concern: opt into [quorum queues](https://www.rabbitmq.com/docs/quorum-queues) by passing `x-queue-type: quorum` through the transport's queue-argument dictionaries. This page covers both.
+
+## Connecting to a cluster
+
+Pass a comma-separated list of broker hostnames as `Host`:
+
+```csharp
+builder.UseRabbitMQ(transport =>
+{
+    transport.Host = "rabbit-a,rabbit-b,rabbit-c";
+    transport.Username = "service-connect";
+    transport.Password = Environment.GetEnvironmentVariable("RMQ_PASSWORD");
+    transport.VirtualHost = "/production";
+});
+```
+
+The string is split on `,` and the resulting hostnames are passed to `ConnectionFactory.CreateConnectionAsync` as a hostname array. RabbitMQ.Client tries each entry in order on initial connect and on automatic recovery, so a downed node is transparent to the application provided at least one entry resolves.
+
+### Host-list format
+
+A few things to know about the parser:
+
+- The string is split on `,` and **whitespace is preserved** — `"rabbit-a, rabbit-b"` becomes `["rabbit-a", " rabbit-b"]` and DNS resolution of the second entry will fail. Either omit spaces or trim them yourself before assigning.
+- **Per-host ports are not supported.** Every entry uses the same port resolved from `SetClientSetting("Port", ...)` (or the AMQP/AMQPS default). If your nodes listen on different ports, front them with a load balancer or DNS so they share one port externally.
+- **TLS is per-connection, not per-host.** `SslEnabled`, `ServerName`, `CertPath`, and friends apply to whichever node the client picks. For mTLS deployments, your broker nodes must present certificates valid for the configured `ServerName` (or for each hostname in the list when no override is set).
+
+### Failover behaviour
+
+Connection recovery is on by default in RabbitMQ.Client and ServiceConnect relies on it. When a broker node drops the connection:
+
+1. RabbitMQ.Client raises `ConnectionShutdown`. ServiceConnect logs event `ConnectionLost` at Information — broker-initiated shutdowns are normal operational events, not warnings.
+2. The client begins automatic recovery, walking the hostname list until one accepts.
+3. Once reconnected, `TopologyRecoveryEnabled = true` replays exchanges, queues, and bindings on the new channel. ServiceConnect logs event `ConnectionRecovered`.
+4. Consumer subscriptions are restored; in-flight messages that were unacked at the time of the drop will be redelivered by the new node.
+
+See the [connection-lifecycle log table](/ServiceConnect-CSharp/learn/operations/observability/#connection-lifecycle-logs) for every event the client emits during recovery, and the [observability](/ServiceConnect-CSharp/learn/operations/observability/) page generally for the `server.address` span attribute, which carries the broker node a publish or consume actually landed on.
+
+<Aside type="note" title="Idempotency matters in clusters">
+  Cluster failover guarantees at-least-once delivery, not exactly-once. A message acked on the old node but lost to the new node will be redelivered. Design handlers to tolerate replays — see [Idempotency](/ServiceConnect-CSharp/learn/operations/idempotency/).
+</Aside>
+
+### Tuning recovery
+
+Two transport knobs govern recovery behaviour:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `NetworkRecoveryInterval` | RabbitMQ.Client default (5s) | Time between recovery attempts. Lower for tight failover windows; raise to avoid hammering a broker that's mid-restart. |
+| `HeartbeatTime` | 60s | AMQP heartbeat interval. Disabling heartbeats (`HeartbeatEnabled = false`) removes broker-side dead-peer detection and is rarely what you want in a clustered deployment. |
+
+Both are set via the `UseRabbitMQ(opts => ...)` typed options surface — see [RabbitMqOptions](https://github.com/ServiceConnect/ServiceConnect-CSharp/blob/master/src/ServiceConnect.Client.RabbitMQ/Configuration/RabbitMqOptions.cs) for the full set.
+
+## Quorum queues
+
+A clustered broker does not automatically give you replicated queues. By default, ServiceConnect declares **classic** queues, which live on a single node — if that node dies, messages on the queue are unavailable until it recovers. For replicated durability you need [quorum queues](https://www.rabbitmq.com/docs/quorum-queues), which the broker replicates across a Raft group of nodes.
+
+Opt in by passing `x-queue-type: quorum` through the transport's three argument dictionaries — one per queue family (main, retry, utility):
+
+```csharp
+builder.UseRabbitMQ(opts =>
+{
+    opts.Host = "rabbit-a,rabbit-b,rabbit-c";
+
+    var quorumArgs = new Dictionary<string, object?>
+    {
+        ["x-queue-type"] = "quorum",
+        ["x-delivery-limit"] = 5,            // poison-message safety net
+        ["x-quorum-initial-group-size"] = 3, // replicas at declare time
+    };
+
+    opts.Arguments              = quorumArgs;  // primary consumer queue
+    opts.RetryQueueArguments    = quorumArgs;  // .Retries queue
+    opts.UtilityQueueArguments  = quorumArgs;  // error + audit queues
+});
+```
+
+ServiceConnect's queue declarations already meet the quorum-queue constraints — queues are declared `durable: true, exclusive: false, autoDelete: false`, and the framework does not set any of the classic-only arguments (`x-max-priority`, `x-queue-mode: lazy`) that would conflict. The retry-queue topology, which sets `x-dead-letter-exchange` and `x-message-ttl` internally, is fully compatible with quorum queues; your arguments are merged with the framework's, not replaced.
+
+### Common arguments
+
+The arguments dictionaries are pass-through to RabbitMQ — anything the broker accepts is allowed. The most useful ones for quorum queues:
+
+| Argument | Purpose |
+|---|---|
+| `x-queue-type` | Set to `"quorum"` (or `"stream"` for stream queues — outside the scope of this page). |
+| `x-delivery-limit` | Maximum redelivery attempts before the broker drops the message to the configured DLX. Acts as a poison-message guard distinct from ServiceConnect's `MaxRetries`. |
+| `x-quorum-initial-group-size` | Number of replicas the queue starts with. Should not exceed your cluster size. |
+| `x-max-in-memory-length` | Cap on messages held in RAM before spillover to disk-only reads. |
+| `x-overflow` | `"reject-publish"` returns a publisher nack when the queue is full — pairs well with publisher confirms (on by default in ServiceConnect). |
+
+See the [RabbitMQ quorum-queue reference](https://www.rabbitmq.com/docs/quorum-queues#configuration) for the full list.
+
+### Trade-offs vs classic queues
+
+Quorum queues are not a free upgrade. The trade-offs worth knowing:
+
+- **Throughput.** Replication adds latency and consumes more cluster bandwidth. Expect lower peak throughput than a classic queue on identical hardware.
+- **Memory profile.** Quorum queues keep an in-memory tail; very long queues are more memory-hungry than lazy classic queues.
+- **Not all classic features are supported.** Priorities (`x-max-priority`), per-queue TTL on the queue itself (message TTL is fine), and queue exclusivity don't apply. ServiceConnect doesn't use any of these internally.
+- **Cluster size matters.** A quorum queue with three replicas needs at least three running nodes to accept writes. Single-node dev clusters work fine for testing — set `x-quorum-initial-group-size = 1` — but production should run an odd cluster size of three or five.
+
+For workloads where throughput dominates and a brief outage is acceptable, classic queues remain the right choice. For workloads where message loss on node failure is unacceptable — orders, payments, anything that triggers a downstream side-effect — quorum queues are worth the throughput cost.
+
+## Putting it together
+
+A typical production transport configuration against a three-node cluster:
+
+```csharp
+builder.UseRabbitMQ(opts =>
+{
+    opts.Port = 5671;                       // AMQPS
+    opts.PrefetchCount = 50;
+    opts.NetworkRecoveryInterval = TimeSpan.FromSeconds(5);
+
+    var quorumArgs = new Dictionary<string, object?>
+    {
+        ["x-queue-type"] = "quorum",
+        ["x-delivery-limit"] = 5,
+        ["x-overflow"] = "reject-publish",
+    };
+    opts.Arguments             = quorumArgs;
+    opts.RetryQueueArguments   = quorumArgs;
+    opts.UtilityQueueArguments = quorumArgs;
+})
+.ConfigureTransport(t =>
+{
+    t.Host = "rabbit-a.prod.example.com,rabbit-b.prod.example.com,rabbit-c.prod.example.com";
+    t.Username = "orders-service";
+    t.Password = Environment.GetEnvironmentVariable("RMQ_PASSWORD");
+    t.VirtualHost = "/production";
+    t.MaxRetries = 3;
+    t.GracefulShutdownTimeoutMilliseconds = 30_000;
+});
+```
+
+The host list is the failover frontier; the argument dictionaries are the durability frontier. Set both for a production deployment against a real cluster — they're independent and you need both.

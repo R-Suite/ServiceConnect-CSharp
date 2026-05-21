@@ -200,5 +200,6 @@ out/
 **/out/
 
 # Working specs / plans authored during agent sessions (committed deliberately,
-# not auto-staged from the working tree)
-docs/
+# not auto-staged from the working tree). Anchored to the repo root so the rule
+# doesn't accidentally match website/src/content/docs/ and trap new doc pages.
+/docs/

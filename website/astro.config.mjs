@@ -65,6 +65,7 @@ export default defineConfig({
               items: [
                 { label: 'Configuration', link: '/learn/operations/configuration/' },
                 { label: 'Hosting & Lifecycle', link: '/learn/operations/hosting/' },
+                { label: 'Clustering & Quorum Queues', link: '/learn/operations/clustering/' },
                 { label: 'Error Handling', link: '/learn/operations/error-handling/' },
                 { label: 'Idempotency', link: '/learn/operations/idempotency/' },
                 { label: 'Cancellation', link: '/learn/operations/cancellation/' },

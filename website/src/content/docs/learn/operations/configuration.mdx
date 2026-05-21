@@ -43,6 +43,8 @@ builder.UseRabbitMQ(transport =>
 
 The essentials: `Host` is required — a single hostname or a comma-separated list for clustered brokers. `Username`/`Password`/`VirtualHost` are optional and default to the broker's guest settings.
 
+For multi-node clusters — host-list parsing rules, failover behaviour, and how to declare replicated quorum queues — see [Clustering & Quorum Queues](/ServiceConnect-CSharp/learn/operations/clustering/).
+
 Retry knobs drive the error-handling pipeline — see [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) for what happens after `MaxRetries` is exhausted.
 
 ### TLS
