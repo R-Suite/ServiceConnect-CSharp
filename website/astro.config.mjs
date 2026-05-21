@@ -155,7 +155,6 @@ export default defineConfig({
                 { label: 'IAggregatorPersistor', link: '/reference/extension-points/persistence/iaggregatorpersistor/' },
                 { label: 'IProcessManagerFinder', link: '/reference/extension-points/persistence/iprocessmanagerfinder/' },
                 { label: 'ITimeoutStore', link: '/reference/extension-points/persistence/itimeoutstore/' },
-                { label: 'ILeaseAwareTimeoutStore', link: '/reference/extension-points/persistence/ileaseawaretimeoutstore/' },
               ],
             },
             {
@@ -168,7 +167,6 @@ export default defineConfig({
             {
               label: 'Transport',
               items: [
-                { label: 'IServiceConnectConnection', link: '/reference/extension-points/transport/iserviceconnectconnection/' },
                 { label: 'IConsumer', link: '/reference/extension-points/transport/iconsumer/' },
                 { label: 'IProducer', link: '/reference/extension-points/transport/iproducer/' },
               ],
@@ -177,7 +175,6 @@ export default defineConfig({
               label: 'Registry',
               items: [
                 { label: 'IHandlerRegistry', link: '/reference/extension-points/registry/ihandlerregistry/' },
-                { label: 'IRegistryInitializer', link: '/reference/extension-points/registry/iregistryinitializer/' },
                 { label: 'IMessageDispatcher', link: '/reference/extension-points/registry/imessagedispatcher/' },
                 { label: 'IMessageProcessor', link: '/reference/extension-points/registry/imessageprocessor/' },
               ],
