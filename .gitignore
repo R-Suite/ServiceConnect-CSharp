@@ -194,3 +194,11 @@ website/.astro/
 # Test runner output
 **/TestResults/
 *.trx
+
+# Stress harness report output (regenerated on every run)
+out/
+**/out/
+
+# Working specs / plans authored during agent sessions (committed deliberately,
+# not auto-staged from the working tree)
+docs/
