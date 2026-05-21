@@ -847,6 +847,12 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             var remaining = deadline - _timeProvider.GetUtcNow();
             if (remaining <= TimeSpan.Zero)
             {
+                // Set the timed-out flag BEFORE cancelling the publish CTS. AckOrNackAsync
+                // gates its leave-unacked branch on _shutdownTimedOut; any in-flight delivery
+                // that observes the publish cancellation must also observe the flag, or it
+                // will fall through to BasicNackAsync and break the "broker redelivers after
+                // channel close" contract.
+                Volatile.Write(ref _shutdownTimedOut, 1);
                 await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
                 return;
             }
@@ -854,6 +860,7 @@ internal sealed class RabbitMqConsumerHost : IAsyncDisposable
             try
             {
                 await Task.Delay(remaining, _timeProvider, shutdownPublishCts.Token).ConfigureAwait(false);
+                Volatile.Write(ref _shutdownTimedOut, 1);
                 await shutdownPublishCts.CancelAsync().ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (shutdownPublishCts.IsCancellationRequested)
