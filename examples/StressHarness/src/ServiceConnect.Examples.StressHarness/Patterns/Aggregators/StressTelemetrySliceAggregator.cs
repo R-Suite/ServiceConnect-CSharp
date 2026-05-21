@@ -14,12 +14,14 @@ namespace ServiceConnect.Examples.StressHarness.Patterns.Aggregators;
 /// <para>
 /// <see cref="BatchSize"/> and <see cref="Timeout"/> are both required to return
 /// strictly positive values — the framework's registry rejects a zero / negative
-/// batch size and rejects a zero / infinite timeout at startup. The chosen
-/// values (<c>4</c> / <c>3s</c>) are tuned for the smoke harness: the driver
-/// sends exactly four items and expects the size-based flush to fire well inside
-/// the per-flow timeout; the timeout-based flush is the safety net if a delivery
-/// is dropped, in which case the partial batch surfaces in the observation log
-/// and the driver's count check fails with diagnostic context.
+/// batch size and rejects a zero / infinite timeout at startup. The driver sends
+/// exactly <see cref="BatchSize"/> items per flow so the size-based flush is the
+/// load-bearing trigger in normal operation; the timeout is the safety net for a
+/// dropped delivery. The chosen <c>60s</c> comfortably exceeds the harness's
+/// standard chaos downtime (<c>20s</c>) plus recovery, so a kill mid-batch does
+/// not flush a partial batch before redelivery completes. Real applications that
+/// rely on prompt partial-batch flush would pick a much shorter value; the harness
+/// favours batch completeness over flush latency.
 /// </para>
 /// <para>
 /// Flow id is taken from <see cref="Message.CorrelationId"/> on the first message
@@ -34,7 +36,7 @@ public sealed class StressTelemetrySliceAggregator(string busTag, AggregatorObse
 {
     public override int BatchSize() => 4;
 
-    public override TimeSpan Timeout() => TimeSpan.FromSeconds(3);
+    public override TimeSpan Timeout() => TimeSpan.FromSeconds(60);
 
     public override Task ExecuteAsync(IReadOnlyList<TelemetrySlice> messages, CancellationToken cancellationToken = default)
     {
