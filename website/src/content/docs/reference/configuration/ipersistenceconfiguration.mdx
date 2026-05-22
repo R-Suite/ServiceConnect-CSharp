@@ -21,6 +21,8 @@ string ConnectionString { get; set; }
 
 Gets or sets the provider-specific connection string.
 
+**Default:** `""` (empty string).
+
 **Remarks.** Only meaningful for providers that connect to an external store (MongoDB). The in-memory provider ignores it.
 
 ---
@@ -33,6 +35,8 @@ string DatabaseName { get; set; }
 
 Gets or sets the database or logical store name.
 
+**Default:** `"RMessageBusPersistentStore"`.
+
 **Remarks.** MongoDB uses this as the database name. The in-memory provider ignores it.
 
 ---
@@ -44,6 +48,8 @@ string AggregatorCollectionName { get; set; }
 ```
 
 Gets or sets the collection or container name used for aggregator state.
+
+**Default:** `"Aggregator"`.
 
 **Remarks.** MongoDB uses this as the collection name for aggregator snapshots. The in-memory provider ignores it.
 

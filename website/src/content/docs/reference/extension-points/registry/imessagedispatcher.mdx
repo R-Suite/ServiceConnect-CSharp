@@ -7,7 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
-`IMessageDispatcher` is the top-level orchestrator that the transport consumer calls for every incoming message. When a raw delivery arrives from the broker, the framework invokes `Dispatch` with the raw bytes, the wire type name, and the transport headers. From that point on, the dispatcher is responsible for the complete consume pipeline:
+`IMessageDispatcher` is the top-level orchestrator that the transport consumer calls for every incoming message. When a raw delivery arrives from the broker, the framework invokes `DispatchAsync` with the raw bytes, the wire type name, and the transport headers. From that point on, the dispatcher is responsible for the complete consume pipeline:
 
 1. Extract `FullTypeName` from headers and build the `Envelope`. Throw if the header is absent.
 2. Run `IMessageProcessor` entries where `RunBeforeDeserialization == true`. If any returns `ProcessResult.Handled`, short-circuit with `Success = true`.

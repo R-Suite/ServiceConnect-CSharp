@@ -31,7 +31,7 @@ await builder.Build().RunAsync();
 What happens:
 
 - The host's `StartAsync` runs `BusHostedService.StartAsync`, which calls `bus.StartConsumingAsync()` and waits for it to succeed. If the broker is down or the handler list is malformed, the exception propagates and the host **fails to start** — the right behaviour for a service that can't do its job.
-- The host's `StopAsync` runs `BusHostedService.StopAsync`, which calls `bus.StopConsumingAsync(cancellationToken)`. In-flight messages get `TransportConfiguration.GracefulShutdownTimeoutMilliseconds` to finish; anything still running at the deadline is abandoned and will be redelivered on the next start (so design handlers to tolerate that).
+- The host's `StopAsync` runs `BusHostedService.StopAsync`, which races `bus.StopConsumingAsync(cancellationToken)` against a `Task.Delay(TransportConfiguration.GracefulShutdownTimeoutMilliseconds)`. When the stop completes inside the window, in-flight messages drain cleanly; if the delay wins, the stop is cancelled and remaining work is abandoned (and will be redelivered on the next start, so design handlers to tolerate that). Setting `GracefulShutdownTimeoutMilliseconds` to zero or negative bypasses the race entirely and stops without a grace window.
 - On crash or `Ctrl+C`, the host cancels `StopAsync`'s token. The bus stops accepting new messages and tries to drain; when the token fires, remaining work is cut.
 
 This is the shape for production. ASP.NET Core, Worker Service, Generic Host — they all do the same thing, because `BusHostedService` is a plain `IHostedService`.

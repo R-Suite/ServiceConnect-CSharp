@@ -53,9 +53,9 @@ Two transport knobs govern recovery behaviour:
 | Setting | Default | Notes |
 |---|---|---|
 | `NetworkRecoveryInterval` | RabbitMQ.Client default (5s) | Time between recovery attempts. Lower for tight failover windows; raise to avoid hammering a broker that's mid-restart. |
-| `HeartbeatTime` | 60s | AMQP heartbeat interval. Disabling heartbeats (`HeartbeatEnabled = false`) removes broker-side dead-peer detection and is rarely what you want in a clustered deployment. |
+| `HeartbeatTime` | 120s | AMQP heartbeat interval. Disabling heartbeats (`HeartbeatEnabled = false`) removes broker-side dead-peer detection and is rarely what you want in a clustered deployment. |
 
-Both are set via the `UseRabbitMQ(opts => ...)` typed options surface — see [RabbitMqOptions](https://github.com/ServiceConnect/ServiceConnect-CSharp/blob/master/src/ServiceConnect.Client.RabbitMQ/Configuration/RabbitMqOptions.cs) for the full set.
+Both are set via the `UseRabbitMQ(opts => ...)` typed options surface — see [RabbitMqOptions](https://github.com/R-Suite/ServiceConnect-CSharp/blob/master/src/ServiceConnect.Client.RabbitMQ/Configuration/RabbitMqOptions.cs) for the full set.
 
 ## Quorum queues
 

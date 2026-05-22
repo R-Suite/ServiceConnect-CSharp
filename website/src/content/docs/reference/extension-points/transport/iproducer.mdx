@@ -34,7 +34,7 @@ The producer stamps these headers authoritatively — caller-supplied values are
 
 `MessageId` is preserved when supplied by the caller (the bus passes through its authoritative stamp); the producer only mints a new one if no caller value is present.
 
-See the [envelope headers reference](/ServiceConnect-CSharp/reference/envelope/) for the full list and their wire semantics.
+See the [envelope headers reference](/ServiceConnect-CSharp/reference/messages/envelope/) for the full list and their wire semantics.
 </Aside>
 
 ## Reference
@@ -292,7 +292,7 @@ public sealed class BrokerProducer : IProducer
         CancellationToken cancellationToken = default)
     {
         var topic = DeriveTopicFromType(type);
-        return PublishToBrokerAsync(topic, message, headers, cancellationToken);
+        return PublishToBrokerAsync(topic, body, headers, cancellationToken);
     }
 
     public Task SendAsync(
@@ -313,7 +313,7 @@ public sealed class BrokerProducer : IProducer
         IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
-        return PublishToBrokerAsync(endPoint, message, headers, cancellationToken);
+        return PublishToBrokerAsync(endPoint, body, headers, cancellationToken);
     }
 
     public Task SendBytesAsync(
@@ -338,7 +338,7 @@ public sealed class BrokerProducer : IProducer
 
     // Broker-specific helpers — implement using your broker client.
     private string DeriveTopicFromType(Type type) => throw new NotImplementedException();
-    private Task PublishToBrokerAsync(string destination, byte[] payload,
+    private Task PublishToBrokerAsync(string destination, ReadOnlyMemory<byte> payload,
         IReadOnlyDictionary<string, string>? headers, CancellationToken ct) => throw new NotImplementedException();
 }
 ```
@@ -371,7 +371,7 @@ public sealed class KafkaProducer : IProducer
         CancellationToken cancellationToken = default)
     {
         var topic    = type.FullName!.Replace('.', '-').ToLowerInvariant();
-        var kafkaMsg = BuildMessage(type.FullName!, message, headers);
+        var kafkaMsg = BuildMessage(type.FullName!, body, headers);
         await _inner.ProduceAsync(topic, kafkaMsg, cancellationToken);
     }
 
@@ -393,7 +393,7 @@ public sealed class KafkaProducer : IProducer
         IReadOnlyDictionary<string, string>? headers = null,
         CancellationToken cancellationToken = default)
     {
-        var kafkaMsg = BuildMessage(type.FullName!, message, headers);
+        var kafkaMsg = BuildMessage(type.FullName!, body, headers);
         await _inner.ProduceAsync(endPoint, kafkaMsg, cancellationToken);
     }
 
@@ -428,7 +428,7 @@ public sealed class KafkaProducer : IProducer
 
     private static Message<string, byte[]> BuildMessage(
         string key,
-        byte[] value,
+        ReadOnlyMemory<byte> value,
         IReadOnlyDictionary<string, string>? headers)
     {
         var kafkaHeaders = new Headers();
@@ -436,7 +436,7 @@ public sealed class KafkaProducer : IProducer
             foreach (var (k, v) in headers)
                 kafkaHeaders.Add(k, System.Text.Encoding.UTF8.GetBytes(v));
 
-        return new Message<string, byte[]> { Key = key, Value = value, Headers = kafkaHeaders };
+        return new Message<string, byte[]> { Key = key, Value = value.ToArray(), Headers = kafkaHeaders };
     }
 }
 ```

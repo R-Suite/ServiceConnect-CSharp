@@ -54,11 +54,14 @@ A process handler implements `IProcessHandler<TData, TMessage>` for each message
 
 ```csharp
 // Orchestrator/FulfillmentProcessHandler.cs
-public sealed class FulfillmentProcessHandler :
+// WorkflowQueues is a record registered as a singleton in DI and injected here.
+public sealed class FulfillmentProcessHandler(WorkflowQueues queues) :
     IProcessHandler<FulfillmentState, OrderSubmitted>,
     IProcessHandler<FulfillmentState, InventoryReserved>,
     IProcessHandler<FulfillmentState, PaymentCaptured>
 {
+    private readonly WorkflowQueues _queues = queues;
+
     public async Task HandleAsync(OrderSubmitted message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
     {
         if (data.IsSubmitted) return;           // idempotent — saw this already
@@ -68,7 +71,7 @@ public sealed class FulfillmentProcessHandler :
 
         await context.Bus.SendAsync(
             new ReserveInventory(message.CorrelationId) { OrderNumber = message.OrderNumber },
-            new SendOptions { EndPoint = "inventory-worker" });
+            new SendOptions { EndPoint = _queues.InventoryQueueName });
     }
 
     public async Task HandleAsync(InventoryReserved message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -79,7 +82,7 @@ public sealed class FulfillmentProcessHandler :
 
         await context.Bus.SendAsync(
             new CapturePayment(message.CorrelationId),
-            new SendOptions { EndPoint = "payment-worker" });
+            new SendOptions { EndPoint = _queues.PaymentQueueName });
     }
 
     public Task HandleAsync(PaymentCaptured message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)
@@ -180,7 +183,13 @@ public async Task HandleAsync(InventoryReserved message, FulfillmentState data, 
     data.InventoryReserved = true;
 
     // Use data.CorrelationId — the saga's own id — not message.CorrelationId.
-    await context.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromHours(24), context.CancellationToken);
+    // CancellationToken.None: the token here cancels the timeout-store insert, not the
+    // scheduled delivery. Once the row is in the store the delay fires regardless of
+    // bus shutdown — passing context.CancellationToken would abandon the insert mid-shutdown
+    // and the timeout would never be scheduled. Pass None when the schedule must survive
+    // graceful shutdown; pass context.CancellationToken only if you genuinely want the
+    // schedule to be cooperatively abandoned on bus stop.
+    await context.Bus.RequestTimeoutAsync(data.CorrelationId, TimeSpan.FromHours(24), CancellationToken.None);
 }
 
 public Task HandleAsync(TimeoutMessage message, FulfillmentState data, IConsumeContext context, CancellationToken cancellationToken = default)

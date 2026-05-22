@@ -67,7 +67,7 @@ int RetryDelay { get; set; }
 
 Gets or sets the dead-letter retry delay, in milliseconds.
 
-**Remarks.** Applied between retries when a handler throws. Must be non-negative; the builder validates this at configuration time.
+**Remarks.** Applied between retries when a handler throws. Must be non-negative. Two validation sites enforce this: the property setter throws `ArgumentOutOfRangeException` if a negative value is assigned directly, and `AddServiceConnect` throws `InvalidOperationException` during builder validation.
 
 ---
 
@@ -79,7 +79,7 @@ int MaxRetries { get; set; }
 
 Gets or sets the maximum retry attempts before a message is treated as terminally failed and routed to the error queue.
 
-**Remarks.** Must be non-negative.
+**Remarks.** Must be non-negative. Two validation sites enforce this: the property setter throws `ArgumentOutOfRangeException` if a negative value is assigned directly, and `AddServiceConnect` throws `InvalidOperationException` during builder validation.
 
 ---
 
@@ -103,7 +103,7 @@ int GracefulShutdownTimeoutMilliseconds { get; set; }
 
 Gets or sets the time the bus will wait for in-flight messages to drain during graceful shutdown, in milliseconds.
 
-**Remarks.** Must be non-negative. After this budget expires, remaining in-flight messages are abandoned and will be redelivered when the consumer reconnects.
+**Remarks.** The property setter accepts any value, including negative, without validation. Only `AddServiceConnect` enforces the non-negative constraint, throwing `InvalidOperationException` during builder validation. After this budget expires, remaining in-flight messages are abandoned and will be redelivered when the consumer reconnects.
 
 ---
 
@@ -114,6 +114,8 @@ bool SslEnabled { get; set; }
 ```
 
 Gets or sets a value indicating whether TLS is enabled for the broker connection.
+
+**Default:** `true`.
 
 ---
 
@@ -216,6 +218,8 @@ Gets or sets a value indicating whether the startup warning for plaintext connec
 **Default:** `false`.
 
 **Remarks.** When `SslEnabled = false` and the configured `Host` resolves to a non-loopback address, ServiceConnect emits a `Warning`-level log under the `ServiceConnect` category at startup. Set this to `true` when plaintext is intentional — Docker Compose networks, dev clusters, isolated internal LANs — to silence the warning without adjusting log-level filters.
+
+The interface supplies a default implementation (`get` returns `false`, `set` is a no-op). Custom `ITransportConfiguration` implementations only need to override these accessors when they propagate the value to a transport that can act on it.
 
 ---
 

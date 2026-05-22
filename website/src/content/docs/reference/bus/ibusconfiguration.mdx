@@ -43,7 +43,7 @@ bool EnableProcessManagerTimeouts { get; set; }
 
 Controls whether the timeout-polling hosted service dispatches scheduled `TimeoutMessage` deliveries for process managers.
 
-**Remarks.** Requires an `ITimeoutStore` registration (for example via `UseMongoDbPersistence`). With no timeout store, enabling this produces a startup error the first time a timeout fires.
+**Remarks.** Requires an `ITimeoutStore` registration (for example via `UseMongoDbPersistence`) to do useful work. With the flag set but no store registered, the polling hosted service logs a `Warning` at start-up and exits its poll loop — no exception is thrown, but no timeouts will be dispatched.
 
 ---
 
@@ -167,9 +167,9 @@ When `true`, only locally-tracked request-reply exchanges are trusted as reply d
 int MaxRoutingSlipHops { get; set; }
 ```
 
-Caps the number of destinations the routing-slip processor will forward a message through before treating the slip as runaway and routing the message to the error exchange. Defaults to **32**.
+Caps the number of destinations the routing-slip processor will forward a message through before rejecting the slip. Defaults to **32**.
 
-**Remarks.** A misbehaving handler that re-prepends destinations could otherwise loop a message indefinitely. The cap is intentionally generous — typical routing slips have 3–6 hops; the limit catches accidents without constraining legitimate patterns.
+**Remarks.** If the inbound slip carries more than this many destinations, the handler throws `InvalidOperationException` and the message follows the standard error path (retries → error queue). A misbehaving handler that re-prepends destinations could otherwise loop a message indefinitely. The cap is intentionally generous — typical routing slips have 3–6 hops; the limit catches accidents without constraining legitimate patterns.
 
 ---
 
@@ -179,7 +179,7 @@ Caps the number of destinations the routing-slip processor will forward a messag
 TimeSpan DisposeTimeout { get; set; }
 ```
 
-The maximum time `IBus.DisposeAsync` waits for in-flight work to drain (graceful consumer cancel, last batch ack, persistor flush) before tearing down the broker connection. Defaults to **30 seconds**.
+The maximum time `IBus.DisposeAsync` waits for the lifecycle semaphore before proceeding with teardown anyway. Guards against a wedged `StartConsumingAsync` (e.g., broker partition during handshake) that would otherwise block container shutdown. Defaults to **30 seconds**.
 
 **Remarks.** Set via the builder's `ConfigureBus` callback (`bus.DisposeTimeout = ...`); the value is frozen at startup. Must be a strictly positive `TimeSpan`, or `Timeout.InfiniteTimeSpan` to wait indefinitely; zero or negative values are rejected at startup.
 

@@ -91,6 +91,7 @@ services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference
 {
     new() { HandlerType = typeof(OrderPlacedAnalyticsHandler), MessageType = typeof(OrderPlaced) },
 });
+services.AddTransient<IMessageHandler<OrderPlaced>, OrderPlacedAnalyticsHandler>();
 services.AddServiceConnect(builder =>
 {
     builder.UseRabbitMQ(t => { /* … */ });

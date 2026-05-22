@@ -37,7 +37,7 @@ builder.UseRabbitMQ(transport =>
     transport.MaxRetries = 3;
     transport.RetryDelay = 3_000;           // ms between retries
     transport.PrefetchCount = 50;           // unacked messages per consumer
-    transport.GracefulShutdownTimeoutMilliseconds = 30_000;
+    transport.GracefulShutdownTimeoutMilliseconds = 30_000;  // default is 5,000 ms
 });
 ```
 
@@ -197,7 +197,7 @@ builder.ConfigureBus(bus =>
     bus.ConsumerCount = 4;                  // parallel consumer loops
 
     bus.EnableProcessManagerTimeouts = true;
-    bus.ProcessManagerTimeoutPollInterval = TimeSpan.FromSeconds(10);
+    bus.ProcessManagerTimeoutPollInterval = TimeSpan.FromSeconds(10);  // default is 30 s
 
     bus.EnableRoutingSlipProcessing = true; // default; set false to ignore slips
     bus.ValidateReplyDestinations = true;   // default; guard against unknown reply queues
@@ -226,7 +226,7 @@ A few worth a note:
 
 ## Validation is at startup, not runtime
 
-The builder validates as you go: a missing `Host`, a negative `MaxRetries`, a negative `GracefulShutdownTimeoutMilliseconds`, an empty or whitespace-only `QueueName` — any of these throw `InvalidOperationException` when `AddServiceConnect` runs. That is by design; configuration errors should fail the process at startup, not surface as confusing broker errors hours later.
+The builder validates as you go: a missing `Host`, a negative `RetryDelay` or `MaxRetries` (validated at both the setter and the builder), an empty or whitespace-only `QueueName` — any of these throw `InvalidOperationException` when `AddServiceConnect` runs. That is by design; configuration errors should fail the process at startup, not surface as confusing broker errors hours later.
 
 If you're writing a config file or a builder helper, structure it so every required setting runs through `ConfigureTransport`, `ConfigureQueues`, and so on — not through field assignment on a bare options object. That's what gets you the validation.
 

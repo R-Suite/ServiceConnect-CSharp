@@ -179,6 +179,10 @@ public sealed class BrokerConsumer : IConsumer
 
     public bool IsConnected => _connected;
 
+    // Broker-cancellation is a hard signal (queue deleted, policy expired, mirror promoted).
+    // Stub `false` here; real implementations should flip true on the broker's cancel callback.
+    public bool IsCancelledByBroker => false;
+
     public async Task StartConsumingAsync(
         string queueName,
         IReadOnlyList<string> messageTypes,
@@ -258,6 +262,10 @@ public sealed class KafkaConsumer : IConsumer
     }
 
     public bool IsConnected => _inner is not null;
+
+    // Kafka has no broker-side consumer-cancel callback equivalent to AMQP `basic.cancel`.
+    // Stub false; a real implementation could surface `ErrorCode.UnknownTopicOrPart` here.
+    public bool IsCancelledByBroker => false;
 
     public async Task StartConsumingAsync(
         string queueName,

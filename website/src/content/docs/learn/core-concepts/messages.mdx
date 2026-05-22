@@ -10,7 +10,7 @@ Keep contracts boring on purpose. They are the most-shared part of a distributed
 ## The base class
 
 ```csharp
-public class Message(Guid correlationId)
+public class Message(Guid correlationId) : IHasCorrelationId
 {
     public Guid CorrelationId { get; init; } = correlationId;
 }
@@ -54,10 +54,10 @@ PointToPoint/
 
 That shape keeps the contract physically separate from the code that uses it, which is exactly what you want when you version one side independently of the other.
 
-The `Contracts` project needs a reference to `ServiceConnect` so it can see the `Message` base:
+The `Contracts` project needs a reference to `ServiceConnect.Interfaces` so it can see the `Message` base:
 
 ```bash
-dotnet add Your.Contracts package ServiceConnect
+dotnet add Your.Contracts package ServiceConnect.Interfaces
 ```
 
 ## Serialisation

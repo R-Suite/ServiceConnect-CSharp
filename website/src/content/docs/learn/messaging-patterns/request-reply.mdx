@@ -117,7 +117,7 @@ Request/reply has **timeout semantics**, not retry semantics. If the responder i
 
 If you need resilient at-least-once delivery with background retries, a plain `SendAsync` + an event-based reply path is the right shape, not a blocking request/reply.
 
-The request methods raise `RequestSendCancelledException` (inheriting from `OperationCanceledException`) when the outbound send pipeline cancels before the request reaches the broker — distinct from a timeout (`RequestTimeoutException`) and from caller-token cancellation (`OperationCanceledException`). It applies to `SendRequestAsync`, `SendRequestMultiAsync`, and `PublishRequestAsync` alike.
+The request methods raise `RequestSendCancelledException` (inheriting from `OperationCanceledException`) when the outbound send pipeline cancels before the request reaches the broker — distinct from a timeout (`RequestTimeoutException`) and from caller-token cancellation (`OperationCanceledException`). It applies to `SendRequestAsync`, `SendRequestMultiAsync`, and `PublishRequestAsync`.
 
 ## Correlation-id flow
 

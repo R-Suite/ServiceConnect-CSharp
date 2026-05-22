@@ -107,7 +107,15 @@ Whether the failure is terminal — the message is permanently malformed (e.g. a
 
 ## `OutgoingEventArgs`
 
-Base event payload for outgoing publish and send telemetry.
+```csharp
+public abstract class OutgoingEventArgs
+{
+    protected OutgoingEventArgs();
+    // ...members below
+}
+```
+
+Base event payload for outgoing publish and send telemetry. The class is `abstract` with a `protected` constructor — only the concrete subtypes (`PublishEventArgs`, `SendEventArgs`) can be instantiated, which keeps user code from raising synthetic outgoing events through the framework's event surface.
 
 ### `Message`
 
@@ -212,7 +220,10 @@ public sealed class OpenTelemetryConsumeMiddleware : IMessageProcessingMiddlewar
             Type = envelope.Headers.TryGetValue("MessageType", out var t)
                 ? t?.ToString() ?? string.Empty
                 : string.Empty,
-            Headers = new Dictionary<string, object>(envelope.Headers),
+            // ConsumeEventArgs documents Headers as case-sensitive (StringComparer.Ordinal);
+            // copying without the comparer would silently swap in the default
+            // (case-insensitive on platforms where Dictionary<string, …>'s default is invariant).
+            Headers = new Dictionary<string, object>(envelope.Headers, StringComparer.Ordinal),
         };
         // The initializer above works because Dictionary<K,V> implements
         // IReadOnlyDictionary<K,V>.

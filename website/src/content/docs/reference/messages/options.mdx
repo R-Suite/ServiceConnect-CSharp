@@ -148,6 +148,20 @@ Number of replies the multi-request should wait for before completing. Only cons
   Set a positive count when you know how many respondents to expect AND want to catch under-delivery as a typed exception; leave it unset (or zero) when you want to drain the full window regardless of how many reply.
 </Aside>
 
+## `ReplyOptions`
+
+Passed to `IConsumeContext.ReplyAsync` inside a handler. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. Carries only `Headers`: a reply does not need an endpoint (the destination is the request's reply-to header), does not need a routing key (replies don't fan out), and does not need a correlation id (auto-correlated via the request's `MessageId`).
+
+### `Headers`
+
+```csharp
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
+```
+
+Gets the additional headers to attach to the reply message.
+
+**Remarks.** Default is `null`. The read-only interface type prevents the framework from iterating a dictionary another thread might be mutating — pass any `Dictionary<string, string>` or `ImmutableDictionary<string, string>` and the caller's own reference retains its concrete type. Header keys carrying the reserved framework names (`MessageId`, `MessageType`, `TypeName`, `FullTypeName`, `DestinationAddress`) are overwritten with framework-stamped values; pick an application-specific key when stamping metadata.
+
 ## Usage
 
 ### Publishing with custom headers

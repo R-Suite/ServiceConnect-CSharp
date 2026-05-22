@@ -88,15 +88,15 @@ Sends a typed request and waits for exactly one reply. The method generates a co
 - `message` — the typed request message. The pipeline serializes it and middleware sees the strongly-typed instance via `SendContext.Message`.
 - `headers` — outgoing headers; `RequestMessageId` is written into this dictionary by the implementation.
 - `options` — routing and timeout options. Set `EndPoint` to target a specific queue, or leave blank to use the type-mapped default.
-- `cancellationToken` — cancels both the send and the wait; throws `OperationCanceledException`.
+- `cancellationToken` — cancels the wait; throws `RequestSendCancelledException` if cancelled during the outbound send, or plain `OperationCanceledException` if cancelled while awaiting the reply.
 
 **Returns** the deserialized reply as `TReply`.
 
 ### `SendRequestMultiAsync<TRequest, TReply>`
 
-Sends a serialized request and collects multiple replies. Works identically to `SendRequestAsync` for the outgoing side; fan-out to multiple responders comes from registering multiple queues against the request type via `IQueueConfiguration.AddQueueMapping`. On the incoming side, each `ProcessReply` call appends to an internal list. With `RequestOptions.ExpectedReplyCount` set to a positive value, the call returns as soon as that many replies have arrived; if fewer arrive before the timeout, a `RequestTimeoutException` is thrown with the partials available on `PartialReplies`. With `ExpectedReplyCount` left unset (or set to zero/negative), the call waits the full timeout and returns every reply received.
+Sends a typed request and collects multiple replies. Works identically to `SendRequestAsync` for the outgoing side; fan-out to multiple responders comes from registering multiple queues against the request type via `IQueueConfiguration.AddQueueMapping`. On the incoming side, each `ProcessReply` call appends to an internal list. With `RequestOptions.ExpectedReplyCount` set to a positive value, the call returns as soon as that many replies have arrived; if fewer arrive before the timeout, a `RequestTimeoutException` is thrown with the partials available on `PartialReplies`. With `ExpectedReplyCount` left unset (or set to zero/negative), the call waits the full timeout and returns every reply received.
 
-**Parameters** — same shape as `SendRequestAsync`. `options.ExpectedReplyCount` drives the reply-count expectation.
+**Parameters** — same shape as `SendRequestAsync`. `options.ExpectedReplyCount` drives the reply-count expectation; `cancellationToken` throws `RequestSendCancelledException` on outbound cancellation or plain `OperationCanceledException` on caller-token cancellation.
 
 **Returns** the collected replies as `IList<TReply>`.
 
@@ -107,7 +107,8 @@ Publishes a typed request to all subscribers and invokes `onReply` for each repl
 **Parameters**
 - `message` — the typed request message; same shape as `SendRequestAsync`.
 - `onReply` — invoked on the reply-processing thread for each matching reply. The callback must not block; long-running work should be dispatched to a background thread.
-- `headers`, `options`, `cancellationToken` — match `SendRequestAsync`.
+- `headers`, `options` — match `SendRequestAsync`.
+- `cancellationToken` — throws `RequestSendCancelledException` if cancelled during the outbound publish, or plain `OperationCanceledException` if cancelled while awaiting replies.
 
 ### `ProcessReply`
 

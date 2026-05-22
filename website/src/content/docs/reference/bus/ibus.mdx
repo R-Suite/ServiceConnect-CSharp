@@ -31,6 +31,8 @@ Broadcasts a message to every subscriber of the message type. Use for domain eve
 - `cancellationToken` — cancels the publish before the broker acknowledges.
 
 **Throws**
+- `ArgumentNullException` — `message` is `null`.
+- `ObjectDisposedException` — the bus has been disposed.
 - `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop` before the message reached the transport.
 
 **Remarks.** Publish is fire-and-forget from the publisher's perspective; it completes once the broker accepts the message, not when subscribers process it. There is no built-in guarantee that any subscriber exists.
@@ -55,6 +57,8 @@ Sends a message to a specific endpoint or to the queue resolved from the configu
 - `cancellationToken` — cancels the send before the broker acknowledges.
 
 **Throws**
+- `ArgumentNullException` — `message` is `null`.
+- `ObjectDisposedException` — the bus has been disposed.
 - `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop` before the message reached the transport.
 
 **Remarks.** If no destination is supplied via `options` and no queue mapping is registered for the message type, the call throws.
@@ -120,7 +124,7 @@ Sends a request to a single endpoint and awaits exactly one reply. Use when the 
 **Exceptions**
 
 - `ArgumentNullException` — `message` is `null`.
-- `ArgumentOutOfRangeException` — `options.Timeout` is negative (excluding `Timeout.InfiniteTimeSpan`) or zero.
+- `ArgumentOutOfRangeException` — `options.Timeout` is negative (other than `Timeout.Infinite`, the `int` constant `-1`) or zero.
 - `ObjectDisposedException` — the bus has been disposed.
 - `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop`.
 - `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
@@ -154,7 +158,7 @@ Sends a request that may fan out to multiple respondents and collects every repl
 **Exceptions**
 
 - `ArgumentNullException` — `message` is `null`.
-- `ArgumentOutOfRangeException` — `options.Timeout` is negative (excluding `Timeout.InfiniteTimeSpan`) or zero.
+- `ArgumentOutOfRangeException` — `options.Timeout` is negative (other than `Timeout.Infinite`, the `int` constant `-1`) or zero.
 - `ObjectDisposedException` — the bus has been disposed.
 - `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop`.
 - `RequestSendCancelledException` — the outbound send pipeline cancelled before the request reached the broker. Distinct from caller-token cancellation (`OperationCanceledException`).
@@ -189,11 +193,11 @@ Publishes a request to every subscriber of the request type and invokes `onReply
 
 - `ArgumentNullException` — `message` or `onReply` is `null`.
 - `ArgumentException` — `options.EndPoint` is non-empty; use `SendRequestAsync` for single-destination requests.
-- `ArgumentOutOfRangeException` — `options.Timeout` is negative (excluding `Timeout.InfiniteTimeSpan`) or zero.
+- `ArgumentOutOfRangeException` — `options.Timeout` is negative (other than `Timeout.Infinite`, the `int` constant `-1`) or zero.
 - `ObjectDisposedException` — the bus has been disposed.
 - `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop`.
 - `RequestTimeoutException` — no replies arrived within `options.Timeout`, or fewer than `options.ExpectedReplyCount` replies arrived.
-- `OperationCanceledException` — the caller's cancellation token fired.
+- `OperationCanceledException` — the caller's cancellation token fired, or an `onReply` invocation threw and propagated through the awaited task.
 
 **Remarks.** The callback is invoked one-at-a-time per request (serialized under an internal lock). Keep it short-lived and non-blocking — heavy work or further bus calls from inside the callback can stall reply processing for the same request. The task completes when the expected reply count is reached or the timeout elapses.
 
@@ -217,6 +221,9 @@ Starts a routing slip: sends the message to the first destination with a routing
 - `cancellationToken` — cancels the initial send.
 
 **Throws**
+- `ArgumentNullException` — `message` or `destinations` is `null`.
+- `ArgumentException` — `destinations` is empty or contains an entry with a comma (the routing-slip separator) or that otherwise fails destination validation.
+- `ObjectDisposedException` — the bus has been disposed.
 - `OutgoingFiltersBlockedException` — an outgoing filter returned `FilterAction.Stop` before the message reached the transport.
 
 **Remarks.** Routing-slip forwarding is handled by the consumer side and requires `IBusConfiguration.EnableRoutingSlipProcessing` (the default) to be true on every intermediate service.
@@ -239,6 +246,11 @@ Opens a write stream for sending a large payload as a sequence of ordered chunks
 - `endpoint` — the queue name to stream to.
 
 **Returns.** A write stream the caller disposes to signal end-of-stream.
+
+**Throws**
+- `ArgumentException` — `endpoint` is `null` or whitespace.
+- `ObjectDisposedException` — the bus has been disposed.
+- `InvalidOperationException` — no `IProducer` is registered in the bus's DI graph.
 
 **Remarks.** Each stream uses its own sequence number; consumers must use the matching `IStreamHandler<T>` to reassemble. Dispose the stream even on failure to release broker resources.
 
@@ -328,8 +340,14 @@ Schedules a `TimeoutMessage` to be delivered back to the current bus's queue aft
 - `delay` — how long to wait before delivery.
 - `cancellationToken` — cancels the scheduling call, not the timeout itself.
 
+**Throws**
+- `ArgumentException` — `correlationId` is `Guid.Empty`.
+- `ArgumentOutOfRangeException` — `delay` is less than or equal to `TimeSpan.Zero`.
+- `InvalidOperationException` — no `ITimeoutStore` is registered (first-party Bus only; see the Aside below for the default-interface-method path).
+- `ObjectDisposedException` — the bus has been disposed.
+
 <Aside type="note" title="Not every implementation supports this">
-  The default interface-method implementation returns `Task.FromException(new NotSupportedException(...))` — the exception is deferred into the returned task rather than thrown synchronously. A concrete bus must be paired with a registered `ITimeoutStore` (for example via `UseMongoDbPersistence`) and have `IBusConfiguration.EnableProcessManagerTimeouts` set to true for this call to succeed.
+  The default interface-method implementation returns `Task.FromException(new NotSupportedException(...))` — the exception is deferred into the returned task rather than thrown synchronously. A concrete bus must be paired with a registered `ITimeoutStore` (for example via `UseMongoDbPersistence`) for this call to succeed. `IBusConfiguration.EnableProcessManagerTimeouts` is a separate concern: it controls whether the polling hosted service dispatches scheduled timeouts back into the handler pipeline. The scheduling call itself only requires an `ITimeoutStore`; if the flag is off the timeout still inserts but nothing fires it.
 </Aside>
 
 ## Usage

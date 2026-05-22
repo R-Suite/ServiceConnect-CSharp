@@ -115,6 +115,7 @@ services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference
 {
     new() { HandlerType = typeof(WorkSubmittedHandler), MessageType = typeof(WorkSubmitted) },
 });
+services.AddTransient<IMessageHandler<WorkSubmitted>, WorkSubmittedHandler>();
 services.AddServiceConnect(builder =>
 {
     builder.UseRabbitMQ(t => { /* … */ });

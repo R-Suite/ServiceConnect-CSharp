@@ -115,7 +115,7 @@ public sealed class ServiceConnectInstrumentationOptions
 }
 ```
 
-Mutable options consumed by `ServiceConnectActivitySource` when starting activities.
+Mutable options consumed by `ServiceConnectActivitySource` when starting activities. Each setter is guarded by a `ThrowIfFrozen()` check: once `AddTelemetry`'s configure callback returns, the options instance is frozen and any subsequent setter call throws `InvalidOperationException`. Mutate the options inside the callback (the only window the framework guarantees is writable); after the bus is built, treat the instance as read-only.
 
 ### `EnrichWithMessage`
 

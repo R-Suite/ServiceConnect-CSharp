@@ -43,6 +43,8 @@ Adds a mapping between a process-manager property and a message property. The fr
 
 **Remarks.** The expressions must be simple property accessors — the framework parses the expression tree to derive both the compiled accessor and the property name/hierarchy used by the persistence layer. Method calls and arithmetic are not supported.
 
+**Throws.** `InvalidOperationException` when a mapping for the same `TMessage` has already been registered. Each message type maps to at most one process-manager-data correlation, so duplicate registration is rejected loud rather than overwriting silently.
+
 ## Usage
 
 ### Correlating on an order number instead of the default correlation id

@@ -87,7 +87,7 @@ services.AddServiceConnect(builder =>
 });
 ```
 
-The MongoDB persistence provider is what makes aggregators safe across restarts. Each buffered message is inserted into a collection keyed by the aggregator name; on restart, the buffer is restored. Flushing removes the batch. If you omit the persistence configuration, the bus has no `IAggregatorPersistor` and registration fails.
+The MongoDB persistence provider is what makes aggregators safe across restarts. Each buffered message is inserted into a collection keyed by the aggregator name; on restart, the buffer is restored. Flushing removes the batch. If you omit the persistence configuration, the bus has no `IAggregatorPersistor`; each arriving aggregatable message logs a `Warning` (`"IAggregatorPersistor not registered. Cannot aggregate {MessageType}"`) and is silently discarded rather than buffered. Wire up persistence — or remove the aggregator registration — before deploying.
 
 Don't keep state in private fields of the aggregator. The instance is recreated per dispatch — the buffer lives in persistence, not in memory.
 

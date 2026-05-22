@@ -91,7 +91,7 @@ Runs the after-consuming filters once the handler has returned.
 
 **Returns.** `FilterAction.Stop` if any filter stopped the pipeline; `FilterAction.Continue` when the pipeline ran to completion. Stopping here suppresses remaining post-processing stages but does not un-handle the message.
 
-**Remarks.** Useful for post-processing concerns such as metrics emission, audit trails, or cleanup that is cheaper to run as a predicate than a middleware.
+**Remarks.** Useful for post-processing concerns such as metrics emission, audit trails, or cleanup that is cheaper to run as a predicate than a middleware. **Exceptions thrown from an after-consuming filter are caught by the dispatcher and logged at `Warning`**; they do not flip the dispatch outcome to `Success = false` or trigger redelivery. Reserve `AfterConsuming` for best-effort teardown that must not block acknowledgement, and use `OnConsumedSuccessfully` (below) for side-effects whose failure must redeliver the message.
 
 ---
 

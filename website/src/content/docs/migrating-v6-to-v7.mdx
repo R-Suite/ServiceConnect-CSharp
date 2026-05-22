@@ -58,7 +58,7 @@ var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddServiceConnect(sc =>
 {
-    sc.UseRabbitMq(t =>
+    sc.UseRabbitMQ(t =>
     {
         t.Host = "rabbit.local";
         t.Username = "guest";
@@ -69,8 +69,8 @@ builder.Services.AddServiceConnect(sc =>
     {
         p.ConnectionString = "mongodb://mongo.local/sc";
     });
-    sc.AddHandlersFromAssemblyContaining<Program>();
-    sc.AutoStartConsuming();
+    sc.ScanAssemblies(typeof(Program).Assembly);
+    sc.ConfigureBus(bus => bus.AutoStartConsuming = true);
 });
 
 using var app = builder.Build();
@@ -80,7 +80,7 @@ await app.RunAsync();
 Key points:
 
 - The bus is now resolved as `IBus` from DI and runs under `BusHostedService`.
-- `AutoStartConsuming()` replaces the explicit `bus.StartConsuming()` call.
+- `AutoStartConsuming = true` (set via `ConfigureBus`) replaces the explicit `bus.StartConsuming()` call.
 - `IBus` is **single-use**. Once stopped or disposed, calling `StartConsumingAsync` again throws — you must resolve a new instance from DI.
 - `Bus` no longer disposes transport singletons; lifetimes are owned by the DI container.
 
@@ -119,14 +119,14 @@ public class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 
 The settable `Context` (and `Stream` on `IStreamHandler<T>`) property is gone — it was unsafe under singleton handlers. Pass the context through to any code that needs it.
 
-`IProcessHandler<T>` and `IStreamHandler<T>` follow the same shape:
+`IProcessHandler<TData, TMessage>` and `IStreamHandler<TMessage>` follow the same shape:
 
 ```csharp
-Task IProcessHandler<TData, TMsg>.HandleAsync(
-    TMsg message, IProcessHandlerContext<TData> ctx, CancellationToken ct);
+Task IProcessHandler<TData, TMessage>.HandleAsync(
+    TMessage message, TData data, IConsumeContext ctx, CancellationToken ct);
 
-Task IStreamHandler<T>.ExecuteAsync(
-    IMessageBusReadStream stream, IConsumeContext ctx, CancellationToken ct);
+Task IStreamHandler<TMessage>.ExecuteAsync(
+    TMessage message, IMessageBusReadStream stream, CancellationToken ct);
 ```
 
 ## Step 3 — Convert filters and middleware
@@ -191,13 +191,17 @@ var replies = bus.SendRequest<ChargeCard, ChargeResult>(
 **After (v7):**
 
 ```csharp
-await bus.SendToManyAsync(new ChargeCard(), new[] { "payments-a", "payments-b" }, ct);
+await bus.SendToManyAsync(
+    new ChargeCard(),
+    new[] { "payments-a", "payments-b" },
+    cancellationToken: ct);
 
+// SendRequestMultiAsync routes via the registered queue mapping for the message type
+// — register multiple endpoints up front via AddQueueMapping(typeof(ChargeCard), new[] { "payments-a", "payments-b" }).
 try
 {
     var replies = await bus.SendRequestMultiAsync<ChargeCard, ChargeResult>(
         new ChargeCard(),
-        new[] { "payments-a", "payments-b" },
         new RequestOptions { ExpectedReplyCount = 2 },
         ct);
 }
@@ -247,16 +251,17 @@ The old `ServiceConnect.Filters.MessageDeduplication` package is gone outright. 
 The replacement is the new fourth pipeline stage, `OnConsumedSuccessfully`, which fires only after a handler invocation succeeded — so any side effect you record there reflects an actual successful consume, not a broker redelivery.
 
 ```csharp
-public class MessageProcessedRecorder : IConsumeMessageFilter
+public class MessageProcessedRecorder : IFilter
 {
     private readonly IMessageProcessedStore store;
 
     public MessageProcessedRecorder(IMessageProcessedStore store) => this.store = store;
 
-    public async Task<bool> ProcessAsync(IConsumeContext ctx, CancellationToken ct)
+    public async Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken ct)
     {
-        await store.RecordAsync(ctx.MessageId, ct);
-        return true;
+        var messageId = (string)envelope.Headers[HeaderKeys.MessageId];
+        await store.RecordAsync(messageId, ct);
+        return FilterAction.Continue;
     }
 }
 
@@ -264,7 +269,7 @@ sc.AddBeforeConsumingFilter<DedupeGuard>();           // short-circuits on alrea
 sc.AddOnConsumedSuccessfullyFilter<MessageProcessedRecorder>();
 ```
 
-A reference implementation lives in [`examples/CustomFilterAndMiddleware`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/v7-clean-architecture/examples/CustomFilterAndMiddleware).
+A reference implementation lives in [`examples/CustomFilterAndMiddleware`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CustomFilterAndMiddleware).
 
 ## Step 7 — Adopt the new health checks (optional but recommended)
 
@@ -335,7 +340,7 @@ Only generic sagas are affected — non-generic saga data collections keep their
 `TransportSettings.SslEnabled` defaults to `true` in v7 (was `false`). Connections go to AMQPS on port 5671 unless you override:
 
 ```csharp
-sc.UseRabbitMq(t =>
+sc.UseRabbitMQ(t =>
 {
     t.Host = "rabbit.local";
     t.SslEnabled = false;            // local plaintext dev only
@@ -373,10 +378,10 @@ Reply routing also no longer falls back to `Type.GetType(callerSuppliedString)` 
 
 The telemetry rework moves to OTel semconv 1.x messaging attributes. Two specific filter changes will break dashboards silently:
 
-- `messaging.operation` (the pre-1.x string attribute) is **no longer emitted**. Replace dashboard filters with `messaging.operation.type` (`publish` / `process`) and `messaging.operation.name` (`publish` / `receive`).
+- `messaging.operation` (the pre-1.x string attribute) is **no longer emitted**. Replace dashboard filters with `messaging.operation.type` (`publish` / `process`) and `messaging.operation.name` (`publish` / `process`).
 - `messaging.destination.name` no longer carries the CLR type's `FullName` — it now carries the broker exchange or routing key. Anything filtering on `messaging.destination.name = "MyCompany.Domain.OrderPlaced"` should switch to the new attribute, or filter on the broker-level value instead.
 
-There's also only one `ActivitySource` now: `"ServiceConnect.Bus"`. OTel listeners that subscribed to the three pre-v7 sources should collapse to a single `AddSource("ServiceConnect.Bus")` call.
+There's also only one `ActivitySource` now: `"ServiceConnect.Telemetry.Bus"`. OTel listeners that subscribed to the three pre-v7 sources should collapse to a single `AddSource("ServiceConnect.Telemetry.Bus")` call.
 
 ### Mongo driver bumped to 3.x
 
@@ -398,7 +403,7 @@ Once your code compiles and your config is wired:
 1. **Run the SerializationCompatTests project against your domain payloads.** It catches the most common silent serializer surprises before they hit production.
 2. **Run a representative subset of `examples/` against your broker.** They double as smoke tests — Aggregator, ProcessManager, RequestReply, RoutingSlip, and Streaming cover the most lifecycle-sensitive paths.
 3. **Add the new health checks** and probe them through your existing platform's liveness/readiness mechanism. Set the `recoveryGraceWindow` to a value that matches your broker's recovery characteristics (default 30s suits most deployments; cluster failover may need longer).
-4. **Sanity-check your OTel pipeline.** Confirm the dashboards you rely on still light up under the new attribute names and the single `ServiceConnect.Bus` source.
+4. **Sanity-check your OTel pipeline.** Confirm the dashboards you rely on still light up under the new attribute names and the single `ServiceConnect.Telemetry.Bus` source.
 5. **Watch `PublishException` counts during the first deploy.** A surge points at a topology gap that v6 was silently swallowing — fix the topology, don't suppress the exception.
 
 For the full inventory of changes (including every breaking change, new feature, and hardening fix), see [the v7 release notes](/releases/#v7).

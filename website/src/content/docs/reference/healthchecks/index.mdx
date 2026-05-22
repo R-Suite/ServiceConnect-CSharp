@@ -53,9 +53,21 @@ public static IHealthChecksBuilder AddServiceConnectBus(
     HealthStatus failureStatus = HealthStatus.Unhealthy,
     IEnumerable<string>? tags = null,
     TimeSpan? timeout = null);
+
+// Configurable recovery-grace window + optional TimeProvider and consumer factory
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IBus> busFactory,
+    TimeSpan recoveryGraceWindow,
+    TimeProvider? timeProvider = null,
+    Func<IServiceProvider, IConsumer?>? consumerFactory = null,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
 ```
 
-Registers `BusConsumingHealthCheck`. The default overload resolves `IBus` via `GetRequiredService<IBus>()` inside a `PerProviderCache<BusConsumingHealthCheck>` factory, so the same probe instance is reused for the lifetime of the `IServiceProvider`. Use the factory or keyed-services overload when multiple named bus instances are registered in the same DI container.
+Registers `BusConsumingHealthCheck`. The default overload resolves `IBus` via `GetRequiredService<IBus>()` inside a `PerProviderCache<BusConsumingHealthCheck>` factory, so the same probe instance is reused for the lifetime of the `IServiceProvider`. Use the factory or keyed-services overload when multiple named bus instances are registered in the same DI container. The fourth overload is the one to reach for from tests (with `FakeTimeProvider`) or when the default 30s recovery-grace window does not match the host's broker-recovery characteristics; threading the optional `consumerFactory` through enables broker-cancelled short-circuit for hosts that observe `IConsumer` separately from `IBus`.
 
 **Parameters (default overload)**
 - `builder` — the `IHealthChecksBuilder` returned by `services.AddHealthChecks()`.
@@ -92,9 +104,20 @@ public static IHealthChecksBuilder AddServiceConnectConsumer(
     HealthStatus failureStatus = HealthStatus.Unhealthy,
     IEnumerable<string>? tags = null,
     TimeSpan? timeout = null);
+
+// Configurable recovery-grace window + optional TimeProvider
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IConsumer> consumerFactory,
+    TimeSpan recoveryGraceWindow,
+    TimeProvider? timeProvider = null,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
 ```
 
-Registers `ConsumerConnectionHealthCheck`. Same factory pattern as `AddServiceConnectBus`. The default name is `"serviceconnect-consumer"`. Skip this on publish-only hosts.
+Registers `ConsumerConnectionHealthCheck`. Same factory pattern as `AddServiceConnectBus`. The default name is `"serviceconnect-consumer"`. Skip this on publish-only hosts. The fourth overload accepts an explicit recovery-grace window and optional `TimeProvider`; use it from tests (`FakeTimeProvider`) or when the default 30s grace does not match the host's broker-recovery characteristics.
 
 ### `AddServiceConnectProducer`
 
@@ -222,11 +245,11 @@ public sealed class ProducerConnectionHealthCheck : IHealthCheck
 }
 ```
 
-Uses `IProducer.HasAttemptedConnection` to distinguish the lazy-not-yet-tried state from a genuine failure:
+Calls `IProducer.GetHealthSnapshot()` so `IsHealthy` and `HasAttemptedConnection` are read **atomically** — reading the two properties separately is racy because the producer's `IsHealthy` can flip false on a transient broker drop in the same instant `HasAttemptedConnection` is observed `true`, surfacing a false-negative Unhealthy. The snapshot returned by `GetHealthSnapshot()` captures the pair under the producer's internal lock and is evaluated as follows:
 
-- `HasAttemptedConnection` is `false` → returns `Healthy("Producer has not yet attempted connection (lazy).")`. This is the state before any publish or send has been issued; treating it as unhealthy would crash-loop pods unnecessarily.
-- `HasAttemptedConnection` is `true` and `IProducer.IsHealthy` is `true` → returns `Healthy("Producer connection is open.")`.
-- `HasAttemptedConnection` is `true` and `IProducer.IsHealthy` is `false` → returns the failure result with status `failureStatus` and `"Producer connection is closed."`.
+- `snapshot.IsHealthy` → returns `Healthy("Producer connection is open.")`.
+- `!snapshot.HasAttemptedConnection` → returns `Healthy("Producer has not yet attempted connection (lazy).")`. This is the state before any publish or send has been issued; treating it as unhealthy would crash-loop pods unnecessarily.
+- Otherwise (`HasAttemptedConnection && !IsHealthy`) → returns the failure result with status `failureStatus` and `"Producer connection is closed."`.
 
 The check also calls `cancellationToken.ThrowIfCancellationRequested()` at entry, so probes cancelled by the health-check framework surface as `OperationCanceledException`.
 

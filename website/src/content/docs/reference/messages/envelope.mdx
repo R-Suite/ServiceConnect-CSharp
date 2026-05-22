@@ -16,7 +16,7 @@ See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for where t
 ### `Headers`
 
 ```csharp
-public IDictionary<string, object> Headers { get; init; } = new Dictionary<string, object>();
+public IDictionary<string, object> Headers { get; init; } = new Dictionary<string, object>(StringComparer.Ordinal);
 ```
 
 Gets the headers accumulated by the pipeline.

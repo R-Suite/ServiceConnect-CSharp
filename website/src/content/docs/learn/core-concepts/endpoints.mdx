@@ -22,16 +22,18 @@ services.AddServiceConnect(builder =>
         queues.AuditQueueName = "orders.audit";  // optional
         queues.AuditingEnabled = false;
         queues.PurgeQueueOnStartup = false;
+        queues.DisableErrors = false;            // set true to suppress dead-lettering entirely
     });
 });
 ```
 
-Four things happen from that block:
+Five things happen from that block:
 
 - **`QueueName`** is this bus's inbox. When `StartConsumingAsync` runs, ServiceConnect declares the queue on the broker (creating it if it doesn't exist) and starts consuming from it. Every message sent to `"orders"` from anywhere in the system lands here.
 - **`ErrorQueueName`** is where a message goes after its retry budget is exhausted. Defaults to `"errors"` when you don't set it. Operationally, this is the queue you watch: messages accumulating here mean something is wrong.
 - **`AuditQueueName`** only matters if `AuditingEnabled = true`. When auditing is on, every successfully handled message is copied to this queue. Useful for compliance or reconciliation; off by default because it doubles broker traffic.
 - **`PurgeQueueOnStartup`** does exactly what it says — it clears the queue when the bus starts. Convenient for development, dangerous for production. Default is `false`.
+- **`DisableErrors`** skips dead-lettering entirely when `true` — failed messages are discarded rather than forwarded to the error queue. Useful in ephemeral or test environments where an error queue would be noise; leave `false` in production.
 
 ### Naming
 

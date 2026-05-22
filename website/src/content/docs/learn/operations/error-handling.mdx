@@ -25,7 +25,7 @@ The retry queue itself can be tuned via `RabbitMQSettingKeys.RetryQueueArguments
 ```csharp
 transport.SetClientSetting(
     RabbitMQSettingKeys.RetryQueueArguments,
-    new Dictionary<string, object>
+    new Dictionary<string, object?>
     {
         ["x-max-length"]  = 10_000,
         ["x-queue-mode"]  = "lazy",
@@ -131,7 +131,7 @@ If the callback itself throws, the framework catches and logs at **Error** so a 
 
 ## Exception hierarchy
 
-Framework exceptions live under `ServiceConnect.Interfaces.Exceptions`. They all derive from one abstract base, so a single catch can quarantine every framework-originated failure without swallowing user exceptions:
+Framework exceptions live under `ServiceConnect.Interfaces.Exceptions`. Most derive from one abstract base — `ServiceConnectException` — so a single catch can quarantine the bulk of framework-originated failures without swallowing user exceptions:
 
 ```csharp
 try
@@ -146,6 +146,18 @@ catch (ServiceConnectException ex)
     _logger.LogError(ex, "ServiceConnect failed for {MessageType}", typeof(T).Name);
     throw;
 }
+```
+
+The one exception is `RequestSendCancelledException`, which derives from `OperationCanceledException` rather than `ServiceConnectException` so it composes with existing `catch (OperationCanceledException)` handlers callers already have around request-reply calls. Catch it alongside other `OperationCanceledException`s, or list it explicitly if you want it routed to the framework-error catch path:
+
+```csharp
+try
+{
+    var reply = await bus.SendRequestAsync<TRequest, TReply>(request, ct: cancellationToken);
+}
+catch (RequestSendCancelledException) { /* outbound send aborted (transport drop, shutdown) */ }
+catch (OperationCanceledException)    { /* caller cancellation */ }
+catch (ServiceConnectException)       { /* everything else (timeout, transport, filter block, …) */ }
 ```
 
 The concrete types and when each is raised:

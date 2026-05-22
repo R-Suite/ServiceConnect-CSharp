@@ -79,7 +79,7 @@ v7 is a clean-architecture rewrite. The legacy static `Bus` is gone; configurati
 #### Telemetry
 
 - **No more static telemetry state.** `ServiceConnectActivitySource.Options` / `MessagingSystemAttributes` are gone; instrumentation methods take options + attributes as parameters, so two buses in one process can have independent enrichment.
-- **One ActivitySource: `"ServiceConnect.Bus"`** (was three). Per-direction toggles via `EnablePublishTelemetry` / `EnableConsumeTelemetry` / `EnableSendTelemetry`.
+- **One ActivitySource: `"ServiceConnect.Telemetry.Bus"`** (was three). Per-direction toggles via `EnablePublishTelemetry` / `EnableConsumeTelemetry` / `EnableSendTelemetry`.
 - **OTel semconv 1.x messaging attributes.** Spans/metrics emit `messaging.operation.type` (`publish`/`process`) and `messaging.operation.name`; the pre-1.x `messaging.operation` attribute is gone. `messaging.destination.name` reflects the broker exchange/routing key, not the CLR type's `FullName`. Dashboards filtering on the legacy attributes must update.
 
 ### What's new
@@ -87,7 +87,7 @@ v7 is a clean-architecture rewrite. The legacy static `Bus` is gone; configurati
 #### Bus and pipeline
 
 - **`OnConsumedSuccessfully` filter stage** — fourth pipeline stage that runs only after a successful handler invocation. The canonical building block for at-most-once side effects and for the dedupe pattern that replaces the removed `MessageDeduplication` package.
-- **DI-first builder.** Multi-bus and keyed-services registration via `AddServiceConnectBus` / `AddServiceConnectConsumer` / `AddServiceConnectProducer`.
+- **DI-first builder.** Single `AddServiceConnect` call per `IServiceCollection`; re-entry is rejected. Multi-bus is achieved via separate service collections. Health-check probing for multiple buses is available via `AddServiceConnectBus` / `AddServiceConnectConsumer` / `AddServiceConnectProducer` on `IHealthChecksBuilder`.
 - **Configurable caps.** `MaxInflightRequests`, `MaxStreamSizeBytes`, `MaxActiveStreams`, `MaxRoutingSlipHops`, `DisposeTimeout`.
 - **Lifecycle flags.** `AllowMissingProducer` (consume-only buses), `DeadLetterUnhandledMessages` (explicit error-queue routing), `StrictReplyValidation` (rejects the cross-bus fallback that a queue-name-aware producer could spoof), `IncludeMachineNameInHeaders` (default `false` to avoid hostname leakage on shared brokers).
 - **`IBus.RequestTimeoutAsync(correlationId, delay, ct)`** for scheduling saga timeouts.
