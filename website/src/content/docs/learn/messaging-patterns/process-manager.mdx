@@ -143,7 +143,7 @@ Without a persistence provider, the process manager has nowhere to put state and
 
 ### Fresh-copy contract for custom persistence
 
-Every call to `FindDataAsync<T>` must return a **fresh** `IPersistenceData<T>.Data` reference. Two successive loads for the same correlation id must produce independent objects — mutations to one must not affect the other. Both built-in providers comply: the InMemory provider deep-clones on every read; MongoDB deserialises a new object from the wire. Custom implementations (Postgres, SQL Server, Redis, …) must do the same. See [`IProcessManagerFinder`](/ServiceConnect-CSharp/reference/extension-points/persistence/iprocessmanagerfinder/#findDataAsync) for details.
+Every call to `FindDataAsync<T>` must return a **fresh** `IPersistenceData<T>.Data` reference. Two successive loads for the same correlation id must produce independent objects — mutations to one must not affect the other. Both built-in providers comply: the InMemory provider deep-clones on every read; MongoDB deserialises a new object from the wire. Custom implementations (Postgres, SQL Server, Redis, …) must do the same. See [`IProcessManagerFinder`](/ServiceConnect-CSharp/reference/extension-points/persistence/iprocessmanagerfinder/#finddataasynct) for details.
 
 ### InMemory deep-clone limitations
 
