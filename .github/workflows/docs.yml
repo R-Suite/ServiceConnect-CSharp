@@ -2,7 +2,7 @@ name: Build and deploy docs site
 
 on:
   push:
-    branches: [v7-clean-architecture]
+    branches: [master]
     paths:
       - 'website/**'
       - '.github/workflows/docs.yml'
@@ -49,7 +49,7 @@ jobs:
 
   deploy:
     needs: build
-    if: github.ref == 'refs/heads/v7-clean-architecture'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

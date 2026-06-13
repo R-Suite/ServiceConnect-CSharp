@@ -32,6 +32,24 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history so the release guard can test whether the tagged commit
+          # is contained in origin/master; the ancestry walk needs the commit
+          # graph, not just the tag tip a shallow clone would provide.
+          fetch-depth: 0
+
+      # Releases are cut from master only. A v* tag (or a manual dispatch ref) can
+      # point at any commit, so gate the publish on the tagged commit being reachable
+      # from origin/master: a tag pushed on a feature branch fails here, before
+      # anything is built or pushed to NuGet.org.
+      - name: Verify tag is on master
+        run: |
+          git fetch origin master --quiet
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::Tag ${GITHUB_REF#refs/tags/} ($GITHUB_SHA) is not contained in origin/master; refusing to release."
+            exit 1
+          fi
+          echo "Tag commit $GITHUB_SHA is contained in origin/master — proceeding."
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
