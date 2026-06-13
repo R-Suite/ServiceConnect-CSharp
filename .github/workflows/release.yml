@@ -70,14 +70,22 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Resolved version: $VERSION"
 
+      # The package version comes from the tag (passed to build/pack as -p:Version
+      # below), so this step only sanity-checks that the tag's BASE version matches
+      # the <Version> declared in Directory.Build.props. "Base" is the tag minus any
+      # SemVer pre-release suffix, so one declared base (e.g. 7.1.0) covers a whole
+      # cut: v7.1.0-beta.1, v7.1.0-rc.1, then v7.1.0 — no props edit between
+      # pre-releases. Bump <Version> only when moving to the next base version.
       - name: Verify tag matches csproj Version property
         working-directory: src
         run: |
           set -e
           DECLARED=$(grep -oP '<Version>\K[^<]+' Directory.Build.props | head -1)
-          if [ "$DECLARED" != "${{ steps.version.outputs.version }}" ]; then
-            echo "ERROR: Tag version '${{ steps.version.outputs.version }}' does not match Directory.Build.props <Version> '$DECLARED'."
-            echo "Bump src/Directory.Build.props and retag, or correct the tag."
+          TAGVER="${{ steps.version.outputs.version }}"
+          BASE="${TAGVER%%-*}"
+          if [ "$DECLARED" != "$BASE" ]; then
+            echo "ERROR: Tag base version '$BASE' (from '$TAGVER') does not match Directory.Build.props <Version> '$DECLARED'."
+            echo "Bump src/Directory.Build.props and retag, or correct the tag. Pre-release suffixes (e.g. -rc.1) are allowed and do not need a props change."
             exit 1
           fi
 

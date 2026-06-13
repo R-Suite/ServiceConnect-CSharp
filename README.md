@@ -138,6 +138,10 @@ If your scenario needs `netstandard2.1` (or you'd like to upstream the work), pl
 
 - RabbitMQ 3.7+
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, build/test instructions, coding conventions, and the release process.
+
 ## License
 
 MIT — see [LICENSE.md](LICENSE.md).
