@@ -753,6 +753,15 @@ public class RabbitMqConsumerHostTests
         channel.Setup(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()))
             .Returns(closeGate.Task);
 
+        // The stalled CloseAsync forces the channel host's DisposeAsync — which the consumer host
+        // does NOT await once the grace deadline wins — to dispose the model channel on a background
+        // continuation. Signal when that disposal actually runs so the assertions can wait for it
+        // deterministically rather than racing a single Task.Yield against the abandoned task.
+        var channelDisposed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        channel.Setup(c => c.DisposeAsync())
+            .Callback(() => channelDisposed.TrySetResult())
+            .Returns(ValueTask.CompletedTask);
+
         var host = new RabbitMqConsumerHost(
             conn.Object,
             MakeTransportCfg(prefetch: 10, autoDelete: false, disablePrefetch: false, gracefulShutdownTimeoutMs: 50).Object,
@@ -773,11 +782,15 @@ public class RabbitMqConsumerHostTests
         await Task.Yield();
         Assert.False(disposeTask.IsCompleted);
 
+        // Crossing the 50ms grace window unblocks dispose: the deadline wins the close race, so the
+        // consumer host abandons the stalled CloseAsync and returns while the channel host disposes
+        // the model on a background task once the close-deadline token cancels. Await both the
+        // dispose and the background channel disposal on a real-time budget so the verification is
+        // deterministic regardless of thread-pool scheduling.
         timeProvider.Advance(TimeSpan.FromMilliseconds(1));
-        await Task.Yield();
-        Assert.True(disposeTask.IsCompleted);
 
-        await disposeTask;
+        await disposeTask.WaitAsync(TimeSpan.FromSeconds(10));
+        await channelDisposed.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         channel.Verify(c => c.CloseAsync(200, "Goodbye", false, It.IsAny<CancellationToken>()), Times.Once);
         channel.Verify(c => c.DisposeAsync(), Times.Once);
