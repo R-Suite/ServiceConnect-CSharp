@@ -25,7 +25,7 @@ This guide is deliberately narrow. It walks you through the mechanical conversio
    | `ServiceConnect.Persistence.Redis`          | **removed**, no replacement                            |
    | `ServiceConnect.Filters.MessageDeduplication` | **removed** — rebuild using `OnConsumedSuccessfully` (see below) |
 
-3. **Stage your broker.** Several broker-visible defaults flipped (TLS on, publisher confirms on, retry/error publishes `mandatory:true`, exchange-name hash changed). If v6 and v7 will share a broker during rollout, read the [bear traps](#bear-traps) section first.
+3. **Stage your broker.** Several broker-visible defaults flipped (TLS on, publisher confirms on, retry/error publishes `mandatory:true`, exchange-name scheme changed). If v6 and v7 will share a broker during rollout, read the [bear traps](#bear-traps) section first.
 
 4. **Branch and pin v6.** Tag your last-good v6 deploy and start the migration on a branch — the API rewrite touches every consumer codebase, and reverting halfway is awkward.
 
@@ -362,7 +362,7 @@ If your v6 deployment was running with a topology gap (missing exchange or routi
 
 ### Exchange-name hash changed for shared brokers
 
-The exchange name for a published message used to embed the assembly-qualified `Type.AssemblyQualifiedName` hash; v7 derives it from `type.FullName + assembly.GetName().Name` — version-stable, so the exchange name no longer rotates whenever you bump a producer's assembly version.
+The exchange name for a published message used to embed the assembly-qualified `Type.AssemblyQualifiedName` hash; v7 derives it from `type.FullName` with the namespace dots removed (`type.FullName.Replace(".", string.Empty)`) — no hash and no assembly metadata, so the exchange name is stable across assembly-version bumps and matches the wire format of the deployed C# `master` services.
 
 The practical consequence: **v6 and v7 services publishing the same message type on the same broker will use different exchange names**. During rollout, expect both exchanges to exist until you have fully migrated. Bridge the two with a manual exchange-to-exchange binding if you need v6 publishers to be visible to v7 consumers (or vice versa) during the transition.
 

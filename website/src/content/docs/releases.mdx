@@ -56,7 +56,7 @@ v7 is a clean-architecture rewrite. The legacy static `Bus` is gone; configurati
 - **Publisher confirms are on by default.** Every publish waits for a broker ack before returning. Benchmark throughput-sensitive paths; configuring `PublisherAcknowledgements=false` together with a finite `PublishTimeout` is now a startup error.
 - **`IProducer` body is `ReadOnlyMemory<byte>`; headers are `IReadOnlyDictionary<string,string>?`.** `byte[]` converts implicitly; a `null` body is no longer expressible — use `ReadOnlyMemory<byte>.Empty`.
 - **External `IConsumer` implementations must add `IsCancelledByBroker`** (default `false`); the bus uses it to flip `IsConsuming` to `false` when the broker has cancelled the consumer (queue deleted, policy expired, mirror promoted).
-- **`MessageTypeExchangeName` hash dropped `AssemblyQualifiedName`.** Exchanges are derived from `type.FullName + assembly.GetName().Name` — version-stable. Single-source apps see no change; apps with broker-shared version skew will see new exchange names on first v7 deploy.
+- **`MessageTypeExchangeName` derives from `Type.FullName`.** Exchanges are named `type.FullName.Replace(".", string.Empty)` — no hash or assembly metadata, matching the deployed C# `master` wire format so v7, master, and Node services share exchanges. Apps upgrading from a hashed-exchange build will see new exchange names on first v7 deploy.
 - **Retry and error publishes use `mandatory:true`.** Topology gaps that pre-v7 silently dropped messages now surface as `PublishException` — fix the topology rather than relying on the drop.
 
 #### Persistence

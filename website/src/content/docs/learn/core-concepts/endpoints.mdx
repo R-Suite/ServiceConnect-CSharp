@@ -111,7 +111,7 @@ Inline `SendOptions` always wins over the configured mapping. That lets you conf
 await bus.PublishAsync(new OrderPlaced(correlationId) { OrderId = "order-100" });
 ```
 
-ServiceConnect publishes through a per-message-type RabbitMQ fanout exchange. The exchange name is derived from the message type (a sanitised type-name plus a short hash suffix); it is not the type's plain `.Name`. Any consumer whose bus has registered a handler for `OrderPlaced` automatically creates a binding from that exchange to its own queue when it starts consuming. Subscribers come and go; the publisher never changes.
+ServiceConnect publishes through a per-message-type RabbitMQ fanout exchange. The exchange name is derived from the message type — its full type name with the namespace dots removed (`Type.FullName.Replace(".", string.Empty)`); it is not the type's plain `.Name`. Any consumer whose bus has registered a handler for `OrderPlaced` automatically creates a binding from that exchange to its own queue when it starts consuming. Subscribers come and go; the publisher never changes.
 
 The upshot:
 
