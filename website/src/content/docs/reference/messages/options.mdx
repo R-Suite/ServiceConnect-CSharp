@@ -1,0 +1,207 @@
+---
+title: Message options
+description: Per-call overrides for publish, send, and request operations — headers, destinations, timeouts.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`PublishOptions`, `SendOptions`, and `RequestOptions` are the per-call override bags passed to `IBus.PublishAsync`, `IBus.SendAsync`, and `IBus.SendRequestAsync` (and its multi variants) respectively. Each is optional — when omitted, defaults come from `IBusConfiguration`. You reach for these types when a single call needs to deviate from the configured defaults: adding headers, overriding the destination endpoint, or tightening a request timeout.
+
+See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for where the baseline defaults are set.
+
+## Reference
+
+## `PublishOptions`
+
+Passed to `IBus.PublishAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. Like `SendOptions`, it is immutable, so concurrent `PublishAsync` callers cannot share a mutable instance and clobber each other's headers between construction and the async pipeline's read.
+
+### `Headers`
+
+```csharp
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
+```
+
+Gets additional headers to attach to the published message.
+
+**Remarks.** Default is `null`. Keys and values are both strings; transports serialise them verbatim. The read-only interface type prevents the framework from iterating a dictionary another thread might be mutating — pass any `Dictionary<string, string>` or `ImmutableDictionary<string, string>` and the caller's own reference retains its concrete type.
+
+---
+
+### `RoutingKey`
+
+```csharp
+public string? RoutingKey { get; init; }
+```
+
+Gets the routing key used by the transport, when applicable.
+
+**Remarks.** Default is `null`. Only transports that support routing keys (e.g., RabbitMQ topic exchanges) consult this value; others ignore it.
+
+## `SendOptions`
+
+Passed to `IBus.SendAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction.
+
+### `Headers`
+
+```csharp
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
+```
+
+Gets the additional headers to attach to the message.
+
+**Remarks.** Default is `null`. See the `PublishOptions.Headers` note above for why the read-only interface is used.
+
+---
+
+### `EndPoint`
+
+```csharp
+public string? EndPoint { get; init; }
+```
+
+Gets the single destination endpoint.
+
+**Remarks.** Default is `null`. When set, overrides the queue mapping configured for the message type. To send to multiple endpoints, use `IBus.SendToManyAsync` with the explicit `endPoints` parameter (the `SendOptions.EndPoint` field is ignored by `SendToManyAsync` — the explicit list always wins).
+
+## `RequestOptions`
+
+Passed to `IBus.SendRequestAsync` and `IBus.SendRequestMultiAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. The struct shape matches `PublishOptions` and `SendOptions` so concurrent request callers cannot share a mutable instance and clobber each other's headers, endpoints, or timeout between construction and the async pipeline's read.
+
+### `DefaultTimeoutMs`
+
+```csharp
+public static readonly int DefaultTimeoutMs = 10_000;
+```
+
+The default request timeout, in milliseconds (10 seconds). Declared `static readonly` rather than `const` so a future tuning of the default doesn't require every consumer to recompile to pick up the change — `const` values are inlined into the consumer's binary at compile time and frozen, whereas `static readonly` is resolved at runtime.
+
+---
+
+### `Default`
+
+```csharp
+public static RequestOptions Default => new();
+```
+
+Gets a `RequestOptions` value populated with default values — equivalent to `new RequestOptions()`.
+
+**Returns.** A struct value per access. Handy when you want to pass defaults explicitly rather than letting the bus apply its own.
+
+---
+
+### `Headers`
+
+```csharp
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
+```
+
+Gets additional headers to attach to the request message.
+
+**Remarks.** Default is `null`. See the `PublishOptions.Headers` note above for why the read-only interface is used.
+
+---
+
+### `EndPoint`
+
+```csharp
+public string? EndPoint { get; init; }
+```
+
+Gets the single destination endpoint for the request.
+
+**Remarks.** Default is `null`. Overrides the configured queue mapping for the request message type. `PublishRequestAsync` requires `EndPoint` to be `null` or empty (it's a fanout-only operation); a non-empty value throws `ArgumentException`.
+
+---
+
+### `Timeout`
+
+```csharp
+public int Timeout { get; init; }
+```
+
+Gets the request timeout, in milliseconds.
+
+**Remarks.** Defaults to `DefaultTimeoutMs` (10,000) — the parameterless constructor seeds the field, so a `new RequestOptions()` value already carries the default. For single-reply requests, the call faults if no reply arrives before the deadline. For multi-requests, see `ExpectedReplyCount` for how timeout and count interact.
+
+<Aside type="caution" title="Don't pass default(RequestOptions)">
+  C# language semantics for `default(T)` on a struct skip the parameterless constructor, leaving `Timeout` at `0`. The request-reply path rejects this with `ArgumentOutOfRangeException` rather than silently expiring after 0 ms. Use `RequestOptions.Default` or `new RequestOptions()` instead.
+</Aside>
+
+---
+
+### `ExpectedReplyCount`
+
+```csharp
+public int? ExpectedReplyCount { get; init; }
+```
+
+Number of replies the multi-request should wait for before completing. Only consulted by `SendRequestMultiAsync`.
+
+<Aside type="note" title="ExpectedReplyCount semantics">
+  The property has two modes:
+
+  - **Positive value N** — the call completes as soon as `N` replies have arrived. If fewer than `N` arrive before `Timeout` elapses, the task throws `RequestTimeoutException` with the partials available on `RequestTimeoutException.PartialReplies`.
+  - **Zero, negative, or `null` (default)** — the call always waits the full `Timeout` and returns every reply received during the window (the silent-partial-return mode).
+
+  Set a positive count when you know how many respondents to expect AND want to catch under-delivery as a typed exception; leave it unset (or zero) when you want to drain the full window regardless of how many reply.
+</Aside>
+
+## `ReplyOptions`
+
+Passed to `IConsumeContext.ReplyAsync` inside a handler. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. Carries only `Headers`: a reply does not need an endpoint (the destination is the request's reply-to header), does not need a routing key (replies don't fan out), and does not need a correlation id (auto-correlated via the request's `MessageId`).
+
+### `Headers`
+
+```csharp
+public IReadOnlyDictionary<string, string>? Headers { get; init; }
+```
+
+Gets the additional headers to attach to the reply message.
+
+**Remarks.** Default is `null`. The read-only interface type prevents the framework from iterating a dictionary another thread might be mutating — pass any `Dictionary<string, string>` or `ImmutableDictionary<string, string>` and the caller's own reference retains its concrete type. Header keys carrying the reserved framework names (`MessageId`, `MessageType`, `TypeName`, `FullTypeName`, `DestinationAddress`) are overwritten with framework-stamped values; pick an application-specific key when stamping metadata.
+
+## Usage
+
+### Publishing with custom headers
+
+```csharp
+await bus.PublishAsync(
+    new OrderPlaced(Guid.NewGuid(), orderId, total),
+    new PublishOptions
+    {
+        Headers = new Dictionary<string, string>
+        {
+            ["X-Tenant"] = tenantId,
+            ["X-Source"] = "OrderService",
+        },
+    });
+```
+
+Use `PublishOptions.Headers` when a downstream subscriber or audit consumer needs metadata that doesn't belong on the message contract itself — for example, a tenant discriminator or the name of the originating service.
+
+### Sending to an explicit endpoint override
+
+```csharp
+await bus.SendAsync(
+    new ProcessPayment(correlationId, orderId, total),
+    new SendOptions { EndPoint = "payments-priority" });
+```
+
+Pass `SendOptions.EndPoint` when the usual queue mapping isn't what you want — for example, routing a high-priority payment to a dedicated queue rather than the default `PaymentProcessor` queue.
+
+### Setting a request timeout
+
+```csharp
+var reply = await bus.SendRequestAsync<GetShippingQuote, ShippingQuote>(
+    new GetShippingQuote(correlationId, orderId),
+    new RequestOptions { Timeout = 2_000 });
+```
+
+Use `RequestOptions.Timeout` to tighten the deadline for a single call — here, a shipping-quote lookup that must return in 2 seconds or be considered failed, rather than inheriting the default 10-second window.
+
+## See also
+
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — concept
+- [`IBus`](../../bus/ibus/) — related reference page

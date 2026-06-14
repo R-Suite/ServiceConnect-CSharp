@@ -1,0 +1,365 @@
+---
+title: ITransportConfiguration
+description: The transport-layer configuration — host, port, credentials, TLS, retry, and prefetch.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`ITransportConfiguration` is the transport-layer configuration surface: broker host, credentials, virtual host, retry policy, consumer prefetch, graceful-shutdown drain window, and TLS. The shape is deliberately transport-neutral; the exact semantics of each field depend on the concrete transport in use. RabbitMQ is the only shipped implementation — access this configuration via `builder.ConfigureTransport(...)` or the `configure` delegate of `UseRabbitMQ(...)`.
+
+See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for how transport configuration fits into the wider bus setup.
+
+## Reference
+
+### `Host`
+
+```csharp
+string Host { get; set; }
+```
+
+Gets or sets the transport host name.
+
+**Remarks.** RabbitMQ accepts a comma-separated host list for cluster failover (`"rabbit-a,rabbit-b,rabbit-c"`). The builder rejects an empty host at configuration time.
+
+---
+
+### `Username`
+
+```csharp
+string? Username { get; set; }
+```
+
+Gets or sets the transport username.
+
+---
+
+### `Password`
+
+```csharp
+string? Password { get; set; }
+```
+
+Gets or sets the transport password.
+
+<Aside type="caution" title="Secrets in configuration">
+  Load credentials from a secret store or environment variables — do not commit them alongside source. ServiceConnect never logs `Password`.
+</Aside>
+
+---
+
+### `VirtualHost`
+
+```csharp
+string? VirtualHost { get; set; }
+```
+
+Gets or sets the virtual host or namespace used by the broker. On RabbitMQ this is the vhost (`/` by default); on other transports it maps to whatever logical partition the broker exposes.
+
+---
+
+### `RetryDelay`
+
+```csharp
+int RetryDelay { get; set; }
+```
+
+Gets or sets the dead-letter retry delay, in milliseconds.
+
+**Remarks.** Applied between retries when a handler throws. Must be non-negative. Two validation sites enforce this: the property setter throws `ArgumentOutOfRangeException` if a negative value is assigned directly, and `AddServiceConnect` throws `InvalidOperationException` during builder validation.
+
+---
+
+### `MaxRetries`
+
+```csharp
+int MaxRetries { get; set; }
+```
+
+Gets or sets the maximum retry attempts before a message is treated as terminally failed and routed to the error queue.
+
+**Remarks.** Must be non-negative. Two validation sites enforce this: the property setter throws `ArgumentOutOfRangeException` if a negative value is assigned directly, and `AddServiceConnect` throws `InvalidOperationException` during builder validation.
+
+---
+
+### `PrefetchCount`
+
+```csharp
+ushort PrefetchCount { get; set; }
+```
+
+Gets or sets the consumer prefetch count — the maximum number of unacknowledged messages the broker will deliver to a consumer at once.
+
+**Remarks.** Higher values improve throughput on I/O-bound handlers but increase the blast radius of a crashed consumer (every prefetched message is redelivered). For short handlers, values in the low tens are typical; for long-running handlers, keep it at `1`.
+
+---
+
+### `GracefulShutdownTimeoutMilliseconds`
+
+```csharp
+int GracefulShutdownTimeoutMilliseconds { get; set; }
+```
+
+Gets or sets the time the bus will wait for in-flight messages to drain during graceful shutdown, in milliseconds.
+
+**Remarks.** The property setter accepts any value, including negative, without validation. Only `AddServiceConnect` enforces the non-negative constraint, throwing `InvalidOperationException` during builder validation. After this budget expires, remaining in-flight messages are abandoned and will be redelivered when the consumer reconnects.
+
+---
+
+### `SslEnabled`
+
+```csharp
+bool SslEnabled { get; set; }
+```
+
+Gets or sets a value indicating whether TLS is enabled for the broker connection.
+
+**Default:** `true`.
+
+---
+
+### `AcceptablePolicyErrors`
+
+```csharp
+SslPolicyErrors AcceptablePolicyErrors { get; set; }
+```
+
+Gets or sets the TLS policy errors that are tolerated during remote certificate validation.
+
+**Remarks.** Defaults to `SslPolicyErrors.None`. Widening this (for example to accept `RemoteCertificateNameMismatch`) trades verification strictness for deployability in environments where the certificate CN does not match the hostname.
+
+---
+
+### `ServerName`
+
+```csharp
+string? ServerName { get; set; }
+```
+
+Gets or sets the expected remote server name for TLS validation.
+
+---
+
+### `CertPath`
+
+```csharp
+string? CertPath { get; set; }
+```
+
+Gets or sets the client certificate file path used for mutual TLS.
+
+---
+
+### `CertPassphrase`
+
+```csharp
+string? CertPassphrase { get; set; }
+```
+
+Gets or sets the passphrase used to open the client certificate file.
+
+---
+
+### `Certs`
+
+```csharp
+X509CertificateCollection? Certs { get; set; }
+```
+
+Gets or sets the in-memory client certificates to present to the broker. Use this when certificates are loaded from a store or a secret manager rather than from disk.
+
+---
+
+### `SslProtocol`
+
+```csharp
+SslProtocols SslProtocol { get; set; }
+```
+
+Gets or sets the TLS protocol selection.
+
+**Remarks.** Defaults to `SslProtocols.None`, which lets the runtime negotiate the best available protocol (TLS 1.3 where supported). Override only when you need to constrain to a specific version, e.g. for compliance.
+
+---
+
+### `CertificateSelectionCallback`
+
+```csharp
+LocalCertificateSelectionCallback? CertificateSelectionCallback { get; set; }
+```
+
+Gets or sets the callback used to choose a local client certificate when the broker requests one.
+
+---
+
+### `CertificateValidationCallback`
+
+```csharp
+RemoteCertificateValidationCallback? CertificateValidationCallback { get; set; }
+```
+
+Gets or sets the callback used to validate the remote broker certificate. A custom callback fully replaces the default chain check — use sparingly.
+
+<Aside type="caution" title="Validation bypass">
+  Returning `true` unconditionally from this callback disables certificate verification and is unsafe outside local development.
+</Aside>
+
+---
+
+### `SuppressPlaintextWarning`
+
+```csharp
+bool SuppressPlaintextWarning { get; set; }
+```
+
+Gets or sets a value indicating whether the startup warning for plaintext connections to non-loopback hosts is suppressed.
+
+**Default:** `false`.
+
+**Remarks.** When `SslEnabled = false` and the configured `Host` resolves to a non-loopback address, ServiceConnect emits a `Warning`-level log under the `ServiceConnect` category at startup. Set this to `true` when plaintext is intentional — Docker Compose networks, dev clusters, isolated internal LANs — to silence the warning without adjusting log-level filters.
+
+The interface supplies a default implementation (`get` returns `false`, `set` is a no-op). Custom `ITransportConfiguration` implementations only need to override these accessors when they propagate the value to a transport that can act on it.
+
+---
+
+### `ClientSettings`
+
+```csharp
+IReadOnlyDictionary<string, object> ClientSettings { get; }
+```
+
+Gets the provider-specific client settings bag. RabbitMQ populates this with transport-specific flags keyed by well-known names (see `RabbitMQSettingKeys`).
+
+**Returns.** A read-only view; mutation goes through [`SetClientSetting`](#setclientsetting).
+
+---
+
+### `PublishTimeout` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.PublishTimeout, TimeSpan.FromSeconds(30));
+```
+
+Maximum time the RabbitMQ producer waits for a broker acknowledgement when publishing under publisher confirms. Accepts a `TimeSpan`; defaults to 30 seconds when unset.
+
+**Remarks.** When the broker ack does not arrive within this window the producer throws `TimeoutException` and the publish is **not retried** — the timeout is treated as a fatal publish error distinct from transport-level failures, so the retry loop exits immediately and the caller decides how to respond. Pair with [`PublisherAcknowledgements`](#publisheracknowledgements-rabbitmq-client-setting) — the timeout only has any effect when publisher confirms are enabled.
+
+---
+
+### `PublisherAcknowledgements` (RabbitMQ client setting)
+
+```csharp
+// Default: true — explicit override is rarely needed.
+transport.SetClientSetting(RabbitMQSettingKeys.PublisherAcknowledgements, true);
+```
+
+Enables RabbitMQ publisher confirms for outbound publishes. **Default: `true`.** When enabled the producer waits for a broker ack before completing the publish, bounded by [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting).
+
+**Remarks.** Two safety properties depend on confirms being enabled: [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting) only enforces against a stalled broker when the producer awaits the ack, and the fan-out `SendAsync(Type)` path's between-iteration header re-stamping is gated by the broker ack so that RabbitMQ.Client cannot read the alias dict after the next iteration mutates it. Setting this explicitly to `false` *and* configuring a finite `PublishTimeout` is rejected at producer construction with `InvalidOperationException` — the combination silently disables the timeout, so misconfiguration fails fast at startup. Either keep the default, or pair an explicit `false` with `PublishTimeout = Timeout.InfiniteTimeSpan` / `TimeSpan.Zero`.
+
+---
+
+### `MaxOutstandingPublishConfirms` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.MaxOutstandingPublishConfirms, 256);
+```
+
+Caps the number of outstanding publisher confirms RabbitMQ.Client will track for one channel. Accepts a positive `int`; defaults to **256** when unset. Only has an effect when [`PublisherAcknowledgements`](#publisheracknowledgements-rabbitmq-client-setting) is enabled.
+
+**Remarks.** RabbitMQ.Client's outstanding-confirm tracker is unbounded by default; a stalled broker can let it grow until memory pressure or [`PublishTimeout`](#publishtimeout-rabbitmq-client-setting) trips a channel reset. The cap installs a `ConcurrencyLimiter` that **back-pressures** the publisher when reached (the publish call awaits a permit; it does *not* throw). For the current single-threaded `Producer` design, the cap is defence-in-depth — `_publishLock` already serialises publishes — but raising or lowering it gives operators a tuning point if the publisher ever gains concurrent-publish capability.
+
+Misconfiguration throws `InvalidOperationException` at first publish: non-`int` types and zero/negative values surface loudly rather than silently falling back to the default.
+
+---
+
+### `NetworkRecoveryInterval` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.NetworkRecoveryInterval, TimeSpan.FromSeconds(15));
+```
+
+Sets the interval RabbitMQ.Client waits between automatic-recovery attempts after a connection drop. Accepts a `TimeSpan`; when unset, RabbitMQ.Client's own default applies (5 seconds at the time of writing).
+
+**Remarks.** Operators seeing prolonged broker-outage thrash — repeated reconnect failures filling logs and pressuring the network — can lengthen the interval to reduce the load. ServiceConnect doesn't add an exponential backoff or circuit-breaker layer on top: RabbitMQ.Client's auto-recovery uses a fixed interval, and tuning that interval is the supported control today. Misconfiguration throws `InvalidOperationException` at connection setup: non-`TimeSpan` values surface loudly with the offending value and its type.
+
+---
+
+### `MaxHeaderCount` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.MaxHeaderCount, 128);
+```
+
+Caps the number of headers the consumer will accept on an inbound message. Accepts a positive `int`; defaults to **64** when unset. Equivalent to `RabbitMqOptions.MaxHeaderCount` on the typed overload.
+
+**Remarks.** Inbound messages whose header count exceeds the cap are rejected at admission and routed to the error queue (acknowledged-then-published, not redelivered — a retry would just hit the same rule). Raise the cap for tracing-heavy producers that legitimately stamp wide header sets (W3C baggage, tenant headers); lower it to tighten resource-exhaustion defence against hostile inputs. The cap pairs with the per-value byte budget (8 KiB) and an aggregate header-size budget (the message-size budget, shared with the body cap) — together they bound the worst-case header weight an attacker can pack onto a single delivery.
+
+---
+
+### `MaxHeaderValueBytes` (RabbitMQ client setting)
+
+```csharp
+transport.SetClientSetting(RabbitMQSettingKeys.MaxHeaderValueBytes, 16 * 1024);
+```
+
+Caps the bytes any single header value may carry on an inbound message. Accepts a positive `int`; defaults to **8192** (8 KB) when unset. Equivalent to `RabbitMqOptions.MaxHeaderValueBytes` on the typed overload.
+
+**Remarks.** Inbound messages with any header value exceeding the cap are rejected at admission and routed to the error queue (acknowledged-then-published, not redelivered — a retry would just hit the same rule). The cap descends into AMQP nested tables and arrays, so an adversary cannot bypass it by wrapping the payload in a nested structure. Raise the cap for deployments that legitimately stamp large correlation / tracing values; lower it to tighten resource-exhaustion defence against hostile inputs. The cap pairs with the header-count budget (`MaxHeaderCount`) and the aggregate header-size budget (the message-size budget, shared with the body cap) — together they bound the worst-case header weight an attacker can pack onto a single delivery.
+
+---
+
+### `SetClientSetting`
+
+```csharp
+void SetClientSetting(string key, object value)
+```
+
+Stores a provider-specific client setting.
+
+**Parameters**
+- `key` — The setting key, typically a well-known constant from the transport's setting-keys class (for example `RabbitMQSettingKeys.PublishTimeout`, `RabbitMQSettingKeys.PublisherAcknowledgements`).
+- `value` — The setting value.
+
+## Usage
+
+### Configuring a TLS-enabled RabbitMQ connection with a non-default prefetch
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "rabbit.internal.example";
+        transport.Username = "order-service";
+        transport.Password = Environment.GetEnvironmentVariable("ORDER_RABBIT_PASSWORD");
+        transport.VirtualHost = "/orders";
+
+        transport.SslEnabled = true;
+        transport.SslProtocol = SslProtocols.Tls12;
+        transport.ServerName = "rabbit.internal.example";
+        transport.CertPath = "/var/run/secrets/order-service/client.pfx";
+        transport.CertPassphrase = Environment.GetEnvironmentVariable("ORDER_RABBIT_CERT_PASS");
+
+        transport.PrefetchCount = 32;
+        transport.MaxRetries = 5;
+        transport.RetryDelay = 2_000;
+        transport.GracefulShutdownTimeoutMilliseconds = 15_000;
+    });
+
+    builder.ConfigureQueues(queues =>
+    {
+        queues.QueueName = "order-service";
+        queues.ErrorQueueName = "order-service.errors";
+    });
+});
+```
+
+The `OrderService` handlers spend most of their time waiting on a downstream HTTP API, so a prefetch of 32 keeps several handler slots busy without saturating memory. Mutual TLS is negotiated with a client certificate read from the host's secret mount, and the policy errors default (`None`) is left intact so a hostname or chain mismatch refuses the connection rather than silently trusting it.
+
+## See also
+
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — concept
+- [`IBusConfiguration`](../../bus/ibusconfiguration/) — related reference
+- [`IQueueConfiguration`](../iqueueconfiguration/) — related reference

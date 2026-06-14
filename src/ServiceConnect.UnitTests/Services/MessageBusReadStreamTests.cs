@@ -1,0 +1,234 @@
+using System.Buffers;
+using ServiceConnect.Services;
+using Xunit;
+
+namespace ServiceConnect.UnitTests.Services;
+
+public class MessageBusReadStreamTests
+{
+    [Fact]
+    public void Write_And_Read_ReassemblesPacketsInOrder()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 5, 6 }, 2);
+        stream.Write(new byte[] { 3, 4 }, 1);
+
+        Assert.True(stream.IsComplete());
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5, 6 }, stream.Read());
+    }
+
+    [Fact]
+    public void IsComplete_MissingPacket_ReturnsFalse()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 3 }, 2);
+
+        Assert.False(stream.IsComplete());
+    }
+
+    [Fact]
+    public void IsComplete_NoLastPacketNumber_ReturnsFalse()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1 }, 0);
+
+        Assert.False(stream.IsComplete());
+    }
+
+    [Fact]
+    public void Read_WhenNotComplete_ThrowsInvalidOperationException()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1 }, 0);
+
+        Assert.Throws<InvalidOperationException>(stream.Read);
+    }
+
+    [Fact]
+    public void Write_DuplicatePacketNumber_DoesNotThrow()
+    {
+        // Broker re-delivery is a routine occurrence — the second arrival of the same
+        // packet number is treated as an idempotent ack rather than a stream-corruption
+        // signal that would nack-with-requeue and produce a poison loop.
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1, 2 }, 0);
+
+        var ex = Record.Exception(() => stream.Write("\t\t"u8.ToArray(), 0));
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Write_DuplicatePacketNumber_FirstPayloadWins_AndStreamIsComplete()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(0);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write("\t\t"u8.ToArray(), 0); // ignored
+
+        Assert.True(stream.IsComplete());
+        Assert.Equal(new byte[] { 1, 2 }, stream.Read());
+    }
+
+    [Fact]
+    public void ReadSequence_Throws_When_NotComplete()
+    {
+        var stream = new MessageBusReadStream("seq");
+        Assert.Throws<InvalidOperationException>(() => stream.ReadSequence());
+    }
+
+    [Fact]
+    public void ReadSequence_SinglePacket_ReturnsAllBytes()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(0);
+        stream.Write(new byte[] { 1, 2, 3 }, 0);
+        var seq = stream.ReadSequence();
+        Assert.Equal(3, seq.Length);
+        Assert.Equal(new byte[] { 1, 2, 3 }, seq.ToArray());
+    }
+
+    [Fact]
+    public void ReadSequence_MultiplePackets_LinksInOrder()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 3 }, 1);
+        stream.Write(new byte[] { 4, 5 }, 2);
+        var seq = stream.ReadSequence();
+        Assert.Equal(5, seq.Length);
+        Assert.False(seq.IsSingleSegment);
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, seq.ToArray());
+    }
+
+    [Fact]
+    public void ReadSequence_OutOfOrderWrites_ReassemblesInOrder()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 4, 5 }, 2);
+        stream.Write(new byte[] { 1, 2 }, 0);
+        stream.Write(new byte[] { 3 }, 1);
+        var seq = stream.ReadSequence();
+        Assert.False(seq.IsSingleSegment);
+        Assert.Equal(new byte[] { 1, 2, 3, 4, 5 }, seq.ToArray());
+    }
+
+    [Fact]
+    public void SetLastPacketNumber_AfterValidPacket_HappyPath()
+    {
+        // Packet 0 arrives, then the close-packet declares LastPacketNumber=0 — consistent.
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1 }, 0);
+
+        var ex = Record.Exception(() => stream.SetLastPacketNumber(0));
+
+        Assert.Null(ex);
+        Assert.True(stream.IsComplete());
+    }
+
+    [Fact]
+    public void SetLastPacketNumber_WhenAlreadyReceivedPacketExceedsIt_Throws()
+    {
+        // Packet 5 arrives before the close-packet declares LastPacketNumber=2 — inconsistent.
+        var stream = new MessageBusReadStream("seq");
+        stream.Write("\t"u8.ToArray(), 5);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => stream.SetLastPacketNumber(2));
+
+        Assert.Contains("5", ex.Message);
+        Assert.Contains("2", ex.Message);
+    }
+
+    [Fact]
+    public void IsComplete_ReturnsFalse_WhenPacketSetIsNonContiguous()
+    {
+        // Write must reject packetNumber > LastPacketNumber once LastPacketNumber is set,
+        // otherwise a sparse set like {0, 1, 999} with LastPacketNumber=2 would have
+        // _receivedCount == LastPacketNumber+1 and IsComplete would return true while
+        // Read/ReadSequence silently returned truncated bytes.
+
+        var stream = new MessageBusReadStream("seq");
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 2 }, 1);
+        stream.SetLastPacketNumber(2);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => stream.Write("\t"u8.ToArray(), 999));
+        Assert.False(stream.IsComplete());
+    }
+
+    // --- Gap-detection regression tests ---
+
+    // Forces the internal received-count counter to a given value via reflection so that
+    // IsComplete() returns true while the packet dictionary has a gap. This tests the
+    // defensive throw inside Read()/ReadSequence() that fires even when IsComplete() is
+    // satisfied — guarding against any future regression that makes IsComplete() too
+    // permissive.
+    private static void ForceReceivedCount(MessageBusReadStream stream, int count)
+    {
+        var field = typeof(MessageBusReadStream)
+            .GetField("_receivedCount", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        field.SetValue(stream, count);
+    }
+
+    [Fact]
+    public void Read_ThrowsInvalidOperationException_WhenPacketIsMissing()
+    {
+        // Arrange: stream reports IsComplete() == true (via forced count) but packet 1 is absent.
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 3 }, 2);
+        ForceReceivedCount(stream, 3); // persuade IsComplete() to return true despite the gap
+
+        // Act + Assert
+        var ex = Assert.Throws<InvalidOperationException>(stream.Read);
+        Assert.Contains("missing packet 1", ex.Message);
+    }
+
+    [Fact]
+    public void ReadSequence_ThrowsInvalidOperationException_WhenPacketIsMissing()
+    {
+        // Arrange: same gap scenario as Read test above.
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 1 }, 0);
+        stream.Write(new byte[] { 3 }, 2);
+        ForceReceivedCount(stream, 3);
+
+        // Act + Assert
+        var ex = Assert.Throws<InvalidOperationException>(() => stream.ReadSequence());
+        Assert.Contains("missing packet 1", ex.Message);
+    }
+
+    [Fact]
+    public void Read_HappyPath_ContiguousPackets_ReturnsAllBytes()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 0x01, 0x02 }, 0);
+        stream.Write(new byte[] { 0x03 }, 1);
+        stream.Write(new byte[] { 0x04, 0x05 }, 2);
+
+        Assert.True(stream.IsComplete());
+        Assert.Equal(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 }, stream.Read());
+    }
+
+    [Fact]
+    public void ReadSequence_HappyPath_ContiguousPackets_ReturnsAllBytes()
+    {
+        var stream = new MessageBusReadStream("seq");
+        stream.SetLastPacketNumber(2);
+        stream.Write(new byte[] { 0x01, 0x02 }, 0);
+        stream.Write(new byte[] { 0x03 }, 1);
+        stream.Write(new byte[] { 0x04, 0x05 }, 2);
+
+        Assert.True(stream.IsComplete());
+        Assert.Equal(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 }, stream.ReadSequence().ToArray());
+    }
+}

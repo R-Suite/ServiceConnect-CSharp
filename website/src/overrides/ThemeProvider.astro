@@ -1,0 +1,47 @@
+---
+import { Icon } from '@astrojs/starlight/components';
+---
+
+{/* Forks Starlight's ThemeProvider so first-time visitors land in dark mode
+    instead of inheriting their OS preference. localStorage semantics from
+    Starlight's ThemeSelect: missing key (null) = never visited, stored ''
+    = explicit 'auto', stored 'light'/'dark' = explicit pick. We default
+    only the first case; 'auto' still follows the OS. Inlined to avoid FOUC. */}
+<script is:inline>
+	window.StarlightThemeProvider = (() => {
+		const storedTheme =
+			typeof localStorage !== 'undefined' ? localStorage.getItem('starlight-theme') : null;
+		let theme;
+		if (storedTheme === 'light' || storedTheme === 'dark') {
+			theme = storedTheme;
+		} else if (storedTheme === '') {
+			theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+		} else {
+			theme = 'dark';
+		}
+		document.documentElement.dataset.theme = theme === 'light' ? 'light' : 'dark';
+		return {
+			updatePickers(theme = storedTheme || 'auto') {
+				document.querySelectorAll('starlight-theme-select').forEach((picker) => {
+					const select = picker.querySelector('select');
+					if (select) select.value = theme;
+					/** @type {HTMLTemplateElement | null} */
+					const tmpl = document.querySelector(`#theme-icons`);
+					const newIcon = tmpl && tmpl.content.querySelector('.' + theme);
+					if (newIcon) {
+						const oldIcon = picker.querySelector('svg.label-icon');
+						if (oldIcon) {
+							oldIcon.replaceChildren(...newIcon.cloneNode(true).childNodes);
+						}
+					}
+				});
+			},
+		};
+	})();
+</script>
+
+<template id="theme-icons">
+	<Icon name="sun" class="light" />
+	<Icon name="moon" class="dark" />
+	<Icon name="laptop" class="auto" />
+</template>

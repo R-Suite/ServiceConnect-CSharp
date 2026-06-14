@@ -1,0 +1,110 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using ServiceConnect.Diagnostics;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
+
+namespace ServiceConnect.Client.RabbitMQ;
+
+/// <summary>
+/// Success-path policy for a RabbitMQ client. Publishes a copy of a successfully
+/// processed message to the audit exchange when auditing is enabled. Skips byte-stream
+/// messages to avoid auditing raw stream frames.
+/// </summary>
+internal sealed class MessageAuditPublisher(
+    IQueueConfiguration queueConfiguration,
+    ILogger<MessageAuditPublisher>? logger = null)
+{
+    private readonly IQueueConfiguration _queueConfiguration = queueConfiguration ?? throw new ArgumentNullException(nameof(queueConfiguration));
+    private readonly ILogger<MessageAuditPublisher> _logger = logger ?? NullLogger<MessageAuditPublisher>.Instance;
+
+    public async Task PublishAuditIfEnabledAsync(
+        IChannel channel,
+        BasicDeliverEventArgs args,
+        Dictionary<string, object> headers,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!_queueConfiguration.AuditingEnabled)
+        {
+            return;
+        }
+
+        string? messageType = null;
+        if (headers.TryGetValue(HeaderKeys.MessageType, out var raw))
+        {
+            messageType = HeaderDecoder.Decode(raw);
+        }
+
+        if (string.Equals(messageType, HeaderKeys.ByteStream, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // Field-by-field copy via BasicPropertiesCopier rather than the BasicProperties
+        // copy-constructor: the ctor's "any malformed source field throws" risk would
+        // otherwise propagate out of PublishAuditIfEnabledAsync — caught upstream and
+        // acked silently — silently dropping audits whenever an inbound delivery had a
+        // quirky property. MessageRetryHandler avoids the ctor for the same reason.
+        var props = BasicPropertiesCopier.CreateCopy(args.BasicProperties, HeaderHelpers.ToNullableHeaders(headers));
+        // Audit is best-effort: the message has already been processed successfully, so a
+        // failure to publish the audit copy must not propagate back into the consumer pipeline
+        // (which would nack-with-requeue and re-run the handler against an idempotent surface).
+        // A broker quota or partition affecting only the audit queue would otherwise fail every
+        // successfully-handled delivery.
+        try
+        {
+            // mandatory:true so unroutable audit messages (queue purged, exchange wrong,
+            // binding broken) raise PublishException instead of being silently dropped at
+            // the broker — otherwise the drop counter only fires on transport failures
+            // and topology problems are invisible.
+            await channel.BasicPublishAsync(
+                _queueConfiguration.AuditQueueName,
+                string.Empty,
+                mandatory: true,
+                props,
+                args.Body,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (global::RabbitMQ.Client.Exceptions.PublishException pex)
+        {
+            // mandatory:true unroutable returns surface as PublishException — these mean the
+            // audit topology is broken (binding removed, queue purged), NOT a transient
+            // transport failure. Tag distinctly so operators can alert on misconfigured-audit
+            // separately from broker-down events; otherwise a stale audit binding produces
+            // the same drop-counter shape as a real outage and dashboards lose signal.
+            _logger.LogWarning(pex,
+                "Audit publish unroutable for message {MessageType} — audit topology likely misconfigured; original delivery is acked normally.",
+                messageType ?? "<unknown>");
+            ServiceConnectMeter.AddAuditDrop(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "error.type", "unroutable" },
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Audit publish failed for message {MessageType}; original delivery is acked normally.",
+                messageType ?? "<unknown>");
+            // Audit drops are observable through the messaging.serviceconnect.audit.drops
+            // counter so operators can alert on broker-side audit failures without parsing
+            // logs. PublishException is handled above with a distinct `error.type=unroutable`
+            // tag; the remaining catch covers transport / IO failures. The audit queue is a
+            // single global destination per the spec — no messaging.destination.name tag.
+            ServiceConnectMeter.AddAuditDrop(new TagList
+            {
+                { "messaging.system", "rabbitmq" },
+                { "error.type", ExceptionTypeMapper.Map(ex) },
+            });
+        }
+    }
+}

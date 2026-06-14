@@ -1,0 +1,96 @@
+<Project>
+  <PropertyGroup>
+    <!-- Default target frameworks for every project under src/. The library packages
+         multi-target the previous LTS (net8.0) and the current LTS (net10.0); test
+         projects, the example filter, and anything else with framework-specific
+         requirements override this in their own .csproj.
+
+         Why these two and nothing older: net8.0 is the broadest LTS currently in
+         support, and net10.0 unlocks System.Threading.Lock, the field keyword,
+         and other recent BCL niceties used in the hot paths. We deliberately do
+         NOT target netstandard2.x or net6.0/net7.0 — see the README's "Supported
+         runtimes" section for the rationale and consumer guidance. -->
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Run IDE/style analyzers (IDE0xxx) during compile so .editorconfig violations
+         become warnings, which TreatWarningsAsErrors promotes to build errors. -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- Emit XML documentation files so DocFX can build the API reference. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Shared package metadata. Per-project csprojs override PackageId, AssemblyName,
+       Description, PackageTags, and PackageReadmeFile where they differ. Version is
+       centralized here so a release cuts a single coherent set of packages. -->
+  <PropertyGroup>
+    <Version>7.0.0</Version>
+    <Authors>Jakub Pachansky, Tim Watson</Authors>
+    <Company>ServiceConnect</Company>
+    <Product>ServiceConnect</Product>
+    <Copyright>Copyright 2026 ServiceConnect contributors</Copyright>
+    <PackageProjectUrl>https://github.com/R-Suite/ServiceConnect-CSharp</PackageProjectUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/R-Suite/ServiceConnect-CSharp.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <NeutralLanguage>en-GB</NeutralLanguage>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <!-- SourceLink + symbol packages. ContinuousIntegrationBuild is set only under
+       GitHub Actions so local builds stay fast (deterministic-build mode disables
+       a few MSBuild optimisations). IncludeSymbols + snupkg ships PDBs in a sidecar
+       symbol package rather than inside the main .nupkg; PublishRepositoryUrl +
+       EmbedUntrackedSources make `Step into` work in consumer IDEs. -->
+  <PropertyGroup>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <!-- Pack the repo-root README into every shippable package so the NuGet.org
+       landing page renders the project README. Per-project csprojs that want a
+       package-specific README override PackageReadmeFile and adjust the Include. -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)..\README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <!-- Pin language version per target framework. net8.0 stays on C# 12 so multi-targeting
+       projects do not gain C# 13+ features (Lock object lock semantics, field keyword) under
+       net8.0 — those features are guarded by #if NET9_0_OR_GREATER and must compile cleanly
+       under both targets. net10.0 takes C# 14 (the SDK default) so expression-tree calls into
+       interface methods with optional CancellationToken parameters compile (C# 13 enforces
+       CS0854 here; C# 14 relaxes it). -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net8.0'">
+    <LangVersion>12.0</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <LangVersion>14.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Meziantou.Analyzer" Version="3.0.54">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <!-- SourceLink for GitHub. PrivateAssets=all keeps it out of the package's
+       dependency graph (it's a build-time-only tool). -->
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

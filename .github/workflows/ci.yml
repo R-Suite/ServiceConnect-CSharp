@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a PR / branch cancels the previous in-flight run for the same ref.
+# Saves CI minutes during rapid iteration; the most recent commit is the one that matters.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  # Deterministic CI builds — combined with the SourceLink + ContinuousIntegrationBuild
+  # properties set in src/Directory.Build.props, ensures the produced binaries embed
+  # repo-relative source paths and are byte-reproducible.
+  ContinuousIntegrationBuild: true
+
+jobs:
+  build-and-test:
+    name: Build + unit tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        working-directory: src
+        run: dotnet restore ServiceConnect.slnx
+
+      - name: Build
+        working-directory: src
+        run: dotnet build ServiceConnect.slnx --configuration Release --no-restore
+
+      - name: Unit tests
+        working-directory: src
+        run: dotnet test ServiceConnect.UnitTests/ServiceConnect.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unittests.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results-${{ matrix.os }}
+          path: src/**/TestResults/*.trx
+          if-no-files-found: ignore
+
+  e2e:
+    name: End-to-end tests (Linux)
+    runs-on: ubuntu-latest
+    # Testcontainers spins up RabbitMQ + MongoDB; needs a working Docker daemon.
+    # ubuntu-latest runners have Docker pre-installed, so no setup step is required.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        working-directory: src
+        run: dotnet restore ServiceConnect.slnx
+
+      - name: Build
+        working-directory: src
+        run: dotnet build ServiceConnect.slnx --configuration Release --no-restore
+
+      - name: E2E tests
+        working-directory: src
+        run: dotnet test ServiceConnect.EndToEndTests/ServiceConnect.EndToEndTests.csproj --configuration Release --no-build --logger "trx;LogFileName=e2e.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: src/**/TestResults/*.trx
+          if-no-files-found: ignore
+
+  pack-validate:
+    name: Pack validation (dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Restore
+        working-directory: src
+        run: dotnet restore ServiceConnect.slnx
+
+      - name: Pack
+        working-directory: src
+        run: dotnet pack ServiceConnect.slnx --configuration Release --no-restore --output ../artifacts
+
+      - name: List produced packages
+        run: ls -la artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
+          if-no-files-found: error
+          retention-days: 14

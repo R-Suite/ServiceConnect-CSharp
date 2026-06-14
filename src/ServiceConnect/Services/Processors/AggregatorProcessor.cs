@@ -1,0 +1,534 @@
+using System.Collections.Concurrent;
+using System.Threading;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using ServiceConnect.Interfaces;
+
+namespace ServiceConnect.Services.Processors;
+
+internal sealed class AggregatorProcessor(
+    AggregatorRegistry registry,
+    IConsumeScopeAccessor scopeAccessor,
+    IServiceScopeFactory scopeFactory,
+    ILogger<AggregatorProcessor> logger,
+    IAggregatorPersistor? persistor = null,
+    TimeProvider? timeProvider = null) : IMessageProcessor, IAsyncDisposable
+{
+    private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
+    // ITimer (vs raw Timer) so the per-aggregator flush timer fires off the injected
+    // TimeProvider — FakeTimeProvider.Advance(...) drives the timer in tests without
+    // wall-clock sleeps. StreamProcessor uses the same pattern.
+    private readonly ConcurrentDictionary<string, ITimer> _timers = new(StringComparer.Ordinal);
+    // Single-flight lock for ResetTimer. Concurrent calls for the same aggregator
+    // would otherwise rely on ConcurrentDictionary.AddOrUpdate factory semantics,
+    // whose factory may re-run under contention — losing-factory Timer instances
+    // are then orphaned (already running, never installed, never disposed).
+#if NET9_0_OR_GREATER
+    private readonly System.Threading.Lock _resetTimerLock = new();
+#else
+    private readonly object _resetTimerLock = new();
+#endif
+    // Per-aggregator flush lock. Holding this across the full flush body prevents
+    // the timer-fired path and the batch-size path from double-flushing and
+    // racing on Get/Invoke/Remove.
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _flushLocks = new(StringComparer.Ordinal);
+    private readonly CancellationTokenSource _disposeCts = new();
+    private readonly ConcurrentDictionary<int, Task> _activeFlushes = new();
+    private int _flushId;
+    private int _disposed;
+
+    private static string ExtractIdempotencyKey(IDictionary<string, object> headers)
+    {
+        if (headers.TryGetValue(HeaderKeys.MessageId, out var raw))
+        {
+            var decoded = HeaderDecoder.Decode(raw);
+            if (!string.IsNullOrEmpty(decoded))
+            {
+                return decoded;
+            }
+        }
+        // Producer didn't set a message id (legacy / third-party transport). Falling back
+        // to a fresh GUID disables idempotency for this delivery — the insert always
+        // proceeds — but keeps the contract honoured so downstream code paths don't
+        // branch on null. The retry-redelivery race the key defends against does not
+        // apply when the producer doesn't tag messages with a stable identifier.
+        return Guid.NewGuid().ToString();
+    }
+
+    public async Task<ProcessResult> ProcessAsync(
+        ReadOnlyMemory<byte> messageBytes, Type messageType, object? message,
+        IDictionary<string, object> headers, Envelope envelope,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        if (message == null)
+        {
+            return ProcessResult.NotHandled;
+        }
+
+        if (!registry.TryGet(messageType, out var descriptor))
+        {
+            return ProcessResult.NotHandled;
+        }
+
+        if (persistor == null)
+        {
+            logger.LogWarning("IAggregatorPersistor not registered. Cannot aggregate {MessageType}", messageType.FullName);
+            return ProcessResult.NotHandled;
+        }
+
+        // IAggregatorPersistor.InsertDataAsync requires IHasCorrelationId. All aggregatable
+        // message types must implement it; Message does so automatically. Non-implementers are
+        // rejected here rather than at the persistor boundary so the error surfaces at the
+        // processor level with a clear message.
+        if (message is not IHasCorrelationId withCorrId)
+        {
+            logger.LogWarning(
+                "Message type '{MessageType}' does not implement IHasCorrelationId; cannot aggregate",
+                messageType.FullName);
+            return ProcessResult.NotHandled;
+        }
+
+        // Use the broker MessageId as the idempotency key so a retry-queue redelivery
+        // between Insert and broker ack is suppressed at the persistor. The key is
+        // stable across all retry shapes (per-queue retry, broker connection-storm
+        // retry, handler-throw nack) because the broker republishes the same message
+        // with the same MessageId. Fall back to a fresh GUID if MessageId is missing
+        // (legacy producer or third-party transport): the insert proceeds without
+        // idempotency protection but does not block the dispatch.
+        var idempotencyKey = ExtractIdempotencyKey(headers);
+        await persistor.InsertDataAsync(withCorrId, descriptor.AggregatorName, idempotencyKey, cancellationToken).ConfigureAwait(false);
+
+        // Use CountResolvedAsync so unresolved-only batches don't trigger empty flushes.
+        // CountAsync (total rows) would fire the gate on every message in an unresolved-only
+        // batch — each flush returns no-op (ResolvedMessages.Count == 0) but still acquires
+        // the per-aggregator semaphore and makes a GetSnapshotAsync round-trip.
+        // CountResolvedAsync is the cheap shape on first-party persistors; the interface
+        // default delegates to CountAsync for third-party implementations.
+        var count = await persistor.CountResolvedAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
+        if (descriptor.BatchSize > 0 && count >= descriptor.BatchSize)
+        {
+            // Register in _activeFlushes BEFORE reading _disposeCts.Token. A concurrent
+            // DisposeAsync either (a) takes its drain snapshot before our TryAdd — we
+            // re-check _disposed below and bail with ODE; or (b) sees our entry in the
+            // snapshot and awaits its completion. Either way _disposeCts.Token is only
+            // ever read while DisposeAsync is still awaiting our task.
+            var id = Interlocked.Increment(ref _flushId);
+            var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _activeFlushes.TryAdd(id, tcs.Task);
+            try
+            {
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _disposeCts.Token);
+                await FlushAggregatorAsync(descriptor, scopeAccessor.Current, descriptor.BatchSize > 0 ? descriptor.BatchSize : 1, linkedCts.Token).ConfigureAwait(false);
+                tcs.TrySetResult();
+            }
+            catch (OperationCanceledException ex)
+            {
+                tcs.TrySetCanceled(ex.CancellationToken);
+                throw;
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+                throw;
+            }
+            finally
+            {
+                _activeFlushes.TryRemove(id, out _);
+            }
+        }
+        else if (descriptor.Timeout > TimeSpan.Zero)
+        {
+            ResetTimer(descriptor);
+        }
+
+        return ProcessResult.Handled;
+    }
+
+    private void ResetTimer(AggregatorDescriptor descriptor)
+    {
+        ITimer? previous;
+        ITimer newTimer;
+        lock (_resetTimerLock)
+        {
+            // Re-check _disposed under the same lock that DisposeAsync's timer cleanup
+            // takes. Without this check a ProcessAsync that passed the entry guard at
+            // ProcessAsync line 41 can land here after DisposeAsync cleared _timers and
+            // install a fresh Timer that nobody disposes (bounded leak per aggregator-name).
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                return;
+            }
+
+            _timers.TryGetValue(descriptor.AggregatorName, out previous);
+            newTimer = _timeProvider.CreateTimer(_ => OnTimerFired(descriptor), null, descriptor.Timeout, Timeout.InfiniteTimeSpan);
+            _timers[descriptor.AggregatorName] = newTimer;
+        }
+        previous?.Dispose();
+    }
+
+    private void OnTimerFired(AggregatorDescriptor descriptor)
+    {
+        // Register the TaskCompletionSource in _activeFlushes BEFORE consulting _disposed
+        // so that DisposeAsync's snapshot at _activeFlushes.Values.ToArray() is guaranteed
+        // to either (a) include our entry — DisposeAsync awaits it — or (b) take its snapshot
+        // AFTER we observe _disposed and bail.
+        //
+        // The reverse order (read _disposed, then TryAdd) had a window where DisposeAsync
+        // could set _disposed=1 between our read and the snapshot; the snapshot would miss
+        // our entry; DisposeAsync would dispose _disposeCts; and RunFlushAsync's defensive
+        // catch (ObjectDisposedException) softened the failure to quiet cancellation.
+        var id = Interlocked.Increment(ref _flushId);
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _activeFlushes.TryAdd(id, tcs.Task);
+
+        // Re-check after registration. If DisposeAsync's Exchange(_disposed,1) ran before
+        // our TryAdd, our entry was missed by the drain snapshot — complete the tcs as
+        // cancelled and remove it so we don't leak the registration past dispose.
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            tcs.TrySetCanceled();
+            _activeFlushes.TryRemove(id, out _);
+            return;
+        }
+
+        // Fire and forget from timer callback — log any errors.
+        // Use _disposeCts.Token via the same shutdown-race-tolerant read in RunFlushAsync.
+        _ = RunFlushAsync(id, tcs, descriptor);
+    }
+
+    private async Task RunFlushAsync(int id, TaskCompletionSource tcs, AggregatorDescriptor descriptor)
+    {
+        // OnTimerFired's `_disposed` guard and this method's `_disposeCts.Token` read
+        // aren't atomic: a callback that passed the guard at T1 can still reach here
+        // after DisposeAsync has disposed `_disposeCts`. Wrap the Token read so the
+        // shutdown race surfaces as quiet cancellation instead of a spurious ERROR log.
+        CancellationToken token;
+        try
+        {
+            token = _disposeCts.Token;
+        }
+        catch (ObjectDisposedException)
+        {
+            tcs.TrySetCanceled();
+            _activeFlushes.TryRemove(id, out _);
+            return;
+        }
+
+        try
+        {
+            // Pass null for ambientScope so FlushAggregatorAsync always creates a fresh DI
+            // scope. The Timer captured the dispatcher's ExecutionContext (and therefore
+            // the AsyncLocal-backed IConsumeScopeAccessor) at construction time, so reading
+            // the accessor from this callback would observe the disposed dispatcher scope.
+            // Timer path: flush if any messages are buffered (minThreshold = 1).
+            // The batch-size threshold only applies when ProcessAsync triggers the flush.
+            await FlushAggregatorAsync(descriptor, ambientScope: null, minThreshold: 1, token).ConfigureAwait(false);
+            tcs.TrySetResult();
+        }
+        catch (OperationCanceledException ex)
+        {
+            tcs.TrySetCanceled(ex.CancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error flushing aggregator {AggregatorName} on timeout", descriptor.AggregatorName);
+            tcs.TrySetException(ex);
+        }
+        finally
+        {
+            _activeFlushes.TryRemove(id, out _);
+        }
+    }
+
+    private async Task FlushAggregatorAsync(AggregatorDescriptor descriptor, IServiceProvider? ambientScope, int minThreshold, CancellationToken cancellationToken)
+    {
+        // Fast-fail if already disposed before we touch _flushLocks at all.
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+        SemaphoreSlim flushLock;
+        if (!_flushLocks.TryGetValue(descriptor.AggregatorName, out flushLock!))
+        {
+            // Re-check before allocating — DisposeAsync may have run between TryGetValue
+            // and here. This minimises wasted work in the common post-dispose path.
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+
+            var freshLock = new SemaphoreSlim(1, 1);
+            flushLock = _flushLocks.GetOrAdd(descriptor.AggregatorName, freshLock);
+
+            // If another thread won the GetOrAdd race, freshLock is surplus — dispose it.
+            if (!ReferenceEquals(flushLock, freshLock))
+            {
+                freshLock.Dispose();
+            }
+
+            // Re-check _disposed: DisposeAsync's _flushLocks.Clear() may have run between
+            // TryGetValue and GetOrAdd. Remove and dispose our (possibly just-inserted) lock
+            // so it does not leak past the disposal foreach.
+            if (Volatile.Read(ref _disposed) != 0)
+            {
+                _flushLocks.TryRemove(new KeyValuePair<string, SemaphoreSlim>(descriptor.AggregatorName, flushLock));
+                flushLock.Dispose();
+                throw new ObjectDisposedException(nameof(AggregatorProcessor));
+            }
+        }
+
+        await flushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (_timers.TryRemove(descriptor.AggregatorName, out var activeTimer))
+            {
+                await activeTimer.DisposeAsync().ConfigureAwait(false);
+            }
+
+            if (persistor == null)
+            {
+                return;
+            }
+
+            // Use the snapshot API so we can (a) remove only the specific records we dispatched,
+            // leaving concurrently-inserted messages intact (closes the Get/RemoveAll race), and
+            // (b) leave unresolved-type records in place instead of silently wiping them.
+            var snapshot = await persistor.GetSnapshotAsync(descriptor.AggregatorName, cancellationToken).ConfigureAwait(false);
+            if (snapshot.ResolvedMessages.Count == 0)
+            {
+                if (snapshot.UnresolvedCount > 0)
+                {
+                    logger.LogWarning(
+                        "Aggregator {AggregatorName} has {UnresolvedCount} record(s) with unresolvable types; skipping dispatch until type is available",
+                        descriptor.AggregatorName, snapshot.UnresolvedCount);
+                }
+
+                // The persistor may have leased the unresolved rows during snapshot acquisition
+                // (Mongo's per-snapshot lease stamps LockedBy/LockExpiresAt up front, regardless
+                // of which rows survive the resolved/unresolved partition). Release defensively
+                // so the next flush — when the unresolvable type becomes available, or when a
+                // retry sweeps stale unresolved rows — can re-claim immediately rather than
+                // waiting out the lease TTL. CT.None: cleanup must run even if the dispatch
+                // token has fired.
+                try
+                {
+                    await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx,
+                        "Aggregator {AggregatorName} lease release on empty-resolved snapshot failed; lease-expiry will reclaim.",
+                        descriptor.AggregatorName);
+                }
+                return;
+            }
+
+            // Re-check threshold AFTER GetSnapshotAsync. ProcessAsync gates on CountResolvedAsync
+            // before this method runs, but GetSnapshotAsync competes with peer flushers for the
+            // lease — a peer holding the lease leaves us with only the unclaimed remnants, which
+            // can be below BatchSize. Dispatching a sub-batch breaks the documented batch-size
+            // contract; release the lease and skip so the next flush (when the peer's lease
+            // expires or releases) re-attempts with the full batch.
+            if (snapshot.ResolvedMessages.Count < minThreshold)
+            {
+                try
+                {
+                    await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx,
+                        "Aggregator {AggregatorName} lease release after sub-batch skip failed; lease-expiry will reclaim.",
+                        descriptor.AggregatorName);
+                }
+                return;
+            }
+
+            await DispatchResolvedAsync(descriptor, snapshot, ambientScope, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            flushLock.Release();
+        }
+    }
+
+    // Resolves the aggregator handler, invokes it with the snapshot payload, removes the
+    // snapshot on success, and releases the lease on failure/cancellation. Extracted so
+    // FlushAggregatorAsync stays within the MA0051 method-length limit.
+    private async Task DispatchResolvedAsync(
+        AggregatorDescriptor descriptor,
+        IAggregatorSnapshot snapshot,
+        IServiceProvider? ambientScope,
+        CancellationToken cancellationToken)
+    {
+        // BuildTypedList expects IList<object>; copy the read-only snapshot into a fresh
+        // mutable list. The snapshot itself stays immutable; this is the handler-facing
+        // payload. IReadOnlyList<IHasCorrelationId> is not co-variant to IList<object>,
+        // so an as-cast cannot avoid this allocation.
+        List<object> resolvedList = [.. snapshot.ResolvedMessages];
+        var typedList = descriptor.BuildTypedList(resolvedList);
+
+        // The batch path passes its dispatcher-pushed scope through ambientScope. The timer
+        // path passes null because the Timer captured the dispatcher's ExecutionContext at
+        // construction, so reading the AsyncLocal here would return the now-disposed scope.
+        IServiceScope? localScope = null;
+        var handlerThrew = false;
+        try
+        {
+            var resolverProvider = ambientScope ?? (localScope = scopeFactory.CreateScope()).ServiceProvider;
+
+            var aggregator = resolverProvider.GetService(descriptor.AggregatorBaseType);
+            if (aggregator == null)
+            {
+                return;
+            }
+
+            // Execute first, then remove on success. On handler exception we propagate
+            // without removing so the broker redelivers and the snapshot is re-flushable.
+            // Cancellation also leaves the snapshot in place — by-design for retry on
+            // next admission. The catch below releases the persistor lease so the next
+            // redelivery's GetSnapshotAsync can re-claim immediately; without the
+            // release, the rows sit under the failed session's lease for the full TTL
+            // (5 minutes on the Mongo persistor) and the redelivery sees an empty
+            // snapshot — handler is never re-invoked until the lease expires.
+            try
+            {
+                await descriptor.InvokeExecuteAsync(aggregator, typedList, cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                handlerThrew = true;
+                throw;
+            }
+            // RemoveSnapshotAsync is a best-effort cleanup. The handler has ALREADY committed
+            // its side effects; if the persistor write fails transiently (Mongo blip, network
+            // drop), propagating the exception would NACK the broker → redelivery → the next
+            // flush mints a fresh LeaseSessionId, re-claims the still-present rows, and runs
+            // the handler AGAIN with the same payload — duplicate dispatch on a handler whose
+            // side effects we already committed. Log and swallow; the rows stay under the
+            // current lease until it expires, at which point a peer (or the same worker)
+            // re-claims and re-attempts the remove. In the worst case the broker observes a
+            // duplicate dispatch ONLY after the lease expires, not on every transient blip.
+            try
+            {
+                await persistor!.RemoveSnapshotAsync(descriptor.AggregatorName, snapshot, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Handler succeeded; release the lease eagerly so the redelivery's next
+                // GetSnapshotAsync can re-claim immediately instead of waiting for TTL.
+                // Use CancellationToken.None so the release runs even though dispatch was cancelled.
+                try
+                {
+                    await persistor!.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx,
+                        "Aggregator {AggregatorName} lease release on cancel path failed; lease-expiry will reclaim.",
+                        descriptor.AggregatorName);
+                }
+                throw;
+            }
+            catch (Exception removeEx)
+            {
+                logger.LogWarning(removeEx,
+                    "Aggregator {AggregatorName} RemoveSnapshotAsync failed after successful handler dispatch; rows remain under lease and will be reclaimed when the lease expires. Handler side effects are NOT replayed by NACKing the broker.",
+                    descriptor.AggregatorName);
+                var tags = new System.Diagnostics.TagList
+                {
+                    { "messaging.system", "serviceconnect" },
+                    { "aggregator.name", descriptor.AggregatorName },
+                };
+                ServiceConnect.Diagnostics.ServiceConnectMeter.AddSnapshotRemoveFailedAfterDispatch(tags);
+            }
+
+            if (snapshot.UnresolvedCount > 0)
+            {
+                logger.LogWarning(
+                    "Aggregator {AggregatorName} dispatched {Count} record(s); {UnresolvedCount} unresolved record(s) retained for a later flush",
+                    descriptor.AggregatorName, snapshot.ResolvedMessages.Count, snapshot.UnresolvedCount);
+            }
+        }
+        finally
+        {
+            // Best-effort lease release on handler failure so the redelivery's
+            // GetSnapshotAsync can re-claim immediately. Uses CancellationToken.None
+            // to ensure cleanup runs even if the dispatch token was cancelled. The
+            // ReleaseSnapshotAsync DIM is a no-op for non-leasing persistors.
+            if (handlerThrew && persistor is not null)
+            {
+                try
+                {
+                    await persistor.ReleaseSnapshotAsync(descriptor.AggregatorName, snapshot, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx,
+                        "Aggregator {AggregatorName} lease release after handler failure failed; lease-expiry will reclaim.",
+                        descriptor.AggregatorName);
+                }
+            }
+            localScope?.Dispose();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+        {
+            return;
+        }
+
+        // Signal all in-flight flushes to cancel.
+        await _disposeCts.CancelAsync().ConfigureAwait(false);
+
+        // Await all tracked pending flushes to complete or cancel. A user
+        // Aggregator<T>.ExecuteAsync that throws a non-OCE exception faults the
+        // tracked flush task; if that escapes the foreach the timer / semaphore
+        // cleanup below is skipped and the processor leaks resources past dispose.
+        var pending = _activeFlushes.Values.ToArray();
+        foreach (var task in pending)
+        {
+            try
+            {
+                await task.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected — we just cancelled it.
+            }
+            catch (ObjectDisposedException)
+            {
+                // Semaphore may have been disposed during cancellation.
+            }
+            catch (Exception ex)
+            {
+                // User handler faulted during the in-flight flush. Log and continue
+                // so the rest of the cleanup (timers, semaphores, _disposeCts) still runs.
+                logger.LogError(ex, "In-flight aggregator flush threw during disposal; cleanup continues.");
+            }
+        }
+
+        // Sequence the timer cleanup against ResetTimer via _resetTimerLock so a Timer
+        // installed in the disposal window does not leak past the foreach.
+        lock (_resetTimerLock)
+        {
+            foreach (var kvp in _timers)
+            {
+                kvp.Value.Dispose();
+            }
+
+            _timers.Clear();
+        }
+
+        foreach (var kvp in _flushLocks)
+        {
+            kvp.Value.Dispose();
+        }
+
+        _flushLocks.Clear();
+
+        _disposeCts.Dispose();
+    }
+}

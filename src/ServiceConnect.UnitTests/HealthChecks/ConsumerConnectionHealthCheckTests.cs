@@ -1,0 +1,109 @@
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Moq;
+using ServiceConnect.HealthChecks;
+using ServiceConnect.Interfaces;
+using Xunit;
+
+namespace ServiceConnect.UnitTests.HealthChecks;
+
+public class ConsumerConnectionHealthCheckTests
+{
+    private readonly Mock<IConsumer> _consumer = new();
+
+    private ConsumerConnectionHealthCheck CreateSut() => new(_consumer.Object);
+
+    [Fact]
+    public async Task CheckHealthAsync_ConsumerConnected_ReturnsHealthy()
+    {
+        _consumer.SetupGet(c => c.IsConnected).Returns(true);
+
+        var result = await CreateSut().CheckHealthAsync(new HealthCheckContext());
+
+        Assert.Equal(HealthStatus.Healthy, result.Status);
+        Assert.Contains("open", result.Description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ConsumerNotConnected_ReturnsUnhealthy()
+    {
+        _consumer.SetupGet(c => c.IsConnected).Returns(false);
+
+        var sut = CreateSut();
+        var ctx = new HealthCheckContext
+        {
+            Registration = new HealthCheckRegistration("x", _ => sut, HealthStatus.Unhealthy, null),
+        };
+        var result = await sut.CheckHealthAsync(ctx);
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Contains("closed", result.Description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ConsumerNotConnected_HonoursDegradedFailureStatus()
+    {
+        _consumer.SetupGet(c => c.IsConnected).Returns(false);
+
+        var sut = CreateSut();
+        var ctx = new HealthCheckContext
+        {
+            Registration = new HealthCheckRegistration("x", _ => sut, HealthStatus.Degraded, null),
+        };
+        var result = await sut.CheckHealthAsync(ctx);
+
+        Assert.Equal(HealthStatus.Degraded, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ConsumerNotConnected_NoRegistration_DefaultsToUnhealthy()
+    {
+        _consumer.SetupGet(c => c.IsConnected).Returns(false);
+
+        // HealthCheckContext with null Registration — exercises the
+        // `context.Registration?.FailureStatus ?? HealthStatus.Unhealthy` fallback path.
+        var result = await CreateSut().CheckHealthAsync(new HealthCheckContext());
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ConnectedAndBrokerCancelled_ReturnsUnhealthy()
+    {
+        // IsConnected=true but IsCancelledByBroker=true: the AMQP TCP connection is up
+        // but the consumer registration has been torn down by the broker (queue deleted,
+        // policy expired, mirror promoted). The check must report Unhealthy so that
+        // readiness probes remove the pod from the load balancer.
+        _consumer.SetupGet(c => c.IsConnected).Returns(true);
+        _consumer.SetupGet(c => c.IsCancelledByBroker).Returns(true);
+
+        var sut = CreateSut();
+        var ctx = new HealthCheckContext
+        {
+            Registration = new HealthCheckRegistration("x", _ => sut, HealthStatus.Unhealthy, null),
+        };
+        var result = await sut.CheckHealthAsync(ctx);
+
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Contains("broker cancelled", result.Description, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_ConnectedAndBrokerCancelled_HonoursDegradedFailureStatus()
+    {
+        // IsCancelledByBroker=true respects the FailureStatus override on the registration,
+        // the same way the disconnect branch does. A Degraded override lets operators
+        // distinguish a cancelled consumer (degraded service) from a hard failure.
+        _consumer.SetupGet(c => c.IsConnected).Returns(true);
+        _consumer.SetupGet(c => c.IsCancelledByBroker).Returns(true);
+
+        var sut = CreateSut();
+        var ctx = new HealthCheckContext
+        {
+            Registration = new HealthCheckRegistration("x", _ => sut, HealthStatus.Degraded, null),
+        };
+        var result = await sut.CheckHealthAsync(ctx);
+
+        Assert.Equal(HealthStatus.Degraded, result.Status);
+        Assert.Contains("broker cancelled", result.Description, StringComparison.OrdinalIgnoreCase);
+    }
+}

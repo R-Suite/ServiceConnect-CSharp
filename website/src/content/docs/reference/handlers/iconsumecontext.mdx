@@ -1,0 +1,143 @@
+---
+title: IConsumeContext
+description: The per-message ambient context supplied to handlers — headers, correlation id, reply helper, bus handle.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IConsumeContext` is the per-message ambient context the dispatch pipeline injects into a handler. It exposes the bus handle, the raw transport headers, the message id and correlation id, a cancellation token tied to the consumer loop, and a convenience `ReplyAsync` that sets the correct headers for request/reply correlation. Handlers reach for it when they need to inspect headers, reply to a request, or publish a follow-up message on the same bus.
+
+See [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) for the conceptual tour.
+
+## Reference
+
+### `Bus`
+
+```csharp
+IBus Bus { get; }
+```
+
+Gets the bus instance on which the message arrived. Use it to publish or send follow-up messages from inside a handler without taking an extra constructor dependency.
+
+---
+
+### `Headers`
+
+```csharp
+IReadOnlyDictionary<string, object> Headers { get; }
+```
+
+Gets a read-only view of the transport headers as they arrived. Values are typed as `object` because transports such as RabbitMQ expose bytes, strings, and numeric values through a single untyped channel.
+
+**Remarks.** Handlers must not mutate headers — the transport layer retains the mutable copy. If you need a header's value as a specific type, defensively cast or decode (a byte array may need to be converted to a string).
+
+---
+
+### `MessageId`
+
+```csharp
+string? MessageId { get; }
+```
+
+Gets the message id header, when the producer or transport set one. Useful as a deduplication key in idempotent handlers.
+
+---
+
+### `CorrelationId`
+
+```csharp
+Guid CorrelationId { get; }
+```
+
+Gets the correlation id carried by the incoming message. The same value threads through every follow-up message produced during the handler, which is what makes distributed traces readable.
+
+---
+
+### `CancellationToken`
+
+```csharp
+CancellationToken CancellationToken { get; }
+```
+
+Gets a cancellation token tied to the consumer loop. It fires when consumption is stopped — propagate it through every async call the handler makes so shutdown is prompt.
+
+---
+
+### `ReplyAsync<TReply>`
+
+```csharp
+Task ReplyAsync<TReply>(
+    TReply message,
+    ReplyOptions? options = null,
+    CancellationToken cancellationToken = default)
+    where TReply : Message;
+```
+
+Sends `message` back to the requester as a reply. The helper sets the `ResponseMessageId` header so the originating `SendRequestAsync` call is correlated with this reply.
+
+**Parameters**
+- `message` — the reply payload; must derive from `Message`.
+- `options` — optional `ReplyOptions` carrying additional headers on `options.Headers`.
+- `cancellationToken` — cancels the send before the broker acknowledges.
+
+**Remarks.** The method only correlates cleanly when it is called from inside the handler that is consuming the originating request — the headers on the incoming message supply the `ResponseMessageId` value.
+
+## Usage
+
+### Reading a header and replying to a request
+
+```csharp
+public sealed class QuoteShippingHandler : IMessageHandler<QuoteShipping>
+{
+    private readonly IShippingRateEngine _rates;
+
+    public QuoteShippingHandler(IShippingRateEngine rates) => _rates = rates;
+
+    public async Task HandleAsync(QuoteShipping message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        // Priority is optional on the request; default to "standard" when absent.
+        var priority = context.Headers.TryGetValue("ShippingPriority", out var raw)
+            ? DecodeString(raw)
+            : "standard";
+
+        var quote = await _rates.QuoteAsync(
+            message.Destination,
+            priority,
+            context.CancellationToken);
+
+        await context.ReplyAsync(new ShippingQuote
+        {
+            OrderId = message.OrderId,
+            Cost = quote.Cost,
+            CarrierCode = quote.CarrierCode,
+        }, cancellationToken: context.CancellationToken);
+    }
+
+    private static string DecodeString(object value) =>
+        value switch
+        {
+            string s => s,
+            byte[] b => System.Text.Encoding.UTF8.GetString(b),
+            _ => value.ToString() ?? string.Empty,
+        };
+}
+```
+
+A request handler typically reads a pinch of metadata from `Headers`, does the work, and replies through `ctx.ReplyAsync`. Because `ReplyAsync` reads the incoming message id out of `Headers`, the requesting `SendRequestAsync<QuoteShipping, ShippingQuote>` call resumes with the correct reply automatically — no manual correlation required.
+
+## Per-instance scope isolation
+
+The internal `ConsumeScopeAccessor` that tracks the current message scope is **per-`Bus`-instance** — it is not a process-wide static. Two `Bus` instances running in the same AppDomain do not share scope state; each consumer loop writes only to its own accessor. This means:
+
+- A handler running on bus A cannot accidentally read the current message context set by bus B's consumer.  
+- A handler running on bus B is unaffected by concurrent dispatches on bus A.
+
+This matters in test scenarios that construct multiple `Bus` instances side-by-side in the same test process, and in multi-tenant application hosts that configure more than one bus registration. If your handler reaches for ambient context via the injected `IConsumeContext` property, it always receives the context for the exact bus that dispatched it.
+
+## See also
+
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — concept
+- [`Envelope`](../../messages/envelope/) — related reference
+- [`Message`](../../messages/message/) — related reference

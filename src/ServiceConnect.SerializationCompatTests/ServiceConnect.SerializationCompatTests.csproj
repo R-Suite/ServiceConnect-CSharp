@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Tests stay net10.0-only. Multi-targeting requires editing every Moq Setup
+         expression that omits the optional CancellationToken (CS0854 is enforced
+         under C# 12; relaxed under C# 14) — ongoing maintenance overhead with no
+         real correctness gain. The libraries under test are multi-targeted to
+         net8.0;net10.0, so consumer scenarios exercise the older TFM at runtime. -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Test projects don't ship API docs. Override the solution-wide
+         GenerateDocumentationFile=true so CS1591 (missing XML comment)
+         stops being raised on test classes/methods (where names are docs
+         enough). Without this, every test build needs -p:NoWarn=CS1591. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
+    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test infrastructure -->
+    <PackageReference Include="coverlet.collector" Version="6.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+
+    <!-- Newtonsoft is referenced only here, scoped to wire-compat verification.
+         Production packages have no Newtonsoft dependency. -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+</Project>

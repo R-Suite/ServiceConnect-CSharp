@@ -1,0 +1,59 @@
+services:
+  rabbit1:
+    image: rabbitmq:3.13-management
+    hostname: rabbit1
+    environment:
+      RABBITMQ_ERLANG_COOKIE: 'stress-harness-cluster'
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+  rabbit2:
+    image: rabbitmq:3.13-management
+    hostname: rabbit2
+    environment:
+      RABBITMQ_ERLANG_COOKIE: 'stress-harness-cluster'
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    depends_on: [rabbit1]
+    command: >
+      bash -c "
+      rabbitmq-server &
+      until rabbitmqctl status >/dev/null 2>&1; do sleep 1; done;
+      rabbitmqctl stop_app;
+      rabbitmqctl reset;
+      rabbitmqctl join_cluster rabbit@rabbit1;
+      rabbitmqctl start_app;
+      wait"
+  rabbit3:
+    image: rabbitmq:3.13-management
+    hostname: rabbit3
+    environment:
+      RABBITMQ_ERLANG_COOKIE: 'stress-harness-cluster'
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    depends_on: [rabbit1, rabbit2]
+    command: >
+      bash -c "
+      rabbitmq-server &
+      until rabbitmqctl status >/dev/null 2>&1; do sleep 1; done;
+      rabbitmqctl stop_app;
+      rabbitmqctl reset;
+      rabbitmqctl join_cluster rabbit@rabbit1;
+      rabbitmqctl start_app;
+      wait"
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10

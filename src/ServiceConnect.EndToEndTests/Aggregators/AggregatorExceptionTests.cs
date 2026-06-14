@@ -1,0 +1,120 @@
+using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using RabbitMQ.Client;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
+using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.EndToEndTests.Helpers;
+using ServiceConnect.EndToEndTests.Messages;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Persistence.InMemory;
+using Xunit;
+
+namespace ServiceConnect.EndToEndTests;
+
+[Collection(nameof(MessagingCollection))]
+public class AggregatorExceptionTests(MessagingFixture fixture)
+{
+    private readonly MessagingFixture _fixture = fixture;
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task Aggregator_ExecuteThrows_MessageSentToErrorQueue()
+    {
+        // Arrange
+        var queueName = _fixture.GetUniqueQueueName("agg-exception");
+        var errorQueueName = _fixture.GetUniqueQueueName("agg-exception-eq");
+        const int maxRetries = 1;
+        const int retryDelay = 1000;
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new()
+            {
+                HandlerType = typeof(ThrowingAggregator),
+                MessageType = typeof(TestMessage)
+            }
+        };
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
+        services.AddTransient<Aggregator<TestMessage>, ThrowingAggregator>();
+
+        services.AddServiceConnect(builder =>
+        {
+            builder.UseRabbitMQ(t =>
+            {
+                t.Host = _fixture.RabbitMqHostname;
+                t.Username = _fixture.RabbitMqUsername;
+                t.Password = _fixture.RabbitMqPassword;
+                t.MaxRetries = maxRetries;
+                t.RetryDelay = retryDelay;
+                t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3);
+                t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
+            });
+            builder.ConfigureQueues(q =>
+            {
+                q.QueueName = queueName;
+                q.ErrorQueueName = errorQueueName;
+            });
+            builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
+            builder.UseInMemoryPersistence();
+        });
+
+        var provider = services.BuildServiceProvider();
+        var bus = provider.GetRequiredService<IBus>();
+
+        await bus.StartConsumingAsync();
+
+
+        try
+        {
+            // Act: send one message — BatchSize=1 triggers Execute immediately
+            var msg = new TestMessage(Guid.NewGuid()) { Content = "agg-exception-trigger" };
+            await bus.PublishAsync(msg);
+
+            // Poll error queue: wait long enough for retries + buffer
+            var factory = new ConnectionFactory
+            {
+                HostName = _fixture.RabbitMqHostname,
+                Port = _fixture.RabbitMqPort,
+                UserName = _fixture.RabbitMqUsername,
+                Password = _fixture.RabbitMqPassword
+            };
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
+
+            var errorMsg = await TestPolling.WaitForAsync(
+                async () => await channel.BasicGetAsync(errorQueueName, autoAck: true),
+                timeout: TimeSpan.FromSeconds(30));
+
+            // Assert: message landed in error queue
+            Assert.NotNull(errorMsg);
+
+            // Verify Exception header contains the thrown message
+            var headers = errorMsg.BasicProperties.Headers!;
+            Assert.True(headers.ContainsKey("Exception"));
+            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]!);
+            Assert.Contains("Aggregator Execute failed", exceptionJson);
+        }
+        finally
+        {
+            await bus.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
+        }
+    }
+}
+
+file class ThrowingAggregator : Aggregator<TestMessage>
+{
+    public override int BatchSize() => 1;
+    public override TimeSpan Timeout() => TimeSpan.FromSeconds(30);
+    public override Task ExecuteAsync(IReadOnlyList<TestMessage> messages, CancellationToken cancellationToken = default) =>
+        Task.FromException(new InvalidOperationException("Aggregator Execute failed"));
+}

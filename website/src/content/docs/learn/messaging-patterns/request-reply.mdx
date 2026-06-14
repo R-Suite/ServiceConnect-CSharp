@@ -1,0 +1,161 @@
+---
+title: Request/Reply
+description: Send a message and await a response — point-to-point, asynchronous on the wire, synchronous at the call site.
+---
+
+**Request/Reply** is the pattern for "I need an answer." You send a message, another service handles it and replies, and your `await` returns the response when it arrives. Asynchronous over the network, synchronous in your code.
+
+It is still point-to-point — one request, one responder — but unlike plain [Send](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/), the caller blocks on the reply rather than walking away.
+
+## When to use it
+
+- You need a value back — a quote, a status, a lookup result.
+- The caller cannot make progress without the response.
+- One service owns the answer. Fan-out to multiple responders is [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/), not this pattern.
+
+Rule of thumb: if you'd reach for a synchronous HTTP call, you probably want request/reply. It carries the same shape — caller waits for callee — but runs over the message bus, which gives you retries, timeouts, and the same correlation-id story as the rest of your messaging.
+
+## The contract
+
+Two message types — the request and the reply:
+
+```csharp
+// Contracts/Quote.cs
+using ServiceConnect.Interfaces;
+
+public sealed class QuoteRequest(Guid correlationId) : Message(correlationId)
+{
+    public string ProductCode { get; init; } = string.Empty;
+}
+
+public sealed class QuoteResponse(Guid correlationId) : Message(correlationId)
+{
+    public decimal Price { get; init; }
+}
+```
+
+Both derive from `Message`. The correlation id on the reply carries through from the request — that's how ServiceConnect matches an incoming reply to the pending `await` on the requester.
+
+## The requester
+
+Two things are different from plain `SendAsync`:
+
+1. **The requester must be consuming.** Replies land on the requester's queue, so the bus has to be started before the request goes out.
+2. **You call `SendRequestAsync<TRequest, TReply>`** and `await` the reply.
+
+```csharp
+// Requester/Program.cs
+using Microsoft.Extensions.DependencyInjection;
+using QuoteDemo.Contracts;
+using ServiceConnect;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
+
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t =>
+    {
+        t.Host = "localhost";
+        t.Username = "guest";
+        t.Password = "guest";
+    });
+    builder.ConfigureQueues(q => q.QueueName = "quotes-requester");
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+await bus.StartConsumingAsync();           // required: replies come back on our queue
+
+var response = await bus.SendRequestAsync<QuoteRequest, QuoteResponse>(
+    new QuoteRequest(Guid.NewGuid()) { ProductCode = "widget" },
+    new RequestOptions { EndPoint = "quotes-responder", Timeout = 30_000 });
+
+Console.WriteLine($"Got price {response.Price}");
+```
+
+`RequestOptions.Timeout` is in **milliseconds** and defaults to 10,000. When the timeout elapses without a reply, `SendRequestAsync` throws — a request without a bounded wait would leak state forever, so ServiceConnect does not let you opt out.
+
+## The responder
+
+The responder is a normal message handler with one extra rule: reply via `IConsumeContext.ReplyAsync`, not via a fresh `SendAsync`.
+
+```csharp
+// Responder/QuoteRequestHandler.cs
+using QuoteDemo.Contracts;
+using ServiceConnect.Interfaces;
+
+public sealed class QuoteRequestHandler : IMessageHandler<QuoteRequest>
+{
+    public async Task HandleAsync(QuoteRequest message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        var price = PriceFor(message.ProductCode);
+        await context.ReplyAsync(new QuoteResponse(message.CorrelationId)
+        {
+            Price = price,
+        });
+    }
+
+    private static decimal PriceFor(string code) => code switch
+    {
+        "widget" => 42.50m,
+        _        => 0m,
+    };
+}
+```
+
+`ReplyAsync` sets a `ResponseMessageId` header that ServiceConnect uses to correlate the reply back to the caller's pending `await`. A plain `Bus.SendAsync` back to the requester's queue **will not** resolve the outstanding request — it would arrive, land in the queue, and go nowhere. Always use `ReplyAsync` when replying to a request.
+
+The responder's bootstrap is structurally identical to any other consumer — register the handler, name the queue, call `StartConsumingAsync`. See [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) for the full shape.
+
+## Timeouts, not retries
+
+Request/reply has **timeout semantics**, not retry semantics. If the responder is slow or unreachable, the caller eventually sees a timeout exception; the request itself is not automatically re-sent. This is deliberate — a request is usually a user-facing operation where the caller wants to know quickly that something is wrong, rather than wait another 30 seconds for a retry.
+
+If you need resilient at-least-once delivery with background retries, a plain `SendAsync` + an event-based reply path is the right shape, not a blocking request/reply.
+
+The request methods raise `RequestSendCancelledException` (inheriting from `OperationCanceledException`) when the outbound send pipeline cancels before the request reaches the broker — distinct from a timeout (`RequestTimeoutException`) and from caller-token cancellation (`OperationCanceledException`). It applies to `SendRequestAsync`, `SendRequestMultiAsync`, and `PublishRequestAsync`.
+
+## Correlation-id flow
+
+ServiceConnect wires the correlation id through for you:
+
+- The request carries a correlation id you generate (or that your handler inherited from an upstream message).
+- The responder's reply uses `message.CorrelationId` — the id from the request.
+- Any logging, tracing, or process-manager state tied to that id can now follow the conversation end-to-end.
+
+If your responder needs to publish downstream events as side effects, pass `message.CorrelationId` through to those events too. That is how a web of related messages stays tied to a single user action.
+
+## Configured destinations
+
+Like [Send](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/#configured-destinations), request/reply can omit `EndPoint` if you have mapped the request type to a queue at startup:
+
+```csharp
+builder.ConfigureQueues(q =>
+{
+    q.QueueName = "quotes-requester";
+    q.AddQueueMapping(typeof(QuoteRequest), "quotes-responder");
+});
+
+// Later:
+var response = await bus.SendRequestAsync<QuoteRequest, QuoteResponse>(
+    new QuoteRequest(Guid.NewGuid()) { ProductCode = "widget" },
+    new RequestOptions { Timeout = 30_000 });
+```
+
+Inline `RequestOptions.EndPoint` still overrides the mapping per call. As with Send, if no mapping and no endpoint exists, the call fails — ServiceConnect does not guess.
+
+## Reference
+
+- [`IBus.SendRequestAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#sendrequestasynctrequest-treply) — single-reply request
+- [`IBus.SendRequestMultiAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#sendrequestmultiasynctrequest-treply) — multi-reply request
+- [Message options](/ServiceConnect-CSharp/reference/messages/options/) — `RequestOptions` for timeouts and expected replies
+
+## What comes next
+
+- [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/) — request/reply with several responders and a bounded set of replies.
+- [Point-to-Point](/ServiceConnect-CSharp/learn/messaging-patterns/point-to-point/) — for when you don't need an answer.
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — the `Context.ReplyAsync` method in context.

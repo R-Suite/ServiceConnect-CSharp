@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>ServiceConnect.Persistence.InMemory</AssemblyName>
+    <PackageId>ServiceConnect.Persistence.InMemory</PackageId>
+    <RootNamespace>ServiceConnect.Persistence.InMemory</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Title>ServiceConnect.Persistence.InMemory</Title>
+    <Description>In-memory process manager, aggregator and timeout persistence for ServiceConnect. Intended for development and test scenarios; data does not survive process restart.</Description>
+    <PackageTags>ServiceConnect;Persistence;InMemory;MessageBus;Messaging;Message;Bus;Service</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ServiceConnect.UnitTests</_Parameter1>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>ServiceConnect.EndToEndTests</_Parameter1>
+    </AssemblyAttribute>
+    <!-- Moq (Castle DynamicProxy) needs visibility into internal types to construct
+         proxies for the internal cache and persistor types. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>DynamicProxyGenAssembly2</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
+    <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

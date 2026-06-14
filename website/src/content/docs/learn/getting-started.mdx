@@ -1,0 +1,243 @@
+---
+title: Getting Started
+description: Install ServiceConnect, start RabbitMQ, and send your first message between two .NET services.
+---
+
+This guide walks you through building a minimal distributed system with ServiceConnect: a **sender** that submits work and a **consumer** that processes it. You will install the NuGet packages, start RabbitMQ locally with Docker, and run two console applications that talk to each other over a queue.
+
+When you finish, you will have a working message flow you can extend, and enough vocabulary to read the rest of the Learn track.
+
+## Prerequisites
+
+- **.NET SDK 8.0 or 10.0**. The library packages multi-target `net8.0` (previous LTS) and `net10.0` (current LTS); use whichever SDK matches your application's target. Older runtimes (`netstandard2.x`, `net6.0`, `net7.0`) are not supported — see the [Releases](/ServiceConnect-CSharp/releases/) page for the rationale and migration guidance.
+- **Docker** (or a local RabbitMQ 3.7+ install). Docker is easier — the command below starts a throwaway broker in 5 seconds.
+
+## Start RabbitMQ
+
+ServiceConnect speaks AMQP 0.9.1 against RabbitMQ. Start a broker with the management UI enabled:
+
+```bash
+docker run --rm -d \
+  --name rabbitmq \
+  -p 5672:5672 \
+  -p 15672:15672 \
+  rabbitmq:3-management
+```
+
+The broker is ready when you can open [http://localhost:15672](http://localhost:15672) (login: `guest` / `guest`).
+
+## Create the projects
+
+We'll build three projects in a single solution:
+
+| Project | Purpose |
+|---|---|
+| `GettingStarted.Contracts` | Shared message types referenced by both services. |
+| `GettingStarted.Sender` | Sends a message and exits. |
+| `GettingStarted.Consumer` | Starts the bus and handles incoming messages. |
+
+Create the solution and projects:
+
+```bash
+mkdir GettingStarted && cd GettingStarted
+dotnet new sln
+dotnet new classlib -n GettingStarted.Contracts
+dotnet new console   -n GettingStarted.Sender
+dotnet new console   -n GettingStarted.Consumer
+dotnet sln add GettingStarted.Contracts GettingStarted.Sender GettingStarted.Consumer
+dotnet add GettingStarted.Sender   reference GettingStarted.Contracts
+dotnet add GettingStarted.Consumer reference GettingStarted.Contracts
+```
+
+Add the ServiceConnect packages to both console apps:
+
+```bash
+dotnet add GettingStarted.Sender   package ServiceConnect
+dotnet add GettingStarted.Sender   package ServiceConnect.Client.RabbitMQ
+dotnet add GettingStarted.Consumer package ServiceConnect
+dotnet add GettingStarted.Consumer package ServiceConnect.Client.RabbitMQ
+```
+
+## Define a message
+
+Messages are the **contracts** exchanged between services. Every ServiceConnect message derives from the `Message` base class, which carries a correlation id used to link related messages across the system.
+
+In `GettingStarted.Contracts`, replace the default `Class1.cs` with `WorkSubmitted.cs`:
+
+```csharp
+// GettingStarted.Contracts/WorkSubmitted.cs
+using ServiceConnect.Interfaces;
+
+namespace GettingStarted.Contracts;
+
+public sealed class WorkSubmitted(Guid correlationId) : Message(correlationId)
+{
+    public string WorkId { get; init; } = string.Empty;
+}
+```
+
+`Contracts` needs the ServiceConnect interfaces to reference `Message`:
+
+```bash
+dotnet add GettingStarted.Contracts package ServiceConnect.Interfaces
+```
+
+Keep message types **simple DTOs** — public properties, no behaviour. See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the full contract design guidance.
+
+## Write the sender
+
+The sender builds a `ServiceCollection`, registers ServiceConnect pointing at RabbitMQ, resolves `IBus`, and calls `SendAsync`.
+
+```csharp
+// GettingStarted.Sender/Program.cs
+using GettingStarted.Contracts;
+using Microsoft.Extensions.DependencyInjection;
+using ServiceConnect;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
+
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "localhost";
+        transport.Username = "guest";
+        transport.Password = "guest";
+        transport.SslEnabled = false; // TLS is on by default; set false against the plaintext local broker only.
+    });
+    builder.ConfigureQueues(queues => queues.QueueName = "getting-started-sender");
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+await bus.SendAsync(
+    new WorkSubmitted(Guid.NewGuid()) { WorkId = "work-001" },
+    new SendOptions { EndPoint = "getting-started-consumer" });
+
+Console.WriteLine("Sent work-001");
+```
+
+Two things to notice:
+
+- **The sender has its own queue name** (`getting-started-sender`). Even a service that only sends needs a queue — that is where replies, errors, and audit copies land.
+- **`SendOptions.EndPoint`** names the *destination* queue. ServiceConnect does not guess routing; you tell it where a message goes, or you configure a queue mapping in advance (see [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/)).
+
+## Write the consumer
+
+The consumer registers a handler for `WorkSubmitted` and starts the bus.
+
+First, the handler:
+
+```csharp
+// GettingStarted.Consumer/WorkSubmittedHandler.cs
+using GettingStarted.Contracts;
+using ServiceConnect.Interfaces;
+
+namespace GettingStarted.Consumer;
+
+public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
+{
+    public Task HandleAsync(WorkSubmitted message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"Processed {message.WorkId}");
+        return Task.CompletedTask;
+    }
+}
+```
+
+Then the bootstrap:
+
+```csharp
+// GettingStarted.Consumer/Program.cs
+using GettingStarted.Consumer;
+using GettingStarted.Contracts;
+using Microsoft.Extensions.DependencyInjection;
+using ServiceConnect;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
+using ServiceConnect.Interfaces;
+
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(WorkSubmittedHandler), MessageType = typeof(WorkSubmitted) }
+});
+// Scanning is disabled below, so AddServiceConnect does not register handler types itself.
+// Register the handler under its IMessageHandler<T> interface so the dispatcher can resolve it.
+services.AddTransient<IMessageHandler<WorkSubmitted>, WorkSubmittedHandler>();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport =>
+    {
+        transport.Host = "localhost";
+        transport.Username = "guest";
+        transport.Password = "guest";
+        transport.SslEnabled = false; // TLS is on by default; set false against the plaintext local broker only.
+    });
+    builder.ConfigureQueues(queues => queues.QueueName = "getting-started-consumer");
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+await bus.StartConsumingAsync();
+Console.WriteLine("Consumer ready. Ctrl-C to exit.");
+await Task.Delay(Timeout.InfiniteTimeSpan);
+```
+
+We register the handler explicitly in two parts — the `HandlerReference` list maps each message type to its handler, and the `AddTransient<IMessageHandler<WorkSubmitted>, …>` registration makes the handler resolvable from DI — then disable `ScanForMessageHandlers`. The scanner does both steps automatically for full applications; doing it by hand here shows exactly what ServiceConnect needs to know.
+
+## Run it
+
+Open two terminals in the `GettingStarted` directory.
+
+**Terminal 1 — start the consumer:**
+
+```bash
+dotnet run --project GettingStarted.Consumer
+```
+
+You should see:
+
+```
+Consumer ready. Ctrl-C to exit.
+```
+
+**Terminal 2 — send one message:**
+
+```bash
+dotnet run --project GettingStarted.Sender
+```
+
+The sender prints `Sent work-001` and exits. In the consumer terminal you should now see:
+
+```
+Processed work-001
+```
+
+That message travelled from the sender process, through RabbitMQ, into the consumer process, and into your handler. Stop the consumer with Ctrl-C.
+
+## What just happened
+
+1. **The consumer declared a queue** named `getting-started-consumer` on RabbitMQ when the bus started consuming.
+2. **The sender produced a message** of type `WorkSubmitted` and, because `SendOptions.EndPoint` was set, routed it directly to `getting-started-consumer`.
+3. **RabbitMQ delivered the message** to the consumer's queue.
+4. **ServiceConnect deserialised the message**, matched it to `WorkSubmittedHandler` via the handler registry, and invoked `HandleAsync`.
+
+Each step maps to a Core Concept page you can read next.
+
+## Where to go next
+
+- [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) — what `IBus` is and how it fits into the host lifecycle.
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — how to design contracts that travel cleanly.
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — how incoming messages reach your code.
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — queue names, routing, and how Send and Publish choose a destination.
+
+Or skip ahead to [Messaging Patterns](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) to see what else the bus can do.

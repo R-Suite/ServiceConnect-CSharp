@@ -18,6 +18,7 @@ bld/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
+.vscode/
 
 # MSTest test Results
 [Tt]est[Rr]esult*/
@@ -175,3 +176,30 @@ UpgradeLog*.htm
 
 # Microsoft Fakes
 FakesAssemblies/
+.gitnexus
+.worktrees/
+
+# Claude Code settings
+AGENTS.md
+CLAUDE.md
+.claude/
+
+# Documentation site (Astro/Starlight)
+website/dist/
+website/.astro/
+
+# Brainstorming companion artifacts
+.superpowers/
+
+# Test runner output
+**/TestResults/
+*.trx
+
+# Stress harness report output (regenerated on every run)
+out/
+**/out/
+
+# Working specs / plans authored during agent sessions (committed deliberately,
+# not auto-staged from the working tree). Anchored to the repo root so the rule
+# doesn't accidentally match website/src/content/docs/ and trap new doc pages.
+/docs/

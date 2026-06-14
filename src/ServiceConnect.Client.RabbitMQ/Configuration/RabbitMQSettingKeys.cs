@@ -1,0 +1,110 @@
+namespace ServiceConnect.Client.RabbitMQ;
+
+/// <summary>
+/// Defines RabbitMQ-specific keys used in <c>ITransportConfiguration.ClientSettings</c>.
+/// </summary>
+public static class RabbitMQSettingKeys
+{
+    /// <summary>RabbitMQ TCP port.</summary>
+    public const string Port = "Port";
+
+    /// <summary>Whether declared queues should be durable.</summary>
+    public const string Durable = "Durable";
+
+    /// <summary>Whether declared queues should be exclusive.</summary>
+    public const string Exclusive = "Exclusive";
+
+    /// <summary>Whether declared queues should be auto-deleted.</summary>
+    public const string AutoDelete = "AutoDelete";
+
+    /// <summary>Additional arguments for the primary queue declaration.</summary>
+    public const string Arguments = "Arguments";
+
+    /// <summary>Additional arguments for retry queue declarations.</summary>
+    public const string RetryQueueArguments = "RetryQueueArguments";
+
+    /// <summary>Additional arguments for utility queue declarations such as audit and error queues.</summary>
+    public const string UtilityQueueArguments = "UtilityQueueArguments";
+
+    /// <summary>Requested prefetch count for consumers.</summary>
+    public const string PrefetchCount = "PrefetchCount";
+
+    /// <summary>Whether consumer prefetch configuration should be disabled.</summary>
+    public const string DisablePrefetch = "DisablePrefetch";
+    /// <summary>Maximum message body size, in bytes.</summary>
+    public const string MessageSize = "MessageSize";
+
+    /// <summary>Whether publisher acknowledgements are enabled for outbound publishes.</summary>
+    public const string PublisherAcknowledgements = "PublisherAcknowledgements";
+    /// <summary>Publish-retry attempt count.</summary>
+    public const string RetryCount = "RetryCount";
+    /// <summary>
+    /// Delay between publish retries, in SECONDS.
+    /// Distinct from <see cref="Interfaces.Configuration.ITransportConfiguration.RetryDelay"/>,
+    /// which controls the dead-letter message-level retry delay in MILLISECONDS.
+    /// </summary>
+    public const string RetrySeconds = "RetrySeconds";
+
+    /// <summary>
+    /// Whether AMQP heartbeats are enabled for the connection. Defaults to <see langword="true"/>.
+    /// <para>
+    /// <b>Warning — disabling AMQP heartbeats removes broker-side dead-peer detection.</b> A crashed
+    /// or firewall-isolated client is then only detected via TCP keepalive (Linux default ~2 hours).
+    /// The broker holds channel state for stale connections for hours; the client never observes
+    /// <c>ConnectionShutdownAsync</c> because nothing probes the link. Production deployments should
+    /// leave this <see langword="true"/> and tune <see cref="HeartbeatTime"/> instead.
+    /// </para>
+    /// </summary>
+    public const string HeartbeatEnabled = "HeartbeatEnabled";
+    /// <summary>Heartbeat interval, in seconds.</summary>
+    public const string HeartbeatTime = "HeartbeatTime";
+
+    /// <summary>
+    /// Maximum time to wait for a broker acknowledgement when publishing under publisher confirms.
+    /// Accepts a <see cref="System.TimeSpan"/>; defaults to 30 seconds.
+    /// </summary>
+    public const string PublishTimeout = "PublishTimeout";
+
+    /// <summary>
+    /// Maximum outstanding publisher-confirms per producer channel before publishes back-pressure.
+    /// Without this cap, a stalled broker can let the RabbitMQ.Client tracker grow unboundedly.
+    /// Tunable via <c>SetClientSetting("MaxOutstandingPublishConfirms", N)</c>; defaults to 256.
+    /// </summary>
+    public const string MaxOutstandingPublishConfirms = nameof(MaxOutstandingPublishConfirms);
+
+    /// <summary>
+    /// Interval RabbitMQ.Client waits between automatic-recovery attempts after a connection
+    /// drop. Accepts a <see cref="System.TimeSpan"/>; when unset, RabbitMQ.Client's own default
+    /// applies (5 seconds at the time of writing). Tune longer to reduce log/network thrash
+    /// during prolonged broker outages.
+    /// </summary>
+    public const string NetworkRecoveryInterval = nameof(NetworkRecoveryInterval);
+
+    /// <summary>
+    /// Maximum number of headers allowed on an inbound message before the consumer rejects
+    /// the delivery (NACK'd to retry / dead-letter). Accepts a positive <see cref="int"/>;
+    /// defaults to 64 when unset. Raise for tracing-heavy producers that legitimately stamp
+    /// wide header sets (W3C baggage, tenant headers); lower to tighten resource-exhaustion
+    /// defence on hostile inputs.
+    /// </summary>
+    public const string MaxHeaderCount = nameof(MaxHeaderCount);
+
+    /// <summary>
+    /// Maximum bytes allowed per individual header value on an inbound message before the
+    /// consumer rejects the delivery (NACK'd to retry / dead-letter). Accepts a positive
+    /// <see cref="int"/>; defaults to 8192 (8 KB) when unset. Raise for deployments that
+    /// stamp large correlation / tracing values; lower to tighten resource-exhaustion
+    /// defence on hostile inputs.
+    /// </summary>
+    public const string MaxHeaderValueBytes = nameof(MaxHeaderValueBytes);
+
+    /// <summary>
+    /// Wall-clock cap on the publisher's retry loop in <c>Producer.ExecuteRetryingPublishAsync</c>.
+    /// Accepts a <see cref="System.TimeSpan"/>; defaults to 120 seconds when unset.
+    /// Set to <see cref="System.Threading.Timeout.InfiniteTimeSpan"/> to disable the cap
+    /// and rely solely on <see cref="RetryCount"/> × <see cref="RetrySeconds"/>.
+    /// Distinct from <see cref="PublishTimeout"/>, which bounds a single confirm-ack
+    /// wait inside one attempt; this cap bounds the total retry budget across attempts.
+    /// </summary>
+    public const string MaxPublishWaitTime = nameof(MaxPublishWaitTime);
+}

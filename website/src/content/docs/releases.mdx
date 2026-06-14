@@ -1,0 +1,167 @@
+---
+title: Releases
+description: Where to find released versions, published packages, and the project changelog.
+---
+
+ServiceConnect is versioned per-package. Each package ships independently on NuGet; GitHub Releases mark the tagged commits those packages were built from. If you want to know "what changed between v5 and v6 of `ServiceConnect.Interfaces`", you're in the right place.
+
+## Where releases live
+
+- **GitHub Releases** — [github.com/R-Suite/ServiceConnect-CSharp/releases](https://github.com/R-Suite/ServiceConnect-CSharp/releases). Each entry lists the tag, the commit, and a summary of the changes in that cut.
+- **NuGet packages** — published under the `ServiceConnect.*` prefix. The core packages are:
+  - [`ServiceConnect`](https://www.nuget.org/packages/ServiceConnect) — the bus, hosted service, and dispatch machinery.
+  - [`ServiceConnect.Interfaces`](https://www.nuget.org/packages/ServiceConnect.Interfaces) — the public API surface (`IBus`, configuration, handlers).
+  - [`ServiceConnect.Client.RabbitMQ`](https://www.nuget.org/packages/ServiceConnect.Client.RabbitMQ) — the RabbitMQ transport.
+  - [`ServiceConnect.Persistence.MongoDb`](https://www.nuget.org/packages/ServiceConnect.Persistence.MongoDb) — MongoDB persistence for process managers and aggregators.
+  - [`ServiceConnect.Persistence.InMemory`](https://www.nuget.org/packages/ServiceConnect.Persistence.InMemory) — in-process persistence for tests and samples.
+  - [`ServiceConnect.Telemetry`](https://www.nuget.org/packages/ServiceConnect.Telemetry) — OpenTelemetry instrumentation hooks.
+  - [`ServiceConnect.HealthChecks`](https://www.nuget.org/packages/ServiceConnect.HealthChecks) — `IHealthCheck` integrations for `Microsoft.Extensions.Diagnostics.HealthChecks`.
+
+## Picking a version
+
+Match the major versions of the packages you reference. `ServiceConnect` 7.x expects `ServiceConnect.Interfaces` 7.x; the transport and persistence packages follow the same major line. Mixing majors is unsupported and will surface as binding redirects or missing-method exceptions.
+
+For new applications, take the latest stable of each package. For existing applications, read the release notes for any major version bumps — we call out breaking changes in the GitHub Release body.
+
+## v7
+
+v7 is a clean-architecture rewrite. The legacy static `Bus` is gone; configuration is fluent and DI-wired; every public path is async with `CancellationToken`; the wire format is System.Text.Json; OpenTelemetry instrumentation is operator-grade; and the solution is consolidated to seven shipping packages. It is **not source- or binary-compatible with v6** — read this entry before upgrading.
+
+### What v7 ships
+
+- **Target frameworks:** `net8.0` and `net10.0` on every package. `net8.0` will be dropped in the first major after Microsoft's EoL (November 10, 2026).
+- **Packages (all version 7.0.0):** `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.MongoDb`, `ServiceConnect.Persistence.InMemory`, `ServiceConnect.Telemetry`, and the new `ServiceConnect.HealthChecks`.
+- **Dropped from the solution:** `ServiceConnect.Persistence.SqlServer`, `ServiceConnect.Persistence.Redis`, `ServiceConnect.Filters.MessageDeduplication`, and a long tail of internal/experimental projects (17 production projects collapsed to seven).
+- **License:** MIT (relicensed from the prior more-restrictive license).
+- **SourceLink + `.snupkg`** ship on every package; step-into works from any consumer.
+
+### Breaking changes
+
+#### Bus, configuration, and handlers
+
+- **Static `Bus` is gone.** Use `AddServiceConnect(...)` + the fluent `ServiceConnectBuilder` from DI. `IBus` is `IAsyncDisposable`; once stopped or disposed, the instance is latched — restart requires a new instance from DI.
+- **Async-first everywhere.** `IBus`, `IProducer`, `IConsumer`, `IConsumeContext`, `IProcessManagerFinder`, `ITimeoutStore`, `IAggregatorPersistor`, middleware, and filters all return `Task`/`ValueTask` and take a `CancellationToken`. The sync-over-async paths in the RabbitMQ transport have been removed.
+- **Handler signatures take the context as a parameter.** `IMessageHandler<T>.HandleAsync(T message, IConsumeContext ctx, CancellationToken ct)` (and the equivalents on `IProcessHandler<T>` / `IStreamHandler<T>`) replace the previous settable `Context`/`Stream` properties, which were unsafe for singleton handlers.
+- **Public surface tightened to extension contracts only.** `Bus`, `MessageDispatcher`, every concrete persistor, every concrete RabbitMQ class, every `*Configuration` type, and all hosted services are now `internal`. Public API is interfaces in `ServiceConnect.Interfaces` plus the builder/extension methods on the bus configuration root.
+- **`ConfigurePipeline(Action<PipelineConfiguration>)` is internal.** Use the typed builders: `AddOutgoingFilter<T>`, `AddBeforeConsumingFilter<T>`, `AddOnConsumedSuccessfullyFilter<T>`, `AddAfterConsumingFilter<T>`, `AddSendMessageMiddleware<T>`, `AddMessageProcessingMiddleware<T>`, plus outermost-position helpers.
+- **Request fan-out is explicit.** `SendOptions.EndPoints` and `RequestOptions.EndPoints` are removed; use `bus.SendToManyAsync(msg, ["a","b"])` for fan-out and `PublishRequestAsync` for broadcast request. `SendRequestMultiAsync` with a positive `ExpectedReplyCount` now throws `RequestTimeoutException` (with `PartialReplies`) instead of silently returning under-delivery.
+- **`PublishOptions` is a `readonly record struct`; `RequestOptions` requires `RequestOptions.Default`.** Mutable-shared-instance races are closed; `default(RequestOptions)` is rejected so the parameterless ctor's defaults always apply.
+- **Read-only collections on the wire.** `TimeoutData.Headers`, `ConsumeEventArgs.Headers`, `TimeoutsBatch.DueTimeouts`, `IBus.RouteAsync` destinations, `IConsumer.StartConsumingAsync` message-type lists, and `IMessageDispatcher.DispatchAsync` headers are now `IReadOnly*`. Mutating middleware constructs a new instance.
+- **`IConsumeContext.ReplyAsync` uses `ReplyOptions`** in place of `(message, headers, ct)`. `IBusConfiguration.ExceptionHandler` is `Func<Exception, CancellationToken, ValueTask>?` (was `Action<Exception>?`).
+- **`IRegistryInitializer` is internal**, and `IProducer.DisconnectAsync` is removed — dispose via `IAsyncDisposable.DisposeAsync` (or rely on DI).
+
+#### Transport
+
+- **TLS is on by default.** `SslEnabled = true` (AMQPS port 5671). For local plaintext dev, set `t.SslEnabled = false`; a non-loopback plaintext connection logs a `Warning` you can suppress with `SuppressPlaintextWarning`.
+- **Publisher confirms are on by default.** Every publish waits for a broker ack before returning. Benchmark throughput-sensitive paths; configuring `PublisherAcknowledgements=false` together with a finite `PublishTimeout` is now a startup error.
+- **`IProducer` body is `ReadOnlyMemory<byte>`; headers are `IReadOnlyDictionary<string,string>?`.** `byte[]` converts implicitly; a `null` body is no longer expressible — use `ReadOnlyMemory<byte>.Empty`.
+- **External `IConsumer` implementations must add `IsCancelledByBroker`** (default `false`); the bus uses it to flip `IsConsuming` to `false` when the broker has cancelled the consumer (queue deleted, policy expired, mirror promoted).
+- **`MessageTypeExchangeName` derives from `Type.FullName`.** Exchanges are named `type.FullName.Replace(".", string.Empty)` — no hash or assembly metadata, matching the deployed C# `master` wire format so v7, master, and Node services share exchanges. Apps upgrading from a hashed-exchange build will see new exchange names on first v7 deploy.
+- **Retry and error publishes use `mandatory:true`.** Topology gaps that pre-v7 silently dropped messages now surface as `PublishException` — fix the topology rather than relying on the drop.
+
+#### Persistence
+
+- **`IHasCorrelationId` is required for aggregator data types.** Replaces v6's reflection-based discovery. `Message` already implements it; custom non-`Message` data types now fail to compile until they implement it.
+- **`IAggregatorPersistor` tightened.** `InsertDataAsync(IHasCorrelationId data, …)`; `GetDataAsync` returns `Task<IReadOnlyList<IHasCorrelationId>>`. `AggregatorSnapshot.ResolvedMessages` matches.
+- **Mongo aggregator `Name` partition value changed** from `typeof(Aggregator<T>).FullName` to `typeof(ConcreteAggregator).FullName`. Existing rows must be renamed before restarting on v7 or they will be invisible and accumulate.
+- **Generic saga collection names sanitized** — `+` / backtick / `[` / `]` / `,` in generic-type `FullName` become `_`. Rename existing generic-saga collections with `renameCollection` before deploy.
+- **MongoDB.Driver bumped to 3.8.0** (from 2.23.1). The bundled persistor handles `GuidRepresentationMode = V3` and `RenderArgs<T>` transparently; consumers using `MongoDB.Driver` directly should follow the official 2.x→3.x guide.
+- **Startup guards on Mongo persistence:** `WriteConcern.Unacknowledged` (w:0) is rejected; conflicting Guid-serializer registrations are rejected; the legacy `(Locked, Time)` timeout index is dropped and `(Time, Locked, LockExpiresAt)` is created.
+- **System.Text.Json replaces Newtonsoft.Json** in all shipped packages. Newtonsoft is no longer transitive; add an explicit reference if you relied on transitive flow. The wire format is JSON-equivalent for typical messages but STJ rejects `NaN`/`Infinity` doubles, nesting > 32 levels, trailing commas, and JS-style comments. A `SerializationCompatTests` project enforces v6↔v7 round-trip on every PR.
+- **`IMessageSerializer` reduced to four methods**: `Serialize<T>(T, IBufferWriter<byte>)`, `Deserialize<T>(ReadOnlyMemory<byte>)`, `Deserialize(ReadOnlyMemory<byte>, Type)`, and a default `ReadOnlySequence<byte>` overload. The `byte[]` / `ReadOnlySpan<byte>` overloads are gone.
+- **`TimeoutData.Destination` is nullable.** `IKeyValueStore` / `ICacheProvider` swap `Get<>` for `TryGet<>` to distinguish "absent" from "present-with-null".
+
+#### Streaming
+
+- **Body type cascades to `ReadOnlyMemory<byte>`.** `IMessageBusReadStream.Write` and `IMessageBusWriteStream.WriteAsync` no longer take `(byte[], offset, count)`; pass `buf.AsMemory(0, len)` instead.
+- **Streams latch on first transport failure.** A faulted write makes the stream unusable; create a fresh stream to recover. Caps: `MaxStreamSizeBytes`, `MaxActiveStreams`.
+
+#### Telemetry
+
+- **No more static telemetry state.** `ServiceConnectActivitySource.Options` / `MessagingSystemAttributes` are gone; instrumentation methods take options + attributes as parameters, so two buses in one process can have independent enrichment.
+- **One ActivitySource: `"ServiceConnect.Telemetry.Bus"`** (was three). Per-direction toggles via `EnablePublishTelemetry` / `EnableConsumeTelemetry` / `EnableSendTelemetry`.
+- **OTel semconv 1.x messaging attributes.** Spans/metrics emit `messaging.operation.type` (`publish`/`process`) and `messaging.operation.name`; the pre-1.x `messaging.operation` attribute is gone. `messaging.destination.name` reflects the broker exchange/routing key, not the CLR type's `FullName`. Dashboards filtering on the legacy attributes must update.
+
+### What's new
+
+#### Bus and pipeline
+
+- **`OnConsumedSuccessfully` filter stage** — fourth pipeline stage that runs only after a successful handler invocation. The canonical building block for at-most-once side effects and for the dedupe pattern that replaces the removed `MessageDeduplication` package.
+- **DI-first builder.** Single `AddServiceConnect` call per `IServiceCollection`; re-entry is rejected. Multi-bus is achieved via separate service collections. Health-check probing for multiple buses is available via `AddServiceConnectBus` / `AddServiceConnectConsumer` / `AddServiceConnectProducer` on `IHealthChecksBuilder`.
+- **Configurable caps.** `MaxInflightRequests`, `MaxStreamSizeBytes`, `MaxActiveStreams`, `MaxRoutingSlipHops`, `DisposeTimeout`.
+- **Lifecycle flags.** `AllowMissingProducer` (consume-only buses), `DeadLetterUnhandledMessages` (explicit error-queue routing), `StrictReplyValidation` (rejects the cross-bus fallback that a queue-name-aware producer could spoof), `IncludeMachineNameInHeaders` (default `false` to avoid hostname leakage on shared brokers).
+- **`IBus.RequestTimeoutAsync(correlationId, delay, ct)`** for scheduling saga timeouts.
+- **`IBus.IsCancelledByBroker` / `IBus.IsStopped` / `IConsumer.IsStopped` / `IProducer.HasAttemptedConnection` / `IProducer.IsHealthy` / `IProducer.GetHealthSnapshot()`** for health-check semantics.
+- **`RequestSendCancelledException`** (inherits `OperationCanceledException`) distinguishes send-pipeline cancel from caller-token cancel and from timeout.
+- **Native streaming.** `bus.CreateStream<T>(endpoint)` → `IMessageBusWriteStream` with zero-copy write path; `IStreamHandler<T>.ExecuteAsync(IMessageBusReadStream stream, ...)`.
+- **Polymorphic dispatch with type-hierarchy walking.** New processor chain (`HandlerProcessor`, `ReplyProcessor`, `ProcessManagerProcessor`, `AggregatorProcessor`, `StreamProcessor`) backed by pluggable registries — no more per-message reflection.
+
+#### Transport
+
+- **`PublishOptions.RoutingKey`** is honoured by the RabbitMQ transport (with `IProducer.SupportsRoutingKey` as a capability flag for third-party transports).
+- **`RabbitMqOptions.MaxPublishWaitTime`** caps the wall-clock budget for publish-confirm retries.
+- **`MessageId` survives publish retries.** Constructed once per public call and captured into the retry closure — consumer-side dedupe under retries is now meaningful.
+- **`TimeoutException` is retriable** under the at-least-once publish contract: a publish-confirm timeout drives a channel reset and re-submits the same `BasicProperties`.
+
+#### Persistence
+
+- **`IProcessManagerTypeRegistry`** (in `ServiceConnect.Interfaces`) enumerates registered saga data types. The Mongo persistor uses it to pre-create `CorrelationId` unique indexes via a hosted service at startup — closes the cross-process startup race.
+- **`IIdentified`** (`Guid Id` getter) on `MemoryData<T>` and `MongoDbData<T>` for stable identity across stores.
+- **`IAggregatorPersistor.CountResolvedAsync`** and **`ReleaseSnapshotAsync`** — additive default-interface-method members for cheap typed-count gating and lease release.
+
+#### Observability and operations
+
+- **`ServiceConnect.HealthChecks`** package with `BusConsumingHealthCheck`, `ConsumerConnectionHealthCheck`, and `ProducerConnectionHealthCheck`. Configurable `recoveryGraceWindow` (default 30s) absorbs transient broker flap; permanent broker-cancel bypasses the grace.
+- **Operator-grade metrics via `System.Diagnostics.Metrics`.** Four OTel `messaging.*` instruments (publish/process duration histograms + published/consumed counters) plus ServiceConnect counters (`retry.attempts`, `retry.drops`, `publish.confirm_timeouts`, `audit.drops`, `outgoing_filters.blocked`) and an in-flight UpDownCounter.
+- **W3C `traceparent`/`tracestate`** injected on outgoing messages (already extracted on consume — end-to-end distributed tracing works out of the box).
+- **`MaxTagValueLength`** (default 256) bounds user-controlled string tags for cardinality safety. **`ExceptionMessageSanitiser`** redacts PII in exception messages before they reach activity status and `exception.message` event tags.
+- **Connection-lifecycle Info logs** (`ConnectionOpened` / `ProducerConnectionOpened` / `ConnectionRecovered` / `ConnectionLost`) carry the connection's `MessageId`.
+
+### Hardening
+
+The bulk of the v7 work landed under hardening: trust boundaries on inbound headers, caps against amplification, persistence-lease correctness under cancellation and reaper paths, and a long tail of races in lifecycle, recovery, dispatch, and disposal.
+
+- **Server-authoritative wire headers.** `DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, and `FullTypeName` are stamped on outbound; reply routing resolves through registered handlers only (no `Type.GetType` on caller-supplied wire headers). `StrictReplyValidation` opts into the tightest mode.
+- **Cardinality and DoS caps.** Message-size, header-count, header-size, routing-slip-hop, active-stream, in-flight-request, packet-number, and stream-size caps. Recursive byte budget on AMQP table/array nested header values. Gzip magic-byte check + decompression size cap.
+- **Newtonsoft → STJ removes the `TypeNameHandling.Auto` deserialisation-gadget surface** in `DeepClone` and elsewhere.
+- **Audit-publish failures no longer trigger redelivery.** Audit is a success-side effect; malformed `RetryCount` headers route to the error queue rather than silently resetting the retry budget; unresolved message types are terminal.
+- **Bus lifecycle is single-use and DI-owned.** `Bus` no longer disposes transport singletons; `StartConsumingAsync` after stop is latched; `DisposeAsync` is bounded by `DisposeTimeout`; the lifecycle semaphore won't deadlock on shutdown.
+- **Mongo timeout-store correctness.** Candidate ordering tie-broken by `Id` (eliminates starvation under saturation); cancellation between `UpdateMany` and `FindAsync` performs best-effort lease cleanup; `$facet` aggregation removes the second round-trip.
+- **Aggregator correctness.** `RemoveDataAsync` distinguishes `KeyNotFoundException` (structural) from `ConcurrencyException` (race); batch-size flushes gate on resolved-count (no more spinning on unresolved-only batches); `OnTimerFired` registers-before-rechecks to close a disposal-snapshot race.
+- **In-memory persistence** no longer drops state at 2 days; deep-clones on read; types are `IDisposable` so DI rebuilds don't leak timers.
+- **Consumer-host recovery.** Auto-recovery refreshes the consumer tag via `ConsumerTagChangeAfterRecoveryAsync`; stale `UnregisteredAsync` events whose tag has been superseded by recovery are ignored; queues are bound before `BasicConsume` (per-channel serialisation contract).
+- **Telemetry correctness.** Enricher `OperationCanceledException` no longer leaks an activity; body copy is gated on listener presence; tag values are length-bounded; exception messages are sanitised.
+- **Saga / process-manager.** Poison rows wrap to `PersistenceException` and route to error queue rather than NACK-looping; saga predicates handle explicit-interface property impls (Mongo + InMemory); `ProcessManagerHandlerRegistry` dedupes by `HandlerType` to handle dual-interface sagas and repeat-assembly scans.
+
+### Removed
+
+- **`ServiceConnect.Filters.MessageDeduplication` package** — the old implementation silently dropped legitimate broker redeliveries and shared in-memory state via a static field. No replacement; use the new `OnConsumedSuccessfully` stage for per-consumer dedupe. See the `CustomFilterAndMiddleware` example.
+- **`ServiceConnect.Persistence.SqlServer` and `ServiceConnect.Persistence.Redis`** — no replacement.
+- **Static `Bus`** — use `AddServiceConnect(...)` from DI.
+- **`IProducer.DisconnectAsync`** — dispose via `IAsyncDisposable.DisposeAsync`.
+- **`SendOptions.EndPoints` and `RequestOptions.EndPoints`** — use `SendToManyAsync` / `PublishRequestAsync`.
+- **`SendEventArgs.EndPoints` (plural)** — multi-endpoint sends raise one event per destination; correlate by `CorrelationId`.
+- **`IProcessMessageMiddleware`** — superseded by `IMessageProcessingMiddleware`.
+- **`Get<TKey,TValue>` on `IKeyValueStore` / `ICacheProvider`** — use `TryGet`.
+- **`byte[]` / `ReadOnlySpan<byte>` overloads on `IMessageSerializer`** — use the `ROM<byte>` / `ROSequence<byte>` shape.
+- **Pre-1.x `messaging.operation` OTel attribute** — replaced by `messaging.operation.type` + `messaging.operation.name`.
+- **Newtonsoft.Json** from all production packages.
+
+### Migration
+
+For application code, the upgrade path is roughly:
+
+1. Replace static `Bus.Initialize(...)` with `AddServiceConnect(builder => ...)` in your composition root; resolve `IBus` from DI.
+2. Convert handlers to `HandleAsync(T message, IConsumeContext ctx, CancellationToken ct)`; drop any settable `Context`/`Stream` property usage.
+3. Replace `SendOptions.EndPoints` and `RequestOptions.EndPoints` usage with `SendToManyAsync` / `PublishRequestAsync` / `SendRequestMultiAsync`.
+4. Convert pipeline registration to the typed `AddOutgoingFilter<T>` / `AddBeforeConsumingFilter<T>` / `AddOnConsumedSuccessfullyFilter<T>` / `AddAfterConsumingFilter<T>` / `AddSendMessageMiddleware<T>` / `AddMessageProcessingMiddleware<T>` builders.
+5. Set `t.SslEnabled = false` explicitly for plaintext local dev; keep TLS on for everything else.
+6. If you ship custom non-`Message` aggregator data, implement `IHasCorrelationId` on it.
+7. If you query `Aggregator<T>`-named partitions or generic-saga collections directly, run the rename scripts before deploying.
+8. If your dashboards filter on the old `messaging.operation` attribute or on `messaging.destination.name = "<CLR type FullName>"`, update them.
+
+For full per-commit context, see the v7 release on GitHub and — once the `v7.0.0` tag is pushed — the `git log master..v7.0.0` range.
+
+## Source and tags
+
+Every release corresponds to a git tag. Browse the source at a specific version by visiting `https://github.com/R-Suite/ServiceConnect-CSharp/tree/<tag>`. The `master` branch is the development head; tagged releases are the frozen points that produced the NuGet artifacts.

@@ -1,0 +1,130 @@
+---
+title: Hosting & Lifecycle
+description: How the bus starts, stops, and fits into .NET generic-host or ASP.NET Core applications.
+---
+
+ServiceConnect ships an `IHostedService` adapter so the bus follows the same startup and shutdown signals as the rest of your application. You can also drive the lifecycle by hand for console workers. This page covers both, and the trade-offs between them.
+
+## The hosted path (recommended)
+
+Register the services, set `AutoStartConsuming = true`, and the bus participates in host startup and shutdown automatically:
+
+```csharp
+// Program.cs
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(OrderPlacedHandler), MessageType = typeof(OrderPlaced) },
+});
+
+builder.Services.AddServiceConnect(sc =>
+{
+    sc.UseRabbitMQ(t => { t.Host = "rabbit"; });
+    sc.ConfigureQueues(q => q.QueueName = "orders-service");
+    sc.ConfigureBus(bus => bus.AutoStartConsuming = true);
+});
+
+await builder.Build().RunAsync();
+```
+
+What happens:
+
+- The host's `StartAsync` runs `BusHostedService.StartAsync`, which calls `bus.StartConsumingAsync()` and waits for it to succeed. If the broker is down or the handler list is malformed, the exception propagates and the host **fails to start** — the right behaviour for a service that can't do its job.
+- The host's `StopAsync` runs `BusHostedService.StopAsync`, which races `bus.StopConsumingAsync(cancellationToken)` against a `Task.Delay(TransportConfiguration.GracefulShutdownTimeoutMilliseconds)`. When the stop completes inside the window, in-flight messages drain cleanly; if the delay wins, the stop is cancelled and remaining work is abandoned (and will be redelivered on the next start, so design handlers to tolerate that). Setting `GracefulShutdownTimeoutMilliseconds` to zero or negative bypasses the race entirely and stops without a grace window.
+- On crash or `Ctrl+C`, the host cancels `StopAsync`'s token. The bus stops accepting new messages and tries to drain; when the token fires, remaining work is cut.
+
+This is the shape for production. ASP.NET Core, Worker Service, Generic Host — they all do the same thing, because `BusHostedService` is a plain `IHostedService`.
+
+### Opting out of auto-start
+
+Leave `AutoStartConsuming = false` when you want the hosted infrastructure (DI, logging, lifecycle) but need to start consuming at a later point yourself:
+
+```csharp
+sc.ConfigureBus(bus => bus.AutoStartConsuming = false);
+
+// Later — maybe after warm-up, maybe on a control-plane signal:
+var bus = provider.GetRequiredService<IBus>();
+await bus.StartConsumingAsync(ct);
+```
+
+The hosted service sees the flag is off and does nothing during `StartAsync`. `StopAsync` still stops on shutdown — it doesn't check the flag, because a stop-before-start is a cheap no-op.
+
+### Signalling readiness after auto-start
+
+When `AutoStartConsuming` is `true`, the bus calls `StartConsumingAsync` from inside `BusHostedService.StartAsync`. By the time the host reaches the running state, consuming has already begun. Hook `IHostApplicationLifetime.ApplicationStarted` for a single post-startup signal — logging, readiness probes, smoke tests — that fires once the host (including the bus) has reached the running state:
+
+```csharp
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStarted.Register(() => Console.WriteLine("bus consuming"));
+```
+
+See `examples/CustomFilterAndMiddleware/src/ServiceConnect.Examples.CustomFilterAndMiddleware.Consumer/Program.cs` for the pattern in context.
+
+## The manual path (console apps)
+
+Short-lived scripts, request-only producers, and samples don't need the generic host. Resolve the bus from the provider and drive it yourself:
+
+```csharp
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>());
+services.AddServiceConnect(sc =>
+{
+    sc.UseRabbitMQ(t => { t.Host = "rabbit"; });
+    sc.ConfigureQueues(q => q.QueueName = "sender-only");
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+await bus.PublishAsync(new OrderPlaced(Guid.NewGuid()));
+```
+
+A pure producer like this never calls `StartConsumingAsync` — nothing needs consuming. A consumer worker that wants manual control calls `StartConsumingAsync`, then blocks until cancelled:
+
+```csharp
+await bus.StartConsumingAsync();
+
+using var cts = new CancellationTokenSource();
+Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
+
+try { await Task.Delay(Timeout.InfiniteTimeSpan, cts.Token); }
+catch (OperationCanceledException) { }
+
+await bus.StopConsumingAsync();
+```
+
+The `await using var provider` at the top takes care of disposing the bus on exit — `DisposeAsync` stops consuming if it hasn't already, flushes the producer, and releases connections.
+
+## Lifecycle rules worth knowing
+
+A few invariants that surface as exceptions if you break them:
+
+- **`StartAsync` fails when no `IProducer` is registered.** `BusHostedService.StartAsync` throws `InvalidOperationException` if no transport adapter has registered an `IProducer` — typically because no `UseRabbitMQ(...)` (or other transport extension) call was made. Set `BusConfiguration.AllowMissingProducer = true` for consume-only or in-process test buses that genuinely never publish.
+- **`StartConsumingAsync` on a bus with no registered consumer throws.** You need `UseRabbitMQ` (or another transport's `Use*` method) before the bus will have an `IConsumer` to start.
+- **Two `StartConsumingAsync` calls throw `InvalidOperationException("Already consuming")`.** The bus runs one consumer loop per `IBus` instance; if you need more parallelism, raise `BusConfiguration.ConsumerCount` ([Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/)).
+- **Stop is terminal.** Once `StopConsumingAsync` has been called, the underlying consumer is disposed and the bus cannot resume. A subsequent `StartConsumingAsync` throws `"Bus has been stopped; dispose it and create a new Bus instance to resume consuming."` If you need to restart, build a new `IBus` — which means, in practice, a new host or a new scope.
+- **Dispose is idempotent.** `DisposeAsync` stops consumption if necessary; calling it twice is safe. `await using` or host-managed DI handles it for you.
+
+## Startup failures
+
+If the broker is unreachable, or queue declaration conflicts with an existing queue, `StartConsumingAsync` throws during startup. With `AutoStartConsuming = true`, that exception propagates out of `BusHostedService.StartAsync` and the host refuses to start. This is by design — a silent "started but not consuming" state is harder to debug than a loud failure.
+
+If you want graceful degradation ("log, keep the HTTP server up, retry in the background"), set `AutoStartConsuming = false` and write that retry loop yourself. Most services shouldn't.
+
+## Graceful shutdown
+
+`GracefulShutdownTimeoutMilliseconds` on the transport config is how long the bus gives in-flight handlers to finish when `StopConsumingAsync` is called. The default is enough for typical handlers; raise it if your handlers are known-slow (and noisy with a partial-work problem), lower it if you need faster shutdowns and can tolerate redelivery of in-flight messages.
+
+A handler that crosses the deadline is abandoned — its message was not acked, so the broker will redeliver it on the next start. That is the right trade-off: cutting the wait is always safe because the messaging infrastructure will replay the work; cutting it is *not* safe if your handler has non-idempotent side effects. See [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for the idempotency argument.
+
+## Health checks
+
+The `ServiceConnect.HealthChecks` package ships `IHealthCheck` classes for bus, consumer, and producer state, registered through `IHealthChecksBuilder` extensions on `services.AddHealthChecks()`. See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/#health-checks) for the wiring details.
+
+## What comes next
+
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — the full set of knobs this page references.
+- [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) — what happens when a handler throws.
+- [Observability](/ServiceConnect-CSharp/learn/operations/observability/) — logs emitted during startup and shutdown.

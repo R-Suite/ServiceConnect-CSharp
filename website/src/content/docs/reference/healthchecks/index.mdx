@@ -1,0 +1,312 @@
+---
+title: ServiceConnect.HealthChecks
+description: Three opt-in IHealthCheck classes for Microsoft.Extensions.Diagnostics.HealthChecks — bus liveness, consumer connection, producer connection. Transport-agnostic.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`ServiceConnect.HealthChecks` is the optional package that ships health-check classes for `Microsoft.Extensions.Diagnostics.HealthChecks`. It contains three sealed `IHealthCheck` implementations and three matching extension methods on `IHealthChecksBuilder`. The package is transport-agnostic — it depends only on `ServiceConnect.Interfaces`. A future transport that implements `IBus`, `IConsumer`, and `IProducer` works with these checks unchanged.
+
+Each check is O(1), allocation-light, and side-effect-free: it inspects last-known in-process state through a public interface property (`IBus.IsConsuming`, `IConsumer.IsConnected`, `IProducer.IsHealthy`). No broker channels are opened per probe, no AMQP round-trips are issued. Each check honours the supplied `CancellationToken` — probes cancelled by the health-check framework surface as `OperationCanceledException` rather than returning a stale result.
+
+See [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/) for the conceptual walk-through, K8s liveness/readiness wiring, and the producer-lazy-connect caveat.
+
+## Installation
+
+```bash
+dotnet add package ServiceConnect.HealthChecks
+```
+
+Then call any combination of `AddServiceConnectBus`, `AddServiceConnectConsumer`, and `AddServiceConnectProducer` on `services.AddHealthChecks()` — pick the methods that match what your host actually does.
+
+## HealthChecksBuilderExtensions
+
+Static class containing the three registration extension methods. Each registers exactly one `HealthCheckRegistration`; tags, failure status, name, and timeout flow through verbatim.
+
+### `AddServiceConnectBus`
+
+```csharp
+// Default — resolves IBus via GetRequiredService<IBus>() from DI
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name = "serviceconnect-bus",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Factory overload — useful for multi-bus hosts
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IBus> busFactory,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Keyed-services convenience overload
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name,
+    object serviceKey,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Configurable recovery-grace window + optional TimeProvider and consumer factory
+public static IHealthChecksBuilder AddServiceConnectBus(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IBus> busFactory,
+    TimeSpan recoveryGraceWindow,
+    TimeProvider? timeProvider = null,
+    Func<IServiceProvider, IConsumer?>? consumerFactory = null,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+```
+
+Registers `BusConsumingHealthCheck`. The default overload resolves `IBus` via `GetRequiredService<IBus>()` inside a `PerProviderCache<BusConsumingHealthCheck>` factory, so the same probe instance is reused for the lifetime of the `IServiceProvider`. Use the factory or keyed-services overload when multiple named bus instances are registered in the same DI container. The fourth overload is the one to reach for from tests (with `FakeTimeProvider`) or when the default 30s recovery-grace window does not match the host's broker-recovery characteristics; threading the optional `consumerFactory` through enables broker-cancelled short-circuit for hosts that observe `IConsumer` separately from `IBus`.
+
+**Parameters (default overload)**
+- `builder` — the `IHealthChecksBuilder` returned by `services.AddHealthChecks()`.
+- `name` — registration name. Defaults to `"serviceconnect-bus"`.
+- `failureStatus` — status to return when the bus is not consuming. Defaults to `Unhealthy`.
+- `tags` — tags attached to the registration (use these with `MapHealthChecks` predicates to split liveness/readiness endpoints).
+- `timeout` — per-check timeout. Defaults to none — the check is O(1) and does not need one.
+
+### `AddServiceConnectConsumer`
+
+```csharp
+// Default — resolves IConsumer via GetRequiredService<IConsumer>() from DI
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name = "serviceconnect-consumer",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Factory overload
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IConsumer> consumerFactory,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Keyed-services convenience overload
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name,
+    object serviceKey,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Configurable recovery-grace window + optional TimeProvider
+public static IHealthChecksBuilder AddServiceConnectConsumer(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IConsumer> consumerFactory,
+    TimeSpan recoveryGraceWindow,
+    TimeProvider? timeProvider = null,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+```
+
+Registers `ConsumerConnectionHealthCheck`. Same factory pattern as `AddServiceConnectBus`. The default name is `"serviceconnect-consumer"`. Skip this on publish-only hosts. The fourth overload accepts an explicit recovery-grace window and optional `TimeProvider`; use it from tests (`FakeTimeProvider`) or when the default 30s grace does not match the host's broker-recovery characteristics.
+
+### `AddServiceConnectProducer`
+
+```csharp
+// Default — resolves IProducer via GetRequiredService<IProducer>() from DI
+public static IHealthChecksBuilder AddServiceConnectProducer(
+    this IHealthChecksBuilder builder,
+    string name = "serviceconnect-producer",
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Factory overload
+public static IHealthChecksBuilder AddServiceConnectProducer(
+    this IHealthChecksBuilder builder,
+    string name,
+    Func<IServiceProvider, IProducer> producerFactory,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+
+// Keyed-services convenience overload
+public static IHealthChecksBuilder AddServiceConnectProducer(
+    this IHealthChecksBuilder builder,
+    string name,
+    object serviceKey,
+    HealthStatus failureStatus = HealthStatus.Unhealthy,
+    IEnumerable<string>? tags = null,
+    TimeSpan? timeout = null);
+```
+
+Registers `ProducerConnectionHealthCheck`. The default name is `"serviceconnect-producer"`. Skip this on consume-only hosts.
+
+<Aside type="caution" title="Producer connects lazily — readiness implications">
+  The producer's broker connection is established on demand (first publish or send), not at startup. `ProducerConnectionHealthCheck` distinguishes two states using `IProducer.HasAttemptedConnection`:
+
+  - **Before any publish/send** (`HasAttemptedConnection` is `false`): the check returns `Healthy`. A probe firing before the host has published anything reflects lazy-not-yet-tried, not failure — treating it as `Unhealthy` would crash-loop pods unnecessarily.
+  - **After the first attempt** (`HasAttemptedConnection` is `true`): the check reflects `IProducer.IsHealthy` — `Healthy` if connected, `Unhealthy` if the connection dropped or failed.
+
+  Hosts that publish only in response to inbound traffic should not put this check on a `ready` tag, because readiness would not fail-fast on a producer connection drop until the next outbound message is attempted. For those topologies use `AddServiceConnectConsumer` only on `ready`.
+</Aside>
+
+## Health-check classes
+
+Each class is `public sealed`, takes its observed interface via constructor with `ArgumentNullException.ThrowIfNull`, and returns `Task.FromResult<HealthCheckResult>` from a synchronous method body.
+
+### `BusConsumingHealthCheck`
+
+```csharp
+public sealed class BusConsumingHealthCheck : IHealthCheck
+{
+    // Default 30s recovery grace; system TimeProvider; no consumer
+    // supplied (no broker-cancelled short-circuit beyond IBus.IsCancelledByBroker).
+    public BusConsumingHealthCheck(IBus bus);
+
+    // Configurable recovery-grace window and optional consumer for broker-cancelled
+    // short-circuit. Pass TimeSpan.Zero to disable grace (suits liveness probes).
+    public BusConsumingHealthCheck(
+        IBus bus,
+        IConsumer? consumer,
+        TimeSpan recoveryGraceWindow,
+        TimeProvider timeProvider);
+
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+```
+
+The check evaluates four observed states in order; the first match wins:
+
+1. **`IBus.IsConsuming == true`** — returns `Healthy("Bus is consuming.")` and stamps the last-Healthy timestamp used by the recovery-grace path.
+2. **Broker-cancelled** — when the supplied `IConsumer.IsCancelledByBroker` is `true`, OR (parameterless-ctor path) when `IBus.IsCancelledByBroker` is `true`. Returns `new HealthCheckResult(failureStatus, "Bus is not consuming (broker cancelled the consumer).")`. Bypasses the grace window — a `basic.cancel` event (queue deleted, policy expired, mirror promoted) is terminal until the consumer restarts.
+3. **Stopped or disposed** — when `IBus.IsStopped` is `true`. Returns `new HealthCheckResult(failureStatus, "Bus is not consuming (stopped or disposed).")`. Also bypasses grace; there is no reconnect to wait for.
+4. **Within the recovery-grace window** — when the bus has been observed Healthy at some prior point AND the time since that observation is less than `recoveryGraceWindow`, returns `Healthy("Bus is not consuming, but within recovery grace (…).")`. This is the readiness-friendly path: a momentary broker disconnect (auto-recovery, network blip, broker bounce) does not crash-loop pods wired on liveness probes.
+
+If none of the above matches, the check returns `new HealthCheckResult(failureStatus, "Bus is not consuming.")` where `failureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy`.
+
+The recovery-grace window defaults to **30 seconds** when the parameterless constructor is used. Pass `TimeSpan.Zero` to the 4-arg ctor to disable grace (suits liveness probes that must flip immediately on disconnect). The `TimeProvider` parameter is injectable for tests.
+
+The grace state is keyed on the `IBus` instance via a `ConditionalWeakTable`, so per-probe re-allocations performed by `HealthCheckService` do not reset the last-Healthy timestamp. A never-Healthy probe (the first-probe case) always reports Unhealthy regardless of the grace window — there is no equivalent to `IProducer.HasAttemptedConnection` for consumers; a never-Healthy consumer is genuinely unhealthy, not lazy.
+
+### `ConsumerConnectionHealthCheck`
+
+```csharp
+public sealed class ConsumerConnectionHealthCheck : IHealthCheck
+{
+    // Default 30s recovery grace; system TimeProvider.
+    public ConsumerConnectionHealthCheck(IConsumer consumer);
+
+    // Configurable recovery-grace window and injectable TimeProvider for tests.
+    public ConsumerConnectionHealthCheck(
+        IConsumer consumer,
+        TimeSpan recoveryGraceWindow,
+        TimeProvider timeProvider);
+
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+```
+
+The check evaluates four observed states in order; the first match wins:
+
+1. **Broker-cancelled** — when `IConsumer.IsCancelledByBroker` is `true`. Returns `new HealthCheckResult(failureStatus, "Consumer connection is closed (broker cancelled the consumer).")`. Bypasses the grace window — `basic.cancel` (queue deleted, policy expired, mirror promoted) is a permanent failure; `IConsumer.IsConnected` can remain `true` while deliveries have stopped, so this check runs first.
+2. **Connected** — when `IConsumer.IsConnected` is `true`. Returns `Healthy("Consumer connection is open.")` and stamps the last-Healthy timestamp used by the recovery-grace path.
+3. **Stopped or disposed** — when `IConsumer.IsStopped` is `true`. Returns `new HealthCheckResult(failureStatus, "Consumer connection is closed (stopped or disposed).")`. Also bypasses grace; an intentional shutdown has no reconnect to wait for.
+4. **Within the recovery-grace window** — when the consumer has been observed Healthy at some prior point AND the time since that observation is less than `recoveryGraceWindow`, returns `Healthy("Consumer connection is closed, but within recovery grace (…).")`. This is the readiness-friendly path: a momentary broker disconnect (auto-recovery, network blip) does not crash-loop pods wired on liveness probes.
+
+If none of the above matches, the check returns `new HealthCheckResult(failureStatus, "Consumer connection is closed.")` where `failureStatus = context.Registration?.FailureStatus ?? HealthStatus.Unhealthy`.
+
+The recovery-grace window defaults to **30 seconds** when the single-argument constructor is used. Pass `TimeSpan.Zero` to the 3-arg constructor to disable grace. The `TimeProvider` parameter is injectable for tests. The grace state is keyed on the `IConsumer` instance via a `ConditionalWeakTable`, so per-probe re-allocations performed by `HealthCheckService` do not reset the last-Healthy timestamp. A never-Healthy probe always reports Unhealthy regardless of the grace window.
+
+`IConsumer.IsConnected` reflects the transport client's last-known view of the broker connection. When the broker drops, the client raises a shutdown event and the property flips to `false`; on reconnect, it flips back. There is a millisecond-scale gap between the underlying connection drop and the event being observed — a probe inside that window can still see `Healthy`. This is the same gap any in-process check has, regardless of implementation.
+
+### `ProducerConnectionHealthCheck`
+
+```csharp
+public sealed class ProducerConnectionHealthCheck : IHealthCheck
+{
+    public ProducerConnectionHealthCheck(IProducer producer);
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default);
+}
+```
+
+Calls `IProducer.GetHealthSnapshot()` so `IsHealthy` and `HasAttemptedConnection` are read **atomically** — reading the two properties separately is racy because the producer's `IsHealthy` can flip false on a transient broker drop in the same instant `HasAttemptedConnection` is observed `true`, surfacing a false-negative Unhealthy. The snapshot returned by `GetHealthSnapshot()` captures the pair under the producer's internal lock and is evaluated as follows:
+
+- `snapshot.IsHealthy` → returns `Healthy("Producer connection is open.")`.
+- `!snapshot.HasAttemptedConnection` → returns `Healthy("Producer has not yet attempted connection (lazy).")`. This is the state before any publish or send has been issued; treating it as unhealthy would crash-loop pods unnecessarily.
+- Otherwise (`HasAttemptedConnection && !IsHealthy`) → returns the failure result with status `failureStatus` and `"Producer connection is closed."`.
+
+The check also calls `cancellationToken.ThrowIfCancellationRequested()` at entry, so probes cancelled by the health-check framework surface as `OperationCanceledException`.
+
+## Usage
+
+### Single-bus registration
+
+```csharp
+using ServiceConnect.HealthChecks;
+
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(opts => opts.Host = "rabbit");
+});
+
+services.AddHealthChecks()
+    .AddServiceConnectBus(tags: ["live"])
+    .AddServiceConnectConsumer(tags: ["ready"])
+    .AddServiceConnectProducer(tags: ["ready"]);
+
+app.MapHealthChecks("/health/live",  new HealthCheckOptions { Predicate = c => c.Tags.Contains("live") });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = c => c.Tags.Contains("ready") });
+```
+
+### Multi-bus registration
+
+When multiple named bus instances are registered in the same DI container, use the factory or keyed-services overloads to bind each check to its specific instance:
+
+```csharp
+// Keyed-services approach — register two named buses
+services.AddKeyedSingleton<IBus>("orders", ordersFactory);
+services.AddKeyedSingleton<IBus>("notifications", notificationsFactory);
+
+services.AddHealthChecks()
+    .AddServiceConnectBus(name: "bus-orders",        serviceKey: "orders",        tags: ["live"])
+    .AddServiceConnectBus(name: "bus-notifications", serviceKey: "notifications", tags: ["live"]);
+
+// Factory approach — resolve manually when keyed services aren't available
+services.AddHealthChecks()
+    .AddServiceConnectProducer(
+        name: "producer-orders",
+        producerFactory: sp => sp.GetRequiredKeyedService<IProducer>("orders"),
+        tags: ["ready"]);
+```
+
+### Topology choices
+
+- **Consume-only** — drop `AddServiceConnectProducer`.
+- **Publish-only** — drop both `AddServiceConnectConsumer` and `AddServiceConnectBus` (a host that never starts consuming would report `IsConsuming` permanently `false`).
+- **Both** — call all three.
+
+### Custom checks
+
+The shipped check classes are `sealed`. If you need a different shape — a custom predicate over multiple bus state pieces, a different failure-status mapping, integration with a non-`Microsoft.Extensions.Diagnostics.HealthChecks` framework — implement `IHealthCheck` directly against `IBus`, `IConsumer`, or `IProducer`. The shipped classes are short enough to copy as a starting point.
+
+## See also
+
+- [Observability — Health checks](/ServiceConnect-CSharp/learn/operations/observability/#health-checks) — concept and wiring walk-through
+- [Hosting](/ServiceConnect-CSharp/learn/operations/hosting/) — how the bus interacts with the .NET hosted-service lifecycle
+- [`AddServiceConnect`](../bus/add-serviceconnect/) — registration entry point

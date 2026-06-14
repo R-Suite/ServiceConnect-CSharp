@@ -1,0 +1,113 @@
+---
+title: Content-Based Routing
+description: Route different kinds of a message to different consumers — either by splitting the message type or by branching inside a handler.
+---
+
+**Content-Based Routing** is the pattern for "some orders go here, some go there." You have a logical event — `OrderPlaced` — but downstream services only want part of it: the priority team wants the premium orders, the batch team wants the rest. Routing by content means the *message* decides where it goes, not the publisher.
+
+This page shows the two idiomatic shapes in ServiceConnect, and when to reach for each.
+
+## Split the type
+
+The idiomatic approach in ServiceConnect is to split the logical event into multiple concrete types, one per route. Pub/Sub fan-out does the rest — subscribers only bind to the types they care about.
+
+```csharp
+// Contracts/OrderPlaced.cs
+using ServiceConnect.Interfaces;
+
+public sealed class PremiumOrderPlaced(Guid correlationId) : Message(correlationId)
+{
+    public string OrderId { get; init; } = string.Empty;
+}
+
+public sealed class StandardOrderPlaced(Guid correlationId) : Message(correlationId)
+{
+    public string OrderId { get; init; } = string.Empty;
+}
+```
+
+The publisher decides which type to emit based on the content of the order:
+
+```csharp
+if (order.TotalValue > premiumThreshold)
+    await bus.PublishAsync(new PremiumOrderPlaced(correlationId) { OrderId = order.Id });
+else
+    await bus.PublishAsync(new StandardOrderPlaced(correlationId) { OrderId = order.Id });
+```
+
+Two subscribers, one per type. A priority consumer:
+
+```csharp
+public sealed class PremiumOrderHandler : IMessageHandler<PremiumOrderPlaced>
+{
+    public Task HandleAsync(PremiumOrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"Priority lane: processing {message.OrderId}");
+        return Task.CompletedTask;
+    }
+}
+```
+
+A standard consumer is the same shape against `StandardOrderPlaced`. Each runs in its own process with its own queue (`priority-consumer`, `standard-consumer`), bound only to its own exchange. A premium order lands only in the priority queue; a standard order lands only in the standard queue.
+
+### Why this shape
+
+- **The type system carries the intent.** A consumer that handles `PremiumOrderPlaced` can't accidentally receive a standard order — it isn't even bound to that exchange.
+- **Fan-out remains automatic.** Adding another consumer for premium orders is a new process with a handler for `PremiumOrderPlaced`. No router to configure, no filter to update.
+- **The routing rule lives with the data.** "What counts as premium?" is answered in one place — the publisher's branch — not scattered across consumers filtering out messages they didn't want.
+
+This is the recommended approach when the categories are stable and the publisher already has the information to decide. The runnable example in [`examples/ContentBasedRouting`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/ContentBasedRouting) takes this shape.
+
+## Branch inside a handler
+
+Sometimes splitting the type is wrong. Maybe the categorisation is a consumer concern (the priority team's definition of "premium" might change, and the publisher shouldn't know about it), or maybe you have so many variations that a type per variant is unwieldy.
+
+In that case, keep one message type and branch inside the handler:
+
+```csharp
+public sealed class OrderRoutingHandler : IMessageHandler<OrderPlaced>
+{
+    public async Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        if (message.TotalValue > 500m)
+            await context.Bus.SendAsync(
+                new PriorityWork(message.CorrelationId) { OrderId = message.OrderId },
+                new SendOptions { EndPoint = "priority-workers" });
+        else
+            await context.Bus.SendAsync(
+                new StandardWork(message.CorrelationId) { OrderId = message.OrderId },
+                new SendOptions { EndPoint = "standard-workers" });
+    }
+}
+```
+
+The bus is now running a routing handler — it subscribes to `OrderPlaced`, inspects content, and forwards to the appropriate destination. Downstream workers stay simple: they handle the one kind of work they know about.
+
+### When to choose this
+
+- The rule changes often and is owned by the consumer domain, not the publisher.
+- You need to enrich the message with information the router knows but the publisher doesn't (the priority team's quota state, for example).
+- Several downstream routes share the same body and splitting types would produce near-duplicates.
+
+The cost is an extra hop and a piece of code whose whole job is to route. Pay that cost when it buys you flexibility; otherwise, split the type.
+
+## Don't filter silently
+
+A pattern to avoid: a handler that subscribes to `OrderPlaced`, checks `TotalValue > 500`, and does nothing when the check fails.
+
+```csharp
+// Bad: a silent no-op for messages the handler doesn't want.
+public Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
+{
+    if (message.TotalValue <= 500m) return Task.CompletedTask;
+    // …process premium…
+}
+```
+
+This works, but it is invisible. The bus will tell you it delivered the message and your handler finished successfully — but it did nothing. You have broken the link between "handler ran" and "work happened," which makes observability and debugging strictly harder. If you need this filter, prefer splitting the type on the publisher side; if you can't, at least route explicitly (as in the previous section) so there is a clear log line for the "this message was ignored" path.
+
+## What comes next
+
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — the fan-out the type-split variant builds on.
+- [Routing Slip](/ServiceConnect-CSharp/learn/messaging-patterns/routing-slip/) — when routing is a sequence of hops, not a one-time decision.
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — message design conventions that make type splits cheap.

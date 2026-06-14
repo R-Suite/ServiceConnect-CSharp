@@ -1,0 +1,225 @@
+---
+title: IMessageTypeRegistry
+description: A safe registry that maps string type names to CLR types — replace to use compact wire names or enforce a strict allowlist of deserializable types.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IMessageTypeRegistry` resolves a message type **name** (a string) to a CLR `Type`. The framework calls `TryResolve` on every inbound message to determine which type to deserialize the payload into.
+
+Replace the default implementation when the type-name scheme differs from what the default provides — for example, when you want to use a stable wire name such as `orders.v1.OrderPlaced` instead of a full assembly-qualified CLR name, or when you need a curated allowlist of types the bus is permitted to deserialize.
+
+**Security property.** Unlike `Type.GetType`, this registry refuses to activate any type that was not explicitly registered at startup. An attacker who controls the wire name in a message header cannot trick the bus into instantiating an arbitrary CLR type; `TryResolve` will return `false` and the message will be routed to the error queue. This makes the registry the correct place to enforce trust boundaries around deserialization.
+
+See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the conceptual model.
+
+## Reference
+
+### `TryResolve`
+
+```csharp
+bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type);
+```
+
+Attempts to locate a previously registered CLR `Type` by its wire name.
+
+**Parameters**
+- `typeName` — the wire name as it appears in the message header or payload. The format is implementation-defined; the framework passes whatever string was embedded in the incoming message without transformation.
+- `type` — receives the resolved `Type` if the method returns `true`; `null` when the method returns `false`. The `[MaybeNullWhen(false)]` attribute lets implementations write `type = null` on the not-found branch without a nullable-context warning.
+
+**Returns.** `true` if a type was found; `false` if `typeName` is unknown. Do not throw for the not-found case — the caller (the bus dispatch pipeline) decides how to react, typically by routing the message to the error queue.
+
+---
+
+### `Register`
+
+```csharp
+void Register(Type type);
+```
+
+Adds `type` to the registry so it can be resolved by name on inbound messages.
+
+**Parameters**
+- `type` — the CLR type to register; must be a `Message` subclass. The implementation derives the wire name from `type` according to its naming scheme (full name, simple name, a custom attribute value, and so on).
+
+**Remarks.** Implementations should fail loudly at registration time when two CLR types share the same wire name rather than silently overwriting the prior entry. A silent overwrite means the first type becomes permanently unreachable and produces hard-to-diagnose deserialization failures at runtime.
+
+---
+
+### `AllRegisteredTypeNames`
+
+```csharp
+IReadOnlyCollection<string> AllRegisteredTypeNames();
+```
+
+Returns a point-in-time snapshot of every registered type-name key. The default implementation (the framework's own `MessageTypeRegistry`) emits both the `Type.FullName` and `Type.AssemblyQualifiedName` keys for each registered type — third-party implementations choosing a different keying scheme should return whatever set of strings `TryResolve` accepts.
+
+**Returns.** The currently-registered type-name keys, detached from the registry. Subsequent `Register` calls do not retroactively appear in a previously returned snapshot.
+
+**Used by.** Persistors that want to filter stored records to those whose CLR type is currently resolvable — for example, the Mongo aggregator persistor uses this set to build a `$in` filter on its `CountResolvedAsync` query so it does not materialise and discard documents that would deserialise to a now-missing type. A registry that returns an unstable, growing snapshot will produce surprising flush-gate behaviour: implementations should cache the snapshot until the next `Register` call.
+
+## Implementing
+
+### Registration timing
+
+Register all known message types before the bus starts consuming. The typical approach is to scan one or more assemblies at startup and call `Register` for each `Message` subtype found. Lazy registration (registering on first encounter) is also valid but must be thread-safe, because `TryResolve` is on the hot path of every inbound message and may be called concurrently.
+
+### Ambiguity at registration
+
+If two CLR types map to the same wire name, throw at `Register` time:
+
+```csharp
+if (!_map.TryAdd(wireName, type))
+    throw new InvalidOperationException(
+        $"Wire name '{wireName}' is already registered as '{_map[wireName].FullName}'. " +
+        $"Cannot also register '{type.FullName}'. Resolve the naming conflict.");
+```
+
+This fails fast during startup rather than producing silent data corruption or routing failures in production.
+
+### Not-found contract
+
+`TryResolve` must return `false` when a name is unknown. Do not throw — the bus pipeline handles `false` by routing the message to the error queue, where it can be inspected. Throwing would propagate an unhandled exception through the consumer, which may cause the channel to close.
+
+### Thread-safety
+
+The registry is a singleton. `TryResolve` is called on the inbound message hot path and may be called from multiple threads concurrently. Use a `ConcurrentDictionary` for the underlying map, or populate a regular `Dictionary` during startup and switch to a read-only frozen view before the bus starts consuming so that no locks are needed at runtime.
+
+### Skeletal implementation sketch
+
+```csharp
+using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
+using ServiceConnect.Interfaces;
+
+public sealed class WireNameMessageTypeRegistry : IMessageTypeRegistry
+{
+    private readonly ConcurrentDictionary<string, Type> _map = new();
+
+    public bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type)
+        => _map.TryGetValue(typeName, out type);
+
+    public void Register(Type type)
+    {
+        throw new NotImplementedException();
+        // Derive wireName from type, then:
+        // if (!_map.TryAdd(wireName, type))
+        //     throw new InvalidOperationException(...);
+    }
+
+    public IReadOnlyCollection<string> AllRegisteredTypeNames() => _map.Keys.ToArray();
+}
+```
+
+## Usage
+
+### Wire-name registry with attribute-driven discovery
+
+The following example implements a registry that resolves compact wire names (e.g. `"OrderPlaced"`) to CLR types. Each message type declares its wire name via a `[WireName]` attribute. At startup the host walks the message assembly and calls `Register` for every attributed `Message` subclass.
+
+```csharp
+using System.Collections.Concurrent;
+using System.Diagnostics.CodeAnalysis;
+using System.Reflection;
+using ServiceConnect.Interfaces;
+
+/// <summary>
+/// Marks a Message subclass with the stable wire name used in message headers.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class WireNameAttribute : Attribute
+{
+    public string Name { get; }
+    public WireNameAttribute(string name) => Name = name;
+}
+
+/// <summary>
+/// Resolves wire names declared via <see cref="WireNameAttribute"/> to CLR types.
+/// </summary>
+public sealed class WireNameMessageTypeRegistry : IMessageTypeRegistry
+{
+    private readonly ConcurrentDictionary<string, Type> _map = new(StringComparer.Ordinal);
+
+    public bool TryResolve(string typeName, [MaybeNullWhen(false)] out Type type)
+        => _map.TryGetValue(typeName, out type);
+
+    public void Register(Type type)
+    {
+        var attr = type.GetCustomAttribute<WireNameAttribute>();
+        if (attr is null)
+            throw new InvalidOperationException(
+                $"Cannot register '{type.FullName}': missing [WireName] attribute.");
+
+        if (!_map.TryAdd(attr.Name, type))
+            throw new InvalidOperationException(
+                $"Wire name '{attr.Name}' is already registered as '{_map[attr.Name].FullName}'. " +
+                $"Cannot also register '{type.FullName}'. Resolve the naming conflict.");
+    }
+
+    public IReadOnlyCollection<string> AllRegisteredTypeNames() => _map.Keys.ToArray();
+}
+```
+
+Declare wire names on your message types:
+
+```csharp
+[WireName("OrderPlaced")]
+public sealed class OrderPlaced : Message
+{
+    public Guid OrderId { get; init; }
+    public string CustomerId { get; init; } = string.Empty;
+    public decimal TotalAmount { get; init; }
+}
+
+[WireName("PaymentAuthorised")]
+public sealed class PaymentAuthorised : Message
+{
+    public Guid OrderId { get; init; }
+    public string PaymentReference { get; init; } = string.Empty;
+}
+```
+
+Scan the assembly at startup and register every attributed `Message` subclass:
+
+```csharp
+public static void RegisterMessageTypes(IMessageTypeRegistry registry, Assembly assembly)
+{
+    foreach (var type in assembly.GetTypes())
+    {
+        if (!type.IsAbstract
+            && type.IsSubclassOf(typeof(Message))
+            && type.GetCustomAttribute<WireNameAttribute>() is not null)
+        {
+            registry.Register(type);
+        }
+    }
+}
+```
+
+Register the implementation during bus startup:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.AddRegistration(svc =>
+    {
+        svc.AddSingleton<IMessageTypeRegistry>(sp =>
+        {
+            var registry = new WireNameMessageTypeRegistry();
+            RegisterMessageTypes(registry, typeof(OrderPlaced).Assembly);
+            return registry;
+        });
+    });
+});
+```
+
+When the bus receives a message with header `type: OrderPlaced`, it calls `TryResolve("OrderPlaced", out var type)`. The registry returns `true` and sets `type` to `typeof(OrderPlaced)`. The serializer then deserializes the payload into an `OrderPlaced` instance, which is dispatched to any registered `IMessageHandler<OrderPlaced>` — such as the `ShippingSaga` or `PaymentProcessor` — in the usual way.
+
+If an inbound message carries a wire name that was never registered — for example, a stale type removed from the codebase — `TryResolve` returns `false`. The pipeline routes the message to the error queue, where it can be inspected without disrupting other consumers.
+
+## See also
+
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — concept
+- [`IMessageSerializer`](../imessageserializer/) — companion serializer interface

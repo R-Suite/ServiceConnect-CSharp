@@ -1,0 +1,375 @@
+---
+title: ServiceConnect.Telemetry
+description: Distributed tracing for ServiceConnect — W3C traceparent propagation across the broker and a single OTel ActivitySource for publish, send, and consume spans.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`ServiceConnect.Telemetry` is the optional package that emits OpenTelemetry-compatible activities for every publish, send, and consume on the bus. It is implemented as a pair of pipeline middleware (`TelemetrySendMiddleware`, `TelemetryProcessingMiddleware`) backed by a static `ServiceConnectActivitySource` that owns a single `ActivitySource` (name exposed via `ServiceConnectActivitySource.ActivitySourceName`).
+
+When registered, the package:
+
+1. Starts a producer activity around every `PublishAsync`/`SendAsync`/`SendRequestAsync` call.
+2. Injects the W3C `traceparent` and `tracestate` headers into the outgoing envelope.
+3. On the consume side, extracts the same headers and starts a consumer activity that is causally linked to the publishing span.
+
+The result is an end-to-end trace that crosses the broker. With OpenTelemetry exporters configured, you see the full request path in your APM backend.
+
+See [Observability](/ServiceConnect-CSharp/learn/operations/observability/) for the conceptual walk-through and the [`Telemetry` example](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/Telemetry) for a runnable end-to-end demo.
+
+## Installation
+
+```bash
+dotnet add package ServiceConnect.Telemetry
+```
+
+Then call `builder.AddTelemetry()` inside the `AddServiceConnect` callback (see [Registration](#registration) below).
+
+## TelemetryBuilderExtensions
+
+### `AddTelemetry`
+
+```csharp
+public static ServiceConnectBuilder AddTelemetry(
+    this ServiceConnectBuilder builder,
+    Action<ServiceConnectInstrumentationOptions>? configure = null);
+```
+
+Registers `TelemetrySendMiddleware` and `TelemetryProcessingMiddleware` as the outermost middleware on the send and processing pipelines, and registers both `ServiceConnectInstrumentationOptions` and `IMessagingSystemAttributes` (via `TryAddSingleton`) into the DI container.
+
+**Parameters**
+- `builder` — the `ServiceConnectBuilder` from inside `AddServiceConnect`.
+- `configure` — optional callback to mutate the `ServiceConnectInstrumentationOptions` (enrichment hooks, per-direction enable flags, tag length bounds, PII sanitiser). Omit to use defaults.
+
+**Returns.** The same `builder`, for chaining.
+
+**Remarks.** `AddTelemetry` inserts the middleware at index 0 so it wraps every other middleware on the pipeline — the activity is opened before any application middleware runs and closed after they unwind, capturing the full pipeline duration. Call once per `AddServiceConnect`.
+
+`IMessagingSystemAttributes` is registered via `TryAddSingleton`. To substitute a custom implementation (for example, to change the `messaging.system` tag for a non-RabbitMQ transport), register your own `IMessagingSystemAttributes` in DI **before** calling `AddTelemetry` — the `Try` registration will leave yours in place.
+
+Two `AddTelemetry` calls in the same process (for example, two independently-scoped `AddServiceConnect` registrations) produce two distinct `ServiceConnectInstrumentationOptions` instances. Options are not shared across bus registrations; enrichment delegates and enable-flags are independent.
+
+The configured `ServiceConnectInstrumentationOptions` is frozen at the end of the `configure` callback passed to `AddTelemetry`. Any setter mutation on the options object after that point throws `InvalidOperationException`.
+
+## TelemetryTracerExtensions
+
+### `AddServiceConnectInstrumentation`
+
+```csharp
+public static TracerProviderBuilder AddServiceConnectInstrumentation(
+    this TracerProviderBuilder builder);
+```
+
+Subscribes the OpenTelemetry tracer provider to the activity source emitted by `ServiceConnectActivitySource`. Equivalent to `builder.AddSource(ServiceConnectActivitySource.ActivitySourceName)`, but keeps the source name in one place so a rename cannot silently disable a caller's telemetry.
+
+**Parameters**
+- `builder` — the `TracerProviderBuilder` from `Sdk.CreateTracerProviderBuilder()` or `services.AddOpenTelemetry().WithTracing(...)`.
+
+**Returns.** The same `builder`, for chaining.
+
+**Throws.** `ArgumentNullException` when `builder` is null.
+
+```csharp
+services.AddOpenTelemetry().WithTracing(b => b
+    .AddServiceConnectInstrumentation()
+    .AddOtlpExporter());
+```
+
+## TelemetryMeterExtensions
+
+### `AddServiceConnectInstrumentation`
+
+```csharp
+public static MeterProviderBuilder AddServiceConnectInstrumentation(
+    this MeterProviderBuilder builder);
+```
+
+Subscribes the OpenTelemetry meter provider to ServiceConnect's `"ServiceConnect.Bus"` meter. Equivalent to `builder.AddMeter(ServiceConnectMeter.MeterName)`.
+
+**Parameters**
+- `builder` — the `MeterProviderBuilder` from `Sdk.CreateMeterProviderBuilder()` or `services.AddOpenTelemetry().WithMetrics(...)`.
+
+**Returns.** The same `builder`, for chaining.
+
+**Throws.** `ArgumentNullException` when `builder` is null.
+
+```csharp
+services.AddOpenTelemetry().WithMetrics(b => b
+    .AddServiceConnectInstrumentation());
+```
+
+## ServiceConnectInstrumentationOptions
+
+```csharp
+public sealed class ServiceConnectInstrumentationOptions
+{
+    public Action<Activity, Message>? EnrichWithMessage { get; set; }
+    public Action<Activity, byte[]>? EnrichWithMessageBytes { get; set; }
+    public bool EnablePublishTelemetry { get; set; } = true;
+    public bool EnableConsumeTelemetry { get; set; } = true;
+    public bool EnableSendTelemetry { get; set; } = true;
+    public int MaxTagValueLength { get; set; } = 256;
+    public Func<Exception, string>? ExceptionMessageSanitiser { get; set; }
+}
+```
+
+Mutable options consumed by `ServiceConnectActivitySource` when starting activities. Each setter is guarded by a `ThrowIfFrozen()` check: once `AddTelemetry`'s configure callback returns, the options instance is frozen and any subsequent setter call throws `InvalidOperationException`. Mutate the options inside the callback (the only window the framework guarantees is writable); after the bus is built, treat the instance as read-only.
+
+### `EnrichWithMessage`
+
+Optional callback invoked on every started publish, send, and consume activity that has a strongly-typed `Message`. Use this to attach domain-specific tags (order id, customer id) to the trace.
+
+<Aside type="caution" title="Do not attach raw payload fields as span tags">
+  Message bodies may contain PII, secrets, or regulated data; tagging them propagates that data to every downstream observability backend. Pick the specific fields you need and review them with whoever owns data classification.
+</Aside>
+
+### `EnrichWithMessageBytes`
+
+Optional callback invoked on the consume side when the activity is started before the message has been deserialised — receives the raw envelope bytes. Same security caveat as `EnrichWithMessage`.
+
+### `Enable{Publish,Send,Consume}Telemetry`
+
+Per-direction toggles. Setting any to `false` skips activity creation for that operation while still injecting the ambient W3C trace context into outgoing headers (so an upstream span — typically an ASP.NET Core request — propagates across the broker even when ServiceConnect's own spans are disabled).
+
+### `MaxTagValueLength`
+
+Maximum number of characters stored in any user-controlled string tag (destination, routing key, MessageId, conversation id). Defaults to `256`. Long values are silently truncated to this bound before they are attached to the activity, providing a hard cardinality ceiling on tag values that originate from message headers.
+
+Set to `int.MaxValue` to disable truncation entirely.
+
+### `ExceptionMessageSanitiser`
+
+Optional `Func<Exception, string>?` called to produce the `exception.message` value written to the activity status description and the OTel `exception` event. Defaults to `null`, which means the raw `Exception.Message` is used unchanged.
+
+Supply a delegate when exception messages may contain PII that you do not want propagating to your observability backend:
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    opts.ExceptionMessageSanitiser = ex =>
+        ex is ValidationException ve ? ve.SafeSummary : "[redacted]";
+});
+```
+
+On .NET 9 and later, when `ExceptionMessageSanitiser` is set, `ServiceConnectActivitySource.SetError` opts out of `Activity.AddException` (which uses the CLR's built-in exception serialisation) and writes the `exception.*` event attributes manually using the sanitised string. On earlier runtimes the sanitised string is applied to the status description and the `exception.message` tag; other `exception.*` attributes still use the CLR path.
+
+## ServiceConnectActivitySource
+
+```csharp
+public static class ServiceConnectActivitySource
+{
+    public static readonly string ActivitySourceName;  // computed from assembly name, currently "ServiceConnect.Telemetry.Bus"
+
+    public static Activity? Publish(
+        PublishEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes,
+        ActivityContext parentContext = default);
+
+    public static Activity? Consume(
+        ConsumeEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes);
+
+    public static Activity? Send(
+        SendEventArgs eventArgs,
+        ServiceConnectInstrumentationOptions options,
+        IMessagingSystemAttributes attributes,
+        ActivityContext parentContext = default);
+
+    public static void SetError(
+        Activity? activity,
+        Exception exception,
+        ServiceConnectInstrumentationOptions options);
+
+    public static bool TryGetExistingContext(
+        IDictionary<string, string> headers,
+        out ActivityContext context);
+}
+```
+
+Static façade that owns the `ActivitySource`. The middleware calls `Publish`, `Send`, and `Consume`; the constant and helpers are public so downstream code (handler-level instrumentation, custom transports) can hook into the same trace tree.
+
+All methods that previously read from static `Options` and `MessagingSystemAttributes` properties now accept those as explicit parameters. This removes ambient global state and allows multiple independently-configured buses in the same process to each drive the façade with their own options and attributes.
+
+### Activity-source name
+
+All activities — publish, send, and consume — are emitted from a single source whose name is exposed as `ServiceConnectActivitySource.ActivitySourceName`. Register it once with the OTel SDK using the dedicated extension:
+
+```csharp
+services.AddOpenTelemetry().WithTracing(b => b
+    .AddServiceConnectInstrumentation()
+    .AddOtlpExporter());
+// Equivalent: .AddSource(ServiceConnectActivitySource.ActivitySourceName)
+// Do not hard-code the literal "ServiceConnect.Telemetry.Bus" — use the extension
+// or the constant so a rename cannot silently disable telemetry.
+```
+
+Per-direction sampling is controlled through `EnablePublishTelemetry`, `EnableConsumeTelemetry`, and `EnableSendTelemetry` in `ServiceConnectInstrumentationOptions` rather than through separate source registrations.
+
+### Listening without the OTel SDK
+
+When you do not want to take a dependency on `OpenTelemetry.Extensions.Hosting`, you can observe ServiceConnect activities directly using the BCL `ActivityListener`. This is the appropriate approach for ad-hoc investigation, console tooling, or smoke tests:
+
+```csharp
+using var listener = new ActivityListener
+{
+    ShouldListenTo = src => src.Name == ServiceConnectActivitySource.ActivitySourceName,
+    Sample = (ref ActivityCreationOptions<ActivityContext> _) => ActivitySamplingResult.AllData,
+    ActivityStarted = a => { /* ... */ },
+    ActivityStopped = a => { /* ... */ },
+};
+ActivitySource.AddActivityListener(listener);
+```
+
+The `AddServiceConnectInstrumentation()` OTel SDK path (shown in [Registration](#registration) above) remains the production path for exporting to OTLP backends. For a worked example of the BCL listener approach see `examples/Telemetry/.../Publisher/TelemetryConsoleListener.cs`.
+
+### `SetError`
+
+Marks an activity as errored using OTel semantic conventions (`Status = Error`, an `exception` event with `exception.{type,message,stacktrace}` attributes). No-op when the activity is null. Pass the same `ServiceConnectInstrumentationOptions` instance used for the activity; the method honours `ExceptionMessageSanitiser` when writing the `exception.message` attribute. Not wired into the bus host paths — exposed for handlers and custom middleware that want to record their own failures inside an existing ServiceConnect activity.
+
+### `TryGetExistingContext`
+
+Parses a W3C `traceparent` (and optional `tracestate`) out of a header dictionary. Useful when bridging into a non-pipeline activity (for example, a long-running batch job that should resume the trace started on the publish side).
+
+## IMessagingSystemAttributes
+
+```csharp
+public interface IMessagingSystemAttributes
+{
+    string MessagingSystem { get; }
+    string ProtocolName { get; }
+    string ServerAddress => string.Empty;
+    int ServerPort => 0;
+}
+```
+
+Supplies the OTel-semantic-convention `messaging.system` and `network.protocol.name` tag values stamped on every emitted activity. `ServerAddress` and `ServerPort` are default-interface-method members with the indicated defaults — most providers override them to surface broker connection metadata. The default implementation (`RabbitMqMessagingSystemAttributes`) returns `rabbitmq` and `amqp`.
+
+To override for a different transport, register your own `IMessagingSystemAttributes` implementation in DI **before** `AddTelemetry`:
+
+```csharp
+services.AddSingleton<IMessagingSystemAttributes, MyTransportAttributes>();
+services.AddServiceConnect(builder =>
+{
+    builder.AddTelemetry();
+    // AddTelemetry uses TryAddSingleton; MyTransportAttributes wins.
+});
+```
+
+## MessagingAttributes — span attribute keys
+
+`MessagingAttributes` exposes the OTel semconv 1.x attribute name constants ServiceConnect stamps on every span. Reference these from your enrichment delegates and span-filter rules rather than hard-coding the strings.
+
+| Constant | Wire name | Description |
+|---|---|---|
+| `MessageId` | `messaging.message.id` | Logical message identifier. High cardinality — span-only; must not be used as a metric tag. |
+| `MessageConversationId` | `messaging.message.conversation_id` | Conversation or correlation identifier. High cardinality — span-only; must not be used as a metric tag. |
+| `MessagingOperationType` | `messaging.operation.type` | OTel-defined operation type: `publish` for sends/publishes, `process` for consumer-side handler dispatch. |
+| `MessagingOperationName` | `messaging.operation.name` | Implementation-specific operation name (e.g. `publish`, `send`, `request`, `process`). |
+| `MessagingSystem` | `messaging.system` | Messaging system identifier supplied via `IMessagingSystemAttributes` (`"rabbitmq"` by default). |
+| `MessagingDestination` | `messaging.destination.name` | Queue or exchange name for the operation. Empty/absent when anonymous. |
+| `MessagingDestinationAnonymous` | `messaging.destination.anonymous` | Boolean — set to `true` when the operation has no resolvable destination. |
+| `MessagingDestinationRoutingKey` | `messaging.rabbitmq.destination.routing_key` | RabbitMQ routing key for publishes that target a topic exchange. |
+| `MessagingBodySize` | `messaging.message.body.size` | Serialised payload size in bytes. |
+| `ProtocolName` | `network.protocol.name` | Network protocol name used by the messaging system. |
+| `ServerAddress` | `server.address` | Broker host name or IP address. Emitted only when the value is non-empty. |
+| `ServerPort` | `server.port` | Broker TCP port. Emitted only when the value is greater than zero. |
+
+The pre-1.x `messaging.operation` attribute is intentionally NOT emitted; ServiceConnect emits the `operation.type` + `operation.name` split prescribed by semconv 1.x. Dashboards that filtered on the older attribute should switch to `messaging.operation.type`.
+
+## Metrics
+
+`ServiceConnect.Telemetry`'s `AddServiceConnectInstrumentation()` extension wires the meter named `"ServiceConnect.Bus"`. The meter publishes 11 instruments — four OTel-standard messaging metrics plus seven ServiceConnect-specific extensions (`messaging.serviceconnect.*`). See [Observability — Metrics](/ServiceConnect-CSharp/learn/operations/observability/#metrics) for the full catalogue with tag schemas, unit details, and cardinality guidance.
+
+The instrument-name constants live in `ServiceConnect.Diagnostics.MetricNames` (in the `ServiceConnect` package — not the telemetry package). Reference them rather than hard-coding strings:
+
+```csharp
+using ServiceConnect.Diagnostics;
+
+var meterListener = new MeterListener();
+meterListener.InstrumentPublished = (instrument, listener) =>
+{
+    if (instrument.Meter.Name == ServiceConnectMeter.MeterName &&
+        instrument.Name == MetricNames.PublishDuration)
+    {
+        listener.EnableMeasurementEvents(instrument);
+    }
+};
+```
+
+## Usage
+
+### Registration
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => t.Host = "localhost");
+    builder.ConfigureQueues(q => q.QueueName = "shipping-service");
+
+    builder.AddTelemetry(opts =>
+    {
+        opts.EnrichWithMessage = (activity, message) =>
+        {
+            // Attach correlation id only — do not export raw payload fields.
+            activity.SetTag("messaging.serviceconnect.correlation_id", message.CorrelationId);
+        };
+    });
+});
+
+services.AddOpenTelemetry().WithTracing(b => b
+    .AddServiceConnectInstrumentation()
+    .AddOtlpExporter());
+```
+
+`AddTelemetry` inserts the telemetry middleware at the head of both pipelines so its activities bracket every other middleware. The OTel SDK is configured to listen for the single ServiceConnect source via `AddServiceConnectInstrumentation`; without that call activities are created but never sampled. The enrichment hook adds a single high-signal tag and deliberately avoids the message body.
+
+### Disabling a single direction
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    // Keep publish/consume tracing on; drop send-side spans for a chatty
+    // command worker that emits hundreds of point-to-point sends per second.
+    opts.EnableSendTelemetry = false;
+});
+```
+
+W3C context still propagates on the disabled side, so an enclosing ASP.NET Core request span continues to thread through the broker even when ServiceConnect itself does not emit a span.
+
+### Capping tag value length
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    // Allow up to 512 characters on tag values (default is 256).
+    opts.MaxTagValueLength = 512;
+});
+```
+
+Set to `int.MaxValue` to disable truncation entirely. The default of 256 prevents runaway cardinality from long destination names or message ids under high-cardinality routing topologies.
+
+### PII redaction in exception messages
+
+```csharp
+builder.AddTelemetry(opts =>
+{
+    opts.ExceptionMessageSanitiser = ex => ex switch
+    {
+        ValidationException ve => ve.PublicMessage,
+        _                      => ex.GetType().Name
+    };
+});
+```
+
+Without a sanitiser, `Exception.Message` is written verbatim to `exception.message` tags and the activity status description. If your handlers throw exceptions whose messages embed user data (email addresses, account numbers), supply a sanitiser before those strings leave the process boundary to your tracing backend.
+
+## See also
+
+- [Observability](/ServiceConnect-CSharp/learn/operations/observability/) — concept
+- [`AddServiceConnect`](../bus/add-serviceconnect/) — registration entry point
+- [`ISendMessageMiddleware`](../filters/isendmessagemiddleware/) — the middleware contract `TelemetrySendMiddleware` implements
+- [`IMessageProcessingMiddleware`](../filters/imessageprocessingmiddleware/) — the middleware contract `TelemetryProcessingMiddleware` implements

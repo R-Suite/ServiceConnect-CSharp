@@ -1,0 +1,97 @@
+---
+title: Envelope
+description: The transport-level wrapper around a serialised message — body bytes plus headers.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`Envelope` is the transport-level wrapper around a serialised message — a bag of headers plus the raw body bytes. Application code rarely constructs one directly; most contact happens indirectly through [`IConsumeContext`](../../handlers/iconsumecontext/) or while authoring a middleware that needs to inspect the untyped payload before it becomes a `Message`.
+
+See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for where the envelope sits in the pipeline.
+
+## Reference
+
+### `Headers`
+
+```csharp
+public IDictionary<string, object> Headers { get; init; } = new Dictionary<string, object>(StringComparer.Ordinal);
+```
+
+Gets the headers accumulated by the pipeline.
+
+**Returns.** A mutable dictionary of header name/value pairs. The reference is fixed by `init`, but filters may add or modify entries in place.
+
+**Remarks.** Header values are untyped because transports such as RabbitMQ expose bytes, strings, and numeric values through a single `object`-typed channel. Code that reads a header should defensively cast or decode.
+
+**Decoding header values.** RabbitMQ delivers header values as `byte[]`, `string`, or numeric primitives depending on how they were written. The static helper `ServiceConnect.Interfaces.Headers.HeaderDecoder.Decode(object? value)` normalises the variants to a `string?` (UTF-8 decoded where the underlying value is `byte[]`), which keeps consumer-side parsing terse:
+
+```csharp
+if (envelope.Headers.TryGetValue("X-Dedupe-Key", out var raw)
+    && Guid.TryParse(HeaderDecoder.Decode(raw), out var key))
+{
+    // ...
+}
+```
+
+Use `HeaderDecoder.Decode` whenever you read a header that might cross the byte-array/string boundary.
+
+<Aside type="note" title="Reading type information from headers">
+  `MessageType` carries the **operation name** — `"Publish"`, `"Send"`, or `"ByteStream"` — not the CLR type. For type information use `TypeName` (the type's `FullName`, e.g. `"OrderService.Messages.OrderPlaced"`) or `FullTypeName` (its `AssemblyQualifiedName`). Both are stamped server-authoritatively on outbound and cannot be overridden by caller-supplied headers.
+</Aside>
+
+---
+
+### `Body`
+
+```csharp
+public ReadOnlyMemory<byte> Body { get; init; } = ReadOnlyMemory<byte>.Empty;
+```
+
+Gets the raw message body bytes as delivered by the transport.
+
+**Returns.** A `ReadOnlyMemory<byte>` over the serialised payload. Empty when no body was provided.
+
+**Remarks.** The body is always opaque at this layer — deserialisation into a concrete `Message` happens later in the pipeline. An empty body is legitimate for messages whose content lives entirely in headers.
+
+## Usage
+
+### Inspecting an envelope from middleware
+
+```csharp
+public sealed class AuditLoggingMiddleware(ILogger<AuditLoggingMiddleware> logger)
+    : IMessageProcessingMiddleware
+{
+    public Task<ConsumeEventResult> ProcessAsync(
+        ReadOnlyMemory<byte> messageBytes,
+        Type messageType,
+        object message,
+        IDictionary<string, object> headers,
+        Envelope envelope,
+        MessageProcessingDelegate next,
+        CancellationToken cancellationToken)
+    {
+        logger.LogInformation(
+            "Received message: {HeaderCount} headers, {BodyLength} bytes",
+            envelope.Headers.Count,
+            envelope.Body.Length);
+
+        if (envelope.Headers.TryGetValue("TypeName", out var headerType))
+        {
+            logger.LogDebug("TypeName header: {TypeName}", headerType);
+        }
+
+        return next(messageBytes, messageType, message, headers, envelope, cancellationToken);
+    }
+}
+```
+
+An audit middleware reads the header bag and the body length directly from the envelope without deserialising. Running at this layer lets the middleware observe every message regardless of its concrete type, and keeps the body as a `ReadOnlyMemory<byte>` slice (no allocation) until something further down the pipeline actually needs to decode it. Pass the same tuple forward to `next` so downstream middleware sees the envelope unchanged.
+
+## See also
+
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — concept
+- [`Message`](../message/) — related reference page
+- [`IConsumeContext`](../../handlers/iconsumecontext/) — related reference page
+- [`IMessageProcessingMiddleware`](../../filters/imessageprocessingmiddleware/) — related reference page

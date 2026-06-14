@@ -1,0 +1,132 @@
+---
+title: IHandlerRegistry
+description: A marker interface that triggers eager DI resolution at startup to validate handler configuration before the first message arrives.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IHandlerRegistry` is a marker interface with no members. Its sole purpose is to give the dependency-injection container a well-known type to query at startup. The framework resolves every registered `IHandlerRegistry` implementation eagerly during bus initialisation. Because DI resolution runs the constructor, implementations can encode validation logic there — verifying that all expected message handlers are present — and fail startup loudly rather than failing silently at first-message delivery.
+
+Most consumers of ServiceConnect never need to implement this interface. It is documented here for completeness and for teams that want to add startup-time consistency checks to their handler bindings.
+
+See [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) for the broader handler model.
+
+## Reference
+
+`IHandlerRegistry` has no members. It is a marker used during startup to trigger eager resolution of implementations, which validates handler configuration early rather than at first-message delivery. The full source is:
+
+```csharp
+namespace ServiceConnect.Interfaces;
+
+/// <summary>
+/// Marker interface for internal handler registries that need eager initialization.
+/// Implementations are resolved during startup to trigger validation of handler configurations.
+/// </summary>
+public interface IHandlerRegistry
+{
+}
+```
+
+## Implementing
+
+### Eager initialisation
+
+The DI container resolves all `IHandlerRegistry` implementations at bus startup, before any message is consumed. If a constructor throws, startup fails immediately with a clear exception. This surfaces misconfigured handler bindings — missing registrations, wrong scope, incorrect type mappings — as a hard start-up error rather than an intermittent runtime failure.
+
+### Typical content
+
+Implementations hold no persistent state beyond the validation logic executed in their constructor. A typical implementation receives an `IServiceProvider` through dependency injection and uses it to verify that the expected `IMessageHandler<T>` types are present. If any are missing, the constructor throws a descriptive exception.
+
+Because construction is single-threaded during startup, thread-safety inside the constructor is not a concern.
+
+## Usage
+
+### Startup validation registry
+
+The following example registers a handler registry that inspects the `IServiceProvider` on startup and fails fast if any `IMessageHandler<T>` required by the order processing pipeline is absent.
+
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using ServiceConnect.Interfaces;
+
+public sealed class StartupValidatingHandlerRegistry : IHandlerRegistry
+{
+    private static readonly Type[] RequiredHandlers =
+    [
+        typeof(IMessageHandler<OrderPlaced>),
+        typeof(IMessageHandler<PaymentAuthorised>),
+        typeof(IMessageHandler<ShipmentDispatched>),
+    ];
+
+    public StartupValidatingHandlerRegistry(IServiceProvider services)
+    {
+        var missing = RequiredHandlers
+            .Where(t => services.GetService(t) is null)
+            .Select(t => t.Name)
+            .ToList();
+
+        if (missing.Count > 0)
+            throw new InvalidOperationException(
+                "The following message handlers are required but not registered: "
+                + string.Join(", ", missing));
+    }
+}
+```
+
+Register it during bus startup:
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => transport.Host = "rabbit.internal.example");
+    builder.AddRegistration(svc =>
+        svc.AddSingleton<IHandlerRegistry, StartupValidatingHandlerRegistry>());
+});
+```
+
+When the bus starts, the framework resolves `StartupValidatingHandlerRegistry`, which runs the constructor. If `OrderService` forgot to register its `ShipmentDispatched` handler, startup throws an `InvalidOperationException` immediately — before any connection to the broker is made and before the service starts accepting traffic.
+
+<Aside type="note">
+Because the constructor is called during DI resolution, the `IServiceProvider` passed in is the root provider. Scoped services are not available here; only singletons and transients can be resolved for inspection.
+</Aside>
+
+## `HandlerInterfaceKind` enum
+
+`HandlerInterfaceKind` discriminates which handler interface a `HandlerReference` was produced for. A single class that implements multiple handler interfaces produces one `HandlerReference` per interface, each carrying the appropriate `Kind`.
+
+```csharp
+namespace ServiceConnect.Interfaces;
+
+public enum HandlerInterfaceKind
+{
+    /// <summary>
+    /// The handler implements <see cref="IMessageHandler{TMessage}"/>.
+    /// </summary>
+    MessageHandler,
+
+    /// <summary>
+    /// The handler implements <see cref="IProcessHandler{TData,TMessage}"/>.
+    /// </summary>
+    ProcessHandler,
+
+    /// <summary>
+    /// The handler implements <see cref="IStreamHandler{TMessage}"/>.
+    /// </summary>
+    StreamHandler,
+
+    /// <summary>
+    /// The handler extends <see cref="Aggregator{TMessage}"/>.
+    /// </summary>
+    Aggregator,
+}
+```
+
+Custom `IHandlerRegistry` implementations and callers that inspect the registry's `HandlerReference` list use this enum to discriminate which handler interface a reference was produced for — for example, to apply different dispatch logic for `ProcessHandler` references versus `MessageHandler` references, or to filter the list to only `Aggregator` references when querying aggregator state.
+
+## See also
+
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — the handler model and registration conventions
+- [`IMessageDispatcher`](../imessagedispatcher/) — the orchestrator that drives message dispatch at runtime
+- [`IMessageProcessor`](../imessageprocessor/) — the chain-of-responsibility hook invoked during dispatch

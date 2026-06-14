@@ -1,0 +1,76 @@
+---
+title: Message
+description: The base class every ServiceConnect message inherits — carries the correlation id that ties a conversation together.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`Message` is the base class every ServiceConnect message inherits from. It carries a single piece of state — the correlation id used to relate messages across a conversation: a request and its reply, a command and the events it produces, and every message emitted by one process-manager instance. You reach for it whenever you define a new message contract.
+
+See [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) for the conceptual tour.
+
+## Reference
+
+### `Message(Guid correlationId)`
+
+```csharp
+public class Message(Guid correlationId)
+```
+
+Primary constructor. Every derived message type passes a correlation id up to this base constructor; derived types typically expose their own primary constructor that forwards it.
+
+**Parameters**
+- `correlationId` — the correlation id to attach to the message. Pass a fresh `Guid.NewGuid()` when starting a new conversation, or forward the id of an inbound message when continuing one.
+
+**Remarks.** The constructor is the primary way to supply the correlation id. The property also has an `init` accessor so deserialisers and object-initializer expressions can populate it — see remarks under `CorrelationId` below.
+
+---
+
+### `CorrelationId`
+
+```csharp
+public Guid CorrelationId { get; init; }
+```
+
+Gets the correlation id used to relate this message to a broader conversation.
+
+**Remarks.** The `init` accessor allows object-initializer syntax and deserialisers to populate the property, but prevents post-construction reassignment in ordinary code. Pass the id through the primary constructor in production code; the `init` accessor is there for deserialisers and test helpers that construct messages via object initializers rather than constructors.
+
+## Usage
+
+### Defining a message type
+
+```csharp
+public sealed record OrderPlaced(Guid correlationId, Guid OrderId, decimal Total)
+    : Message(correlationId);
+```
+
+A message type inherits `Message` and forwards a correlation id through its own primary constructor. Using `sealed record` gives value equality and a compact declaration; the correlation id flows into the base class verbatim.
+
+### Propagating correlation id from an inbound message
+
+```csharp
+public sealed class PlaceOrderHandler : IMessageHandler<PlaceOrder>
+{
+    public async Task HandleAsync(PlaceOrder message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        // ... persist the order ...
+
+        await context.Bus.PublishAsync(new OrderPlaced(
+            correlationId: message.CorrelationId,
+            OrderId: message.OrderId,
+            Total: message.Total));
+    }
+}
+```
+
+When a handler emits a follow-up event, it forwards the inbound message's correlation id into the new message so downstream subscribers and log aggregators can stitch the full conversation together. Generating a fresh id here would break the trace. `context` is passed directly to `HandleAsync` — reach for it when you need the bus, the reply helper, or other per-message metadata.
+
+## See also
+
+- [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — concept
+- [`Envelope`](../envelope/) — related reference page
+- [`Message options`](../options/) — related reference page
+- [`IConsumeContext`](../../handlers/iconsumecontext/) — related reference page

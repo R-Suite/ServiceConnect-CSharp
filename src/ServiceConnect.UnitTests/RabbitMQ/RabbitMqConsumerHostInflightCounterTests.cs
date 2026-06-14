@@ -1,0 +1,212 @@
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
+using Xunit;
+
+namespace ServiceConnect.UnitTests.RabbitMQ;
+
+/// <summary>
+/// Atomicity discipline of the in-flight counter (owned by
+/// <see cref="RabbitMqAdmissionGate"/>): under concurrent deliveries, the counter
+/// must never go negative and must settle to zero once all in-flight handlers
+/// complete.
+///
+/// All increments and decrements happen under the gate's lock, so the counter is
+/// exact regardless of interleaving. Mixing lock-protected `++` with lock-free
+/// decrements and volatile reads would let a concurrent decrement lose an update
+/// against a stale read inside the lock-protected `++`, leaving the counter stuck
+/// above the true in-flight count.
+/// </summary>
+public sealed class RabbitMqConsumerHostInflightCounterTests
+{
+    [Fact]
+    public async Task EventAsync_ConcurrentDeliveriesAndDrains_CounterReachesZero_NeverNegative()
+    {
+        // Yielding handler maximises interleaving by forcing the continuation onto
+        // the thread pool — this widens the window between the increment (admission)
+        // and decrement (finally) so concurrent producers/decrementers exercise the
+        // full read-modify-write race surface of the in-flight counter.
+        static async Task<ConsumeEventResult> YieldingHandler(
+            ReadOnlyMemory<byte> _, string __, IDictionary<string, object> ___, CancellationToken ____)
+        {
+            await Task.Yield();
+            return new ConsumeEventResult { Success = true };
+        }
+
+        var (host, gate, _, _) = await BuildHostAsync(YieldingHandler);
+
+        // Background sampler reads the counter every 1ms and tracks the minimum value
+        // observed. A negative value indicates a lost-update race (decrement applied
+        // against a stale read inside the lock-protected `++`).
+        int minObserved = int.MaxValue;
+        using var samplerCts = new CancellationTokenSource();
+        var sampler = Task.Run(async () =>
+        {
+            while (!samplerCts.IsCancellationRequested)
+            {
+                var v = ReadInflightCount(gate);
+                int snapshot;
+                do { snapshot = minObserved; }
+                while (v < snapshot && Interlocked.CompareExchange(ref minObserved, v, snapshot) != snapshot);
+                try
+                {
+                    await Task.Delay(1, samplerCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
+        });
+
+        // 8 concurrent producers, 100 deliveries each, distinct deliveryTags so the
+        // mock channel paths don't collide on duplicate ack tags.
+        var tasks = Enumerable.Range(0, 8).Select(producerIdx => Task.Run(async () =>
+        {
+            for (int i = 0; i < 100; i++)
+            {
+                var args = MakeArgs(deliveryTag: (ulong)((producerIdx * 100) + i));
+                await host.RaiseDeliveryForTests(args);
+            }
+        })).ToArray();
+
+        await Task.WhenAll(tasks);
+        await samplerCts.CancelAsync();
+        try { await sampler; } catch (OperationCanceledException) { }
+
+        // Counter never went negative.
+        Assert.True(minObserved >= 0, $"Counter went negative: min observed = {minObserved}");
+
+        // Brief settle window: the decrement runs in the finally after the handler
+        // continuation, which may still be hopping thread-pool slots when WhenAll
+        // returns from the producer task (the producer task awaits RaiseDeliveryForTests
+        // to completion of EventAsync's finally, but the sampler tracks min, not max).
+        await Task.Delay(100);
+
+        // Counter is at zero after drain.
+        Assert.Equal(0, ReadInflightCount(gate));
+    }
+
+    private static int ReadInflightCount(RabbitMqAdmissionGate gate)
+    {
+        // The in-flight counter now lives on the gate, not the host. Reflection still
+        // probes it directly so the sampler observes the same primitive the production
+        // path increments/decrements, without needing a public surface that exists only
+        // for tests.
+        var field = typeof(RabbitMqAdmissionGate).GetField(
+            "_inFlight",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+        return (int)field!.GetValue(gate)!;
+    }
+
+    // ── Harness ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a <see cref="RabbitMqConsumerHost"/> with mocked channels. Parameterised to
+    /// accept the handler delegate so the inflight-counter test can pass a yielding handler
+    /// that maximises interleaving.
+    /// </summary>
+    private static async Task<(
+        RabbitMqConsumerHost Host,
+        RabbitMqAdmissionGate Gate,
+        Mock<IChannel> ConsumerChannel,
+        Mock<IChannel> PublishChannel)> BuildHostAsync(ConsumerEventHandler handler)
+    {
+        // ── Consumer channel (BasicQos + BasicConsume + BasicAck/Nack) ──────
+        var consumerChannel = new Mock<IChannel>(MockBehavior.Strict);
+        consumerChannel.Setup(c => c.IsOpen).Returns(true);
+        consumerChannel.Setup(c => c.BasicQosAsync(
+                It.IsAny<uint>(), It.IsAny<ushort>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        consumerChannel.Setup(c => c.BasicConsumeAsync(
+                It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<string>(),
+                It.IsAny<bool>(), It.IsAny<bool>(),
+                It.IsAny<IDictionary<string, object?>?>(),
+                It.IsAny<IAsyncBasicConsumer>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("tag");
+        consumerChannel.Setup(c => c.BasicAckAsync(
+                It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+        consumerChannel.Setup(c => c.BasicNackAsync(
+                It.IsAny<ulong>(), It.IsAny<bool>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+        consumerChannel.Setup(c => c.CloseAsync(
+                It.IsAny<ushort>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+        consumerChannel.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
+        consumerChannel.SetupAdd(c => c.ChannelShutdownAsync += It.IsAny<AsyncEventHandler<ShutdownEventArgs>>());
+        consumerChannel.SetupRemove(c => c.ChannelShutdownAsync -= It.IsAny<AsyncEventHandler<ShutdownEventArgs>>());
+
+        // ── Publish channel (BasicPublishAsync) ─────────────────────────────
+        var publishChannel = new Mock<IChannel>(MockBehavior.Loose);
+        publishChannel
+            .Setup(c => c.BasicPublishAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(),
+                It.IsAny<BasicProperties>(), It.IsAny<ReadOnlyMemory<byte>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns(ValueTask.CompletedTask);
+        publishChannel.Setup(c => c.DisposeAsync()).Returns(ValueTask.CompletedTask);
+
+        // ── Connection ──────────────────────────────────────────────────────
+        var conn = new Mock<IServiceConnectConnection>();
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(consumerChannel.Object);
+        conn.Setup(c => c.CreateChannelAsync(It.IsAny<CreateChannelOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(publishChannel.Object);
+        conn.SetupGet(c => c.UnderlyingConnection).Returns((IConnection?)null);
+
+        // ── Transport / queue / bus configuration ───────────────────────────
+        var transport = new Mock<ITransportConfiguration>();
+        transport.SetupGet(t => t.MaxRetries).Returns(3);
+        transport.SetupGet(t => t.PrefetchCount).Returns((ushort)10);
+        transport.SetupProperty(t => t.GracefulShutdownTimeoutMilliseconds, 5000);
+        transport.SetupGet(t => t.ClientSettings).Returns(new Dictionary<string, object>());
+
+        var queue = new Mock<IQueueConfiguration>();
+        queue.SetupGet(q => q.QueueName).Returns("q");
+        queue.SetupGet(q => q.ErrorQueueName).Returns("err");
+        queue.SetupGet(q => q.AuditQueueName).Returns("audit");
+        queue.SetupGet(q => q.DisableErrors).Returns(false);
+        queue.SetupGet(q => q.AuditingEnabled).Returns(false);
+
+        var bus = new Mock<IBusConfiguration>();
+        bus.SetupGet(b => b.IncludeMachineNameInHeaders).Returns(false);
+        bus.SetupGet(b => b.DeadLetterUnhandledMessages).Returns(false);
+
+        var retry = new MessageRetryHandler(3, "err", "q", NullLogger.Instance);
+        var audit = new MessageAuditPublisher(queue.Object);
+        var gate = new RabbitMqAdmissionGate("q");
+
+        var host = new RabbitMqConsumerHost(
+            conn.Object, transport.Object, queue.Object, bus.Object,
+            retry, gate, audit, NullLogger.Instance);
+
+        await host.StartConsumingAsync(handler, queueName: "q").ConfigureAwait(false);
+
+        return (host, gate, consumerChannel, publishChannel);
+    }
+
+    /// <summary>
+    /// Builds a delivery with the minimal headers that get past the type-name
+    /// admission guard so the processor path is reached.
+    /// </summary>
+    private static BasicDeliverEventArgs MakeArgs(ulong deliveryTag)
+        => new(
+            consumerTag: "ct",
+            deliveryTag: deliveryTag,
+            redelivered: false,
+            exchange: "",
+            routingKey: "q",
+            properties: new BasicProperties
+            {
+                Headers = new Dictionary<string, object?>(StringComparer.Ordinal)
+                {
+                    [HeaderKeys.FullTypeName] = "Foo.Bar",
+                },
+            },
+            body: new byte[] { 1 });
+}

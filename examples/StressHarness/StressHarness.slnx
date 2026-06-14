@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ServiceConnect.Examples.StressHarness.Chaos/ServiceConnect.Examples.StressHarness.Chaos.csproj" />
+    <Project Path="src/ServiceConnect.Examples.StressHarness.Contracts/ServiceConnect.Examples.StressHarness.Contracts.csproj" />
+    <Project Path="src/ServiceConnect.Examples.StressHarness.Tests/ServiceConnect.Examples.StressHarness.Tests.csproj" />
+    <Project Path="src/ServiceConnect.Examples.StressHarness/ServiceConnect.Examples.StressHarness.csproj" />
+  </Folder>
+  <Project Path="../../src/ServiceConnect.Client.RabbitMQ/ServiceConnect.Client.RabbitMQ.csproj" />
+  <Project Path="../../src/ServiceConnect.Interfaces/ServiceConnect.Interfaces.csproj" />
+  <Project Path="../../src/ServiceConnect.Persistence.InMemory/ServiceConnect.Persistence.InMemory.csproj" />
+  <Project Path="../../src/ServiceConnect.Persistence.MongoDb/ServiceConnect.Persistence.MongoDb.csproj" />
+  <Project Path="../../src/ServiceConnect.Telemetry/ServiceConnect.Telemetry.csproj" />
+  <Project Path="../../src/ServiceConnect/ServiceConnect.csproj" />
+  <Project Path="../ExampleSupport/ServiceConnect.Examples.Support.csproj" />
+</Solution>

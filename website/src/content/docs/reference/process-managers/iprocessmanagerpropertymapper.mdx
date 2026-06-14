@@ -1,0 +1,77 @@
+---
+title: IProcessManagerPropertyMapper
+description: Declares how incoming message properties correlate to process-manager state properties — the expressions the finder uses to load the saga record.
+---
+
+## Overview
+
+`IProcessManagerPropertyMapper` is the surface the framework hands to an `IProcessHandler` so it can declare how inbound messages correlate to persisted saga state. Each `ConfigureMapping` call registers one mapping expression; the framework compiles the expressions and uses them when loading a record through `IProcessManagerFinder`. Reach for this type only when you are overriding `IProcessHandler<TData, TMessage>.ConfigureMapper` — the default mapping (`CorrelationId` to `CorrelationId`) is usually right.
+
+See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the conceptual tour.
+
+## Reference
+
+```csharp
+public interface IProcessManagerPropertyMapper
+```
+
+### `Mappings`
+
+```csharp
+IReadOnlyList<ProcessManagerToMessageMap> Mappings { get; }
+```
+
+Gets the mapping entries registered through `ConfigureMapping`. The framework enumerates this list when resolving a saga record for an inbound message; each entry carries the message type, the compiled message-property accessor, and the process-manager property path.
+
+---
+
+### `ConfigureMapping`
+
+```csharp
+void ConfigureMapping<TProcessManagerData, TMessage>(
+    Expression<Func<TProcessManagerData, object>> processManagerProperty,
+    Expression<Func<TMessage, object>> messageExpression)
+    where TProcessManagerData : IProcessManagerData
+    where TMessage : Message;
+```
+
+Adds a mapping between a process-manager property and a message property. The framework records both expressions so the property-mapper instance becomes the declarative source of truth for "which property on `TMessage` locates the `TData` record."
+
+**Parameters**
+- `processManagerProperty` — an expression selecting the state property to match against, for example `d => d.OrderId`.
+- `messageExpression` — an expression selecting the message property to read, for example `m => m.OrderId`.
+
+**Remarks.** The expressions must be simple property accessors — the framework parses the expression tree to derive both the compiled accessor and the property name/hierarchy used by the persistence layer. Method calls and arithmetic are not supported.
+
+**Throws.** `InvalidOperationException` when a mapping for the same `TMessage` has already been registered. Each message type maps to at most one process-manager-data correlation, so duplicate registration is rejected loud rather than overwriting silently.
+
+## Usage
+
+### Correlating on an order number instead of the default correlation id
+
+```csharp
+public sealed class ShippingSaga :
+    IProcessHandler<ShippingSagaData, OrderPlaced>
+{
+    public Task HandleAsync(OrderPlaced message, ShippingSagaData data, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        data.OrderId = message.OrderId;
+        return Task.CompletedTask;
+    }
+
+    void IProcessHandler<ShippingSagaData, OrderPlaced>.ConfigureMapper(
+        IProcessManagerPropertyMapper mapper)
+    {
+        mapper.ConfigureMapping<ShippingSagaData, OrderPlaced>(
+            d => d.OrderId,
+            m => m.OrderId);
+    }
+}
+```
+
+Override `ConfigureMapper` as an explicit interface implementation on the handler class and call `ConfigureMapping` once per `(TData, TMessage)` pair you want to correlate. The framework will look up the `ShippingSagaData` record by matching `OrderPlaced.OrderId` against `ShippingSagaData.OrderId` instead of the default `CorrelationId`-to-`CorrelationId` match.
+
+## See also
+
+- [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept
+- [`IProcessHandler`](../iprocesshandler/) — related reference

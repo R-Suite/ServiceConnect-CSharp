@@ -1,0 +1,109 @@
+---
+title: Routing Slip
+description: Send a message through an ordered chain of services — each stage does its work and the message advances automatically.
+---
+
+**Routing Slip** is the pattern for an ordered, multi-stage pipeline: inventory, then billing, then shipping. Each stage runs on its own service; between stages, the message carries its own itinerary. The initiator declares the route once; the stages don't need to know about each other.
+
+Think of it like a physical inter-office envelope with a list of offices clipped to the front. Each office does its work, crosses itself off, and passes the envelope to whoever is next on the list.
+
+## When to use it
+
+- You have a sequence of steps that must run in order.
+- The set of steps is known at the start of the flow, not decided later.
+- Each step is owned by a different service and you don't want each service to know the identity of the next one.
+
+If steps can run in parallel, you want [Scatter-Gather](/ServiceConnect-CSharp/learn/messaging-patterns/scatter-gather/) or plain [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/). If the step sequence depends on decisions made mid-flow, you want a [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/). Routing Slip is for the straight line.
+
+## The contract
+
+A single message type is carried through the pipeline. Nothing special is required of it — just a message:
+
+```csharp
+// Contracts/RoutingSlipOrder.cs
+using ServiceConnect.Interfaces;
+
+public sealed class RoutingSlipOrder(Guid correlationId) : Message(correlationId)
+{
+    public string OrderId { get; init; } = string.Empty;
+    public string CurrentStep { get; set; } = string.Empty;
+}
+```
+
+`CurrentStep` is a domain field — it is what the message represents, not how ServiceConnect routes it. The routing itself lives in a header, invisible to your code.
+
+## The initiator
+
+The initiator calls `RouteAsync` with the message and the ordered list of destination queues:
+
+```csharp
+// Starter/Program.cs
+await bus.RouteAsync(
+    new RoutingSlipOrder(Guid.NewGuid()) { OrderId = "order-001" },
+    new[] { "inventory", "billing", "shipping" });
+```
+
+ServiceConnect attaches a `RoutingSlip` header listing the remaining stops, sends the message to the first queue, and that is the last the initiator sees of it. The pipeline runs itself from there.
+
+## The stages
+
+Each stage is a normal consumer with a handler for the message type. **The handler does not forward the message** — the bus takes care of that:
+
+```csharp
+// InventoryStep/RoutingSlipOrderHandler.cs
+public sealed class RoutingSlipOrderHandler : IMessageHandler<RoutingSlipOrder>
+{
+    public async Task HandleAsync(RoutingSlipOrder message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        message.CurrentStep = "InventoryStep";
+        await ReserveStockAsync(message.OrderId);
+        // No forwarding here — ServiceConnect reads the RoutingSlip header
+        // and sends the message to the next stage after this handler returns.
+    }
+
+    private Task ReserveStockAsync(string orderId) => Task.CompletedTask;
+}
+```
+
+The stage's bootstrap is identical to any other consumer: declare the queue, register the handler, start consuming. Nothing special is needed to participate in a routing slip.
+
+After `HandleAsync` returns cleanly, the handler processor consults the `RoutingSlip` header, pops the current queue off the list, and forwards the message to the next queue. When the list is empty the message has reached the end and is acknowledged; it does not go anywhere else.
+
+## The mechanics
+
+A few details worth understanding, because they determine what the pattern can and cannot do:
+
+- **The header is the truth.** The list of remaining stops travels on the wire with every hop. Restarting a stage mid-flow doesn't lose the itinerary — it's in the message.
+- **Forwarding is automatic and bus-configurable.** The `EnableRoutingSlipProcessing` flag (default `true`) on the bus's configuration is what lights up the forwarding behaviour. If you set it to `false`, routing-slip headers are silently ignored — a useful escape hatch when a service wants to receive a message but not propagate it.
+- **Stage failure stops the pipeline.** If a stage's handler throws and exhausts retries, the message lands in that stage's error queue; the remaining stages never see it. Operations need to decide what to do — re-route from the error queue, compensate previous stages, or alert.
+- **Stages can mutate the message.** The bus forwards the same message instance, so changes a stage makes to the body are visible to later stages. This is the *only* message-mutation pattern in ServiceConnect where this is intentional — elsewhere, messages are immutable once constructed.
+
+### Slip drop on handler throw
+
+When a handler throws, the routing slip is **dropped from the forward path** for that delivery attempt. The message goes through the normal retry / error-queue machinery without forwarding to the next stage. The slip data is **preserved in the envelope's `RoutingSlip` header** — it travels with the message to the error queue so an operator can replay from that stage and have the pipeline continue from where it failed.
+
+This means:
+
+- A handler that throws does not accidentally forward a partial result to downstream stages.
+- The full itinerary is available for DLQ-based replay — the replayed message re-enters the pipeline at the faulting stage and continues through the remaining stops.
+
+### Cross-service routing slips
+
+Routing-slip destinations are validated by format only — `RouteAsync` does not require destinations to appear in the local bus's queue configuration, so **destinations that belong to other services are fully supported**. As long as the destination name is non-null, non-empty/whitespace, and contains no commas, `RouteAsync` accepts it and the transport delivers to that queue; otherwise it throws `ArgumentException`.
+
+```csharp
+// Routing across three services that the inventory service has no local config for:
+await bus.RouteAsync(
+    new RoutingSlipOrder(Guid.NewGuid()) { OrderId = "order-001" },
+    new[] { "billing-service", "fraud-check-service", "shipping-service" });
+```
+
+## When to prefer Pub/Sub instead
+
+If the "steps" are actually independent reactions to an event — analytics, email, cache invalidation, search index update — those want [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/), not a routing slip. Use a routing slip when the order matters: billing must happen after inventory, shipping must happen after billing. Use pub/sub when the order does not matter and the reactions are independent of each other's success.
+
+## What comes next
+
+- [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — when the step sequence is not fixed and mid-flow decisions drive the path.
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — when order doesn't matter and reactions are independent.
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — how the queue names the slip refers to are declared.

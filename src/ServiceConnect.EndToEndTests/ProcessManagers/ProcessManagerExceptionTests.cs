@@ -1,0 +1,125 @@
+using System.Text;
+using Microsoft.Extensions.DependencyInjection;
+using RabbitMQ.Client;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.DependencyInjection;
+using ServiceConnect.EndToEndTests.Fixtures;
+using ServiceConnect.EndToEndTests.Helpers;
+using ServiceConnect.EndToEndTests.Messages;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
+using ServiceConnect.Persistence.InMemory;
+using Xunit;
+
+namespace ServiceConnect.EndToEndTests;
+
+[Collection(nameof(MessagingCollection))]
+public class ProcessManagerExceptionTests(MessagingFixture fixture)
+{
+    private readonly MessagingFixture _fixture = fixture;
+
+    [Fact]
+    [Trait("Category", "Docker")]
+    public async Task ProcessManagerHandler_Throws_MessageSentToErrorQueue()
+    {
+        // Arrange
+        var queueName = _fixture.GetUniqueQueueName("pm-exception");
+        var errorQueueName = _fixture.GetUniqueQueueName("pm-exception-eq");
+        var correlationId = Guid.NewGuid();
+        const int maxRetries = 1;
+        const int retryDelay = 1000;
+
+        var mapper = new TestProcessManagerPropertyMapper();
+        mapper.ConfigureMapping<TestProcessData, TestMessage>(d => d.CorrelationId, m => m.CorrelationId);
+
+        var handlerRefs = new List<HandlerReference>
+        {
+            new()
+            {
+                HandlerType = typeof(ThrowingProcessHandler),
+                MessageType = typeof(TestMessage)
+            }
+        };
+
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerRefs);
+        services.AddSingleton<IProcessManagerPropertyMapper>(mapper);
+        services.AddTransient<IProcessHandler<TestProcessData, TestMessage>, ThrowingProcessHandler>();
+
+        services.AddServiceConnect(builder =>
+        {
+            builder.UseRabbitMQ(t =>
+            {
+                t.Host = _fixture.RabbitMqHostname;
+                t.Username = _fixture.RabbitMqUsername;
+                t.Password = _fixture.RabbitMqPassword;
+                t.MaxRetries = maxRetries;
+                t.RetryDelay = retryDelay;
+                t.SetClientSetting("Port", _fixture.RabbitMqPort);
+                t.SetClientSetting("RetryCount", 3);
+                t.SetClientSetting("RetrySeconds", 1);
+                t.SslEnabled = false; // Testcontainers RabbitMQ runs plaintext
+            });
+            builder.ConfigureQueues(q =>
+            {
+                q.QueueName = queueName;
+                q.ErrorQueueName = errorQueueName;
+            });
+            builder.ConfigureBus(b => b.ScanForMessageHandlers = false);
+            builder.UseInMemoryPersistence();
+        });
+
+        var provider = services.BuildServiceProvider();
+        var bus = provider.GetRequiredService<IBus>();
+
+        await bus.StartConsumingAsync();
+
+
+        try
+        {
+            // Act
+            var msg = new TestMessage(correlationId) { Content = "throw-me" };
+            await bus.SendAsync(msg, new SendOptions { EndPoint = queueName });
+
+            // Poll error queue with raw RabbitMQ — wait long enough for retries
+            var factory = new ConnectionFactory
+            {
+                HostName = _fixture.RabbitMqHostname,
+                Port = _fixture.RabbitMqPort,
+                UserName = _fixture.RabbitMqUsername,
+                Password = _fixture.RabbitMqPassword
+            };
+            await using var conn = await factory.CreateConnectionAsync();
+            await using var channel = await conn.CreateChannelAsync();
+
+            var errorMsg = await TestPolling.WaitForAsync(
+                async () => await channel.BasicGetAsync(errorQueueName, autoAck: true),
+                timeout: TimeSpan.FromSeconds(30));
+
+            // Assert
+            Assert.NotNull(errorMsg);
+
+            var headers = errorMsg.BasicProperties.Headers!;
+            Assert.True(headers.ContainsKey("Exception"));
+            var exceptionJson = Encoding.UTF8.GetString((byte[])headers["Exception"]!);
+            Assert.Contains("PM handler exploded", exceptionJson);
+        }
+        finally
+        {
+            await bus.DisposeAsync();
+            if (provider is IAsyncDisposable asyncProvider)
+            {
+                await asyncProvider.DisposeAsync();
+            }
+        }
+    }
+}
+
+file class ThrowingProcessHandler : IProcessHandler<TestProcessData, TestMessage>
+{
+    public Task HandleAsync(TestMessage message, TestProcessData data, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        throw new InvalidOperationException("PM handler exploded");
+    }
+}

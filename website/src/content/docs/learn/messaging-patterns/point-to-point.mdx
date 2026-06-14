@@ -1,0 +1,159 @@
+---
+title: Point-to-Point
+description: Send a message directly to a named queue, with exactly one service on the other end.
+---
+
+**Point-to-Point** is the simplest messaging pattern: one sender, one named destination, one recipient. You know which service should handle the message, you name its queue, and ServiceConnect delivers exactly one copy.
+
+It is the opposite of [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — instead of broadcasting a fact for anyone interested, you are dispatching a unit of work to a specific handler.
+
+## When to use it
+
+- A service is asking another service to **do something** — this is a command, not an event.
+- You know the destination ahead of time. There is one service that owns this operation.
+- You don't want implicit fan-out. If you're publishing and only one subscriber happens to exist, that is subscription state leaking into call semantics — use Send instead.
+
+Typical commands: `PlaceOrder`, `RefundRequested`, `SendWelcomeEmail`, `ReindexDocument`.
+
+## The contract
+
+Commands, by convention, are named with an imperative verb so intent is obvious at the call site:
+
+```csharp
+// Contracts/WorkSubmitted.cs
+using ServiceConnect.Interfaces;
+
+public sealed class WorkSubmitted(Guid correlationId) : Message(correlationId)
+{
+    public string WorkId { get; init; } = string.Empty;
+}
+```
+
+The contract lives in a shared project referenced by both sides, same as in every pattern.
+
+## The sender
+
+The sender knows two things: the message type and the destination queue.
+
+```csharp
+// Sender/Program.cs
+using Microsoft.Extensions.DependencyInjection;
+using P2PDemo.Contracts;
+using ServiceConnect;
+using ServiceConnect.Client.RabbitMQ;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Options;
+
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t =>
+    {
+        t.Host = "localhost";
+        t.Username = "guest";
+        t.Password = "guest";
+    });
+    builder.ConfigureQueues(q => q.QueueName = "p2p-sender");
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+await bus.SendAsync(
+    new WorkSubmitted(Guid.NewGuid()) { WorkId = "work-001" },
+    new SendOptions { EndPoint = "p2p-consumer" });
+
+Console.WriteLine("Sent work-001");
+```
+
+The `SendOptions.EndPoint` value is the destination queue name. One message, one copy, one queue.
+
+Even a send-only process needs a queue of its own. The `QueueName` on the sender (`p2p-sender` here) is where replies, errors, and audits land. ServiceConnect creates it when the bus builds; it is empty on a pure-sender, but it must exist.
+
+### Configured destinations
+
+When the destination is a stable fact — "every `WorkSubmitted` always goes to the fulfilment service" — you can move the mapping into startup:
+
+```csharp
+builder.ConfigureQueues(q =>
+{
+    q.QueueName = "p2p-sender";
+    q.AddQueueMapping(typeof(WorkSubmitted), "p2p-consumer");
+});
+
+// Later, no SendOptions needed:
+await bus.SendAsync(new WorkSubmitted(Guid.NewGuid()) { WorkId = "work-001" });
+```
+
+ServiceConnect looks up the mapping and routes for you. Inline `SendOptions.EndPoint` still wins if supplied, so you can override the configured default per call. If no mapping exists and no `SendOptions.EndPoint` is supplied, the send fails — ServiceConnect refuses to guess. See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) for the full rules.
+
+## The consumer
+
+The consumer owns the destination queue and handles the command:
+
+```csharp
+// Consumer/WorkSubmittedHandler.cs
+using P2PDemo.Contracts;
+using ServiceConnect.Interfaces;
+
+public sealed class WorkSubmittedHandler : IMessageHandler<WorkSubmitted>
+{
+    public Task HandleAsync(WorkSubmitted message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine($"Processed {message.WorkId}");
+        return Task.CompletedTask;
+    }
+}
+```
+
+```csharp
+// Consumer/Program.cs
+var services = new ServiceCollection();
+services.AddLogging();
+services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference>
+{
+    new() { HandlerType = typeof(WorkSubmittedHandler), MessageType = typeof(WorkSubmitted) },
+});
+services.AddTransient<IMessageHandler<WorkSubmitted>, WorkSubmittedHandler>();
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(t => { /* … */ });
+    builder.ConfigureQueues(q => q.QueueName = "p2p-consumer");
+    builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+await bus.StartConsumingAsync();
+await Task.Delay(Timeout.InfiniteTimeSpan);
+```
+
+One sender, one consumer, a direct line between them. This is also the shape the [Getting Started](/ServiceConnect-CSharp/learn/getting-started/) guide walks through in full.
+
+## Multiple destinations
+
+A single call can deliver to more than one queue via `IBus.SendToManyAsync`, which takes an explicit endpoint list:
+
+```csharp
+await bus.SendToManyAsync(
+    new StockUpdated(correlationId) { Sku = "widget", Quantity = 10 },
+    new[] { "pricing", "search-index", "reporting" });
+```
+
+This is still point-to-point — one copy per listed queue. The sender is choosing the fan-out explicitly, rather than letting subscribers opt in. When the list of recipients is a fact you control, this is cleaner than publishing; when it is a concern that belongs on the consumer side, publish instead.
+
+## Error and retry behaviour
+
+If the handler throws, ServiceConnect applies the retry policy and, after retries are exhausted, moves the message to the consumer's error queue. The sender has no visibility — `SendAsync` completed the moment RabbitMQ accepted the message. If the sender needs an answer, you want [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/), not Send.
+
+## Reference
+
+- [`IBus.SendAsync`](/ServiceConnect-CSharp/reference/bus/ibus/#sendasynct) — the send method
+- [Message options](/ServiceConnect-CSharp/reference/messages/options/) — `SendOptions` for endpoint overrides
+
+## What comes next
+
+- [Request/Reply](/ServiceConnect-CSharp/learn/messaging-patterns/request-reply/) — point-to-point, but the sender awaits a response.
+- [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) — point-to-point, but with several workers sharing one queue.
+- [Routing Slip](/ServiceConnect-CSharp/learn/messaging-patterns/routing-slip/) — point-to-point through an ordered chain of services.

@@ -1,0 +1,57 @@
+---
+// 60-second quickstart card for the homepage.
+// Matches the brainstorming mockup approved in the design spec.
+---
+
+<section class="quickstart" aria-label="60-second quickstart">
+  <p class="quickstart__label">60-second quickstart</p>
+  <pre class="quickstart__code"><code><span class="qs-comment"># Install</span>
+<span class="qs-prompt">$</span> dotnet add package ServiceConnect
+<span class="qs-prompt">$</span> dotnet add package ServiceConnect.Client.RabbitMQ
+
+<span class="qs-comment">// Configure &amp; publish</span>
+services.AddServiceConnect(b =&gt;
+    b.UseRabbitMQ(t =&gt; t.Host = <span class="qs-string">"localhost"</span>));
+
+<span class="qs-keyword">await</span> bus.PublishAsync(<span class="qs-keyword">new</span> OrderPlaced(correlationId));</code></pre>
+</section>
+
+<style>
+  .quickstart {
+    max-width: 680px;
+    margin: 2.5rem auto 0;
+    padding: 0 1rem;
+  }
+
+  .quickstart__label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--sl-color-accent);
+    margin: 0 0 0.75rem;
+  }
+
+  .quickstart__code {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 1.25rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    overflow-x: auto;
+    margin: 0;
+  }
+
+  .quickstart__code code {
+    font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  .qs-prompt { color: #64748b; user-select: none; }
+  .qs-keyword { color: #c084fc; }
+  .qs-string { color: #86efac; }
+  .qs-comment { color: #64748b; font-style: italic; }
+</style>

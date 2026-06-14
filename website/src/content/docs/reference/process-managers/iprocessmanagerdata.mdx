@@ -1,0 +1,61 @@
+---
+title: IProcessManagerData
+description: The base contract for a process manager's persisted state — carries the correlation id the framework uses to load and save the record.
+---
+
+## Overview
+
+`IProcessManagerData` is the marker contract every process-manager (saga) state type implements. The framework persists the record through the configured `IProcessManagerFinder`, keyed by the `CorrelationId` property declared here. Implementors add whatever additional state their workflow needs — step flags, business identifiers, collected values — and the framework loads and saves the whole record around each `IProcessHandler.HandleAsync` call.
+
+See [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) for the conceptual tour.
+
+## Reference
+
+```csharp
+public interface IProcessManagerData
+```
+
+### `CorrelationId`
+
+```csharp
+Guid CorrelationId { get; set; }
+```
+
+Gets or sets the correlation id that identifies the process instance. The framework uses this value to load the correct record when a message arrives — by default it matches the inbound message's `Message.CorrelationId`, and an `IProcessManagerPropertyMapper` override can redirect the match to a different message property.
+
+**Remarks.** The setter is required because the framework sets the correlation id on newly-created records before the first handler invocation persists them.
+
+## Usage
+
+### Shipping-saga state record
+
+```csharp
+public sealed class ShippingSagaData : IProcessManagerData
+{
+    public Guid CorrelationId { get; set; }
+
+    public Guid OrderId { get; set; }
+
+    public OrderStatus Status { get; set; } = OrderStatus.Pending;
+
+    public DateTimeOffset? AcknowledgedAt { get; set; }
+
+    public DateTimeOffset? ShipmentDispatchedAt { get; set; }
+}
+
+public enum OrderStatus
+{
+    Pending,
+    Acknowledged,
+    ShipmentDispatched,
+    Completed,
+}
+```
+
+`ShippingSagaData` is a plain DTO: `CorrelationId` satisfies the contract, and the other properties carry whatever the saga needs to remember between messages. The framework writes the whole record through the configured persistence provider — there is no partial-update hook to implement.
+
+## See also
+
+- [Process Manager](/ServiceConnect-CSharp/learn/messaging-patterns/process-manager/) — concept
+- [`IProcessHandler`](../iprocesshandler/) — related reference
+- [`IProcessManagerFinder`](../../extension-points/persistence/iprocessmanagerfinder/) — related reference

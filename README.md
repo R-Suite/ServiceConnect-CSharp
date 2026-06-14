@@ -1,92 +1,150 @@
-[![Join the chat at https://gitter.im/R-Suite/ServiceConnect](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/R-Suite/ServiceConnect?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+# ServiceConnect
 
-**_ServiceConnect 5.0.0 is available at [https://www.nuget.org/packages/ServiceConnect](https://www.nuget.org/packages/ServiceConnect/)_**
-* **New in ServiceConnect 5.0.0**
-    - Async consumers
-    - Priority Queues support
-    - Bug Fixes
+[![NuGet](https://img.shields.io/nuget/v/ServiceConnect.svg)](https://www.nuget.org/packages/ServiceConnect/)
 
-ServiceConnect is a simple, easy to use asynchronous messaging framework for .NET.
+Asynchronous messaging for .NET. Distributed systems, done cleanly.
 
-## Features
+ServiceConnect is a thin, opinionated bus over RabbitMQ. It gives you the well-known Enterprise Integration Patterns — pub/sub, point-to-point, request/reply, process managers, aggregators, routing slips — behind a small async API that plugs into `Microsoft.Extensions.DependencyInjection`.
 
-* Support for many well-known Enterprise Integration Patterns
-    - Point to Point
-    - Publish/Subscribe
-    - Process Manager
-    - Recipient List
-    - Scatter Gather
-    - Routing Slip
-    - Message Aggregation
-    - Content-Based Router
-* Streaming
-* Retries
-* Auditing
-* .NET Core
-* SSL Support
-* Polymorphic message dispatch
-* Multi-threaded consumers
-* Intercept message-processing pipline with custom filters. See [Filters](https://github.com/R-Suite/ServiceConnect/tree/master/samples/Filters) sample application for a complete example.
+**📖 Full docs: [r-suite.github.io/ServiceConnect-CSharp](https://r-suite.github.io/ServiceConnect-CSharp/)**
 
-## Project Maturity
-ServiceConnect (recently renamed from R.MessageBus) has been first released in May 2014. The current version is used by a number of high-profile financial applications in production environments. Public API is stable and no major changes are planned in the next version.
+## Install
 
+```bash
+dotnet add package ServiceConnect
+dotnet add package ServiceConnect.Client.RabbitMQ
+```
 
-## Simple example
+Optional extensions:
 
-In this example we simply send a message from one endpoint and consume the same message on another endpoint.
-See [Point To Point](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/samples/PointToPoint) sample application for a complete example.
+```bash
+# Process-manager and aggregator persistence
+dotnet add package ServiceConnect.Persistence.InMemory
+dotnet add package ServiceConnect.Persistence.MongoDb
 
-##### 1. Define your message
+# Distributed tracing (W3C traceparent injection, OTel messaging semconv)
+dotnet add package ServiceConnect.Telemetry
 
-```YourMessage``` is a .Net class that inherits from
-```ServiceConnect.Interfaces.Message``` base class
+# Liveness/readiness health checks
+dotnet add package ServiceConnect.HealthChecks
+```
 
-```c#
-public class YourMessage : Message
+## Quick start
+
+Define a message:
+
+```csharp
+using ServiceConnect.Interfaces;
+
+public sealed class OrderPlaced(Guid correlationId) : Message(correlationId)
 {
-    public YourMessage(Guid correlationId) : base(correlationId){}
+    public string OrderId { get; init; } = "";
 }
 ```
 
-##### 2. Send your message
+Write a handler:
 
-In the standard command line ```Main``` method we start the bus with ```var bus = Bus.Initialize();```. Calling initialize with no parameters will create an instance of the Bus with default configuration options. Next, we simply send ```YourMessage``` using ```bus.Send(new YourMessage(id), "YourConsumer");```  - where the first argument is an instance of ```YourMessage```, the second argument, "YourConsumer", is the receiving enpoint name.  (We are going to configure "YourConsumer" next).
+```csharp
+using ServiceConnect.Interfaces;
 
-```c#
-public class Program
+public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
 {
-    public static void Main()
+    public Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
     {
-        var bus = Bus.Initialize();
-
-        bus.Send(new YourMessage(Guid.NewGuid()), "YourConsumer");
+        Console.WriteLine($"Received order {message.OrderId}");
+        return Task.CompletedTask;
     }
 }
 ```
 
-##### 3. Receive your message
+Wire up the bus:
 
-Again,  we start the bus in the standard command line ```Main``` method. This time, however, with ```var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));```. Because the method initialize can also take a single lambda/action parameter for custom configuration, we explicitly set the name of the receiving endpoint to "YourConsumer".
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using ServiceConnect.Interfaces;
 
-```c#
-public class Program
+var services = new ServiceCollection();
+services.AddLogging();
+
+services.AddServiceConnect(builder =>
 {
-    public static void Main()
+    builder.UseRabbitMQ(transport =>
     {
-        var bus = Bus.Initialize(config => config.SetEndPoint("YourConsumer"));
-    }
-}
+        transport.Host = "localhost";
+        transport.Username = "guest";
+        transport.Password = "guest";
+        // Local-dev plaintext: TransportConfiguration.SslEnabled defaults to true (AMQPS
+        // on 5671). The standard rabbitmq:3-management container exposes plaintext 5672,
+        // so disable SSL explicitly for the localhost path. Production deployments should
+        // leave SslEnabled at its true default and configure CertPath / ServerName.
+        transport.SslEnabled = false;
+    });
+
+    builder.ConfigureQueues(queues => queues.QueueName = "order-service");
+});
+
+await using var provider = services.BuildServiceProvider();
+var bus = provider.GetRequiredService<IBus>();
+
+// Start consuming, then publish
+await bus.StartConsumingAsync();
+await bus.PublishAsync(new OrderPlaced(Guid.NewGuid()) { OrderId = "ORD-001" });
 ```
 
-Finally, we define a "handler" that will receive the message. The handler is a .NET class that implements ```ServiceConnect.Interfaces.IMessageHandler<T>``` where the generic parameter ```T``` is the type of the message being consumed.
+## Messaging patterns
 
-```c#
-public class YourMessageHandler : IMessageHandler<YourMessage>
-{
-    public void Execute(YourMessage message)
-    {
-        Console.WriteLine("Received message - {0}", message.CorrelationId);
-    }
-}
-```
+- **Publish/Subscribe** — broadcast events to every subscriber
+- **Point-to-Point** — send commands to a specific endpoint
+- **Request/Reply** — single-reply and multi-reply RPC
+- **Competing Consumers** — scale out handlers across processes
+- **Content-Based Routing** — dispatch by message type or content
+- **Polymorphic Messages** — subscribe by base type and receive every derived message
+- **Routing Slip** — sequential pipeline of endpoints
+- **Scatter-Gather** — multicast with reply aggregation
+- **Process Manager** — long-running, stateful workflows (sagas)
+- **Aggregator** — accumulate related messages until complete
+- **Streaming** — chunked delivery of large payloads
+- **Filters & Middleware** — inspect, transform, or short-circuit the pipeline. Outgoing filters that return `FilterAction.Stop` throw `OutgoingFiltersBlockedException` so callers can distinguish a blocked send from a successful one.
+
+Each pattern has a conceptual guide and worked example in [the docs](https://r-suite.github.io/ServiceConnect-CSharp/learn/).
+
+## Examples
+
+Runnable console apps live in [`examples/`](examples), one per pattern:
+
+[PointToPoint](examples/PointToPoint) · [PublishSubscribe](examples/PublishSubscribe) · [RequestReply](examples/RequestReply) · [CompetingConsumers](examples/CompetingConsumers) · [ContentBasedRouting](examples/ContentBasedRouting) · [PolymorphicMessages](examples/PolymorphicMessages) · [RoutingSlip](examples/RoutingSlip) · [ScatterGather](examples/ScatterGather) · [Aggregator](examples/Aggregator) · [ProcessManager](examples/ProcessManager) · [Filters](examples/Filters) · [CustomFilterAndMiddleware](examples/CustomFilterAndMiddleware) · [Streaming](examples/Streaming) · [Telemetry](examples/Telemetry)
+
+Each example ships with a `run.sh` and a `docker-compose.yml` at `examples/docker-compose.yml` for a local RabbitMQ broker.
+
+## Supported runtimes
+
+ServiceConnect targets modern .NET only — by design.
+
+- **`net8.0`** — previous LTS. End of Microsoft support: **November 10, 2026**.
+- **`net10.0`** — current LTS. End of Microsoft support: November 14, 2028. Used to opt into recent BCL features (`System.Threading.Lock`, the `field` keyword) on the hot paths; `net8.0` paths take guarded fallbacks.
+
+All published packages — `ServiceConnect`, `ServiceConnect.Interfaces`, `ServiceConnect.Client.RabbitMQ`, `ServiceConnect.Persistence.*`, `ServiceConnect.Telemetry`, and `ServiceConnect.HealthChecks` — multi-target both.
+
+We deliberately do **not** target `netstandard2.x`, `net6.0`, or `net7.0`:
+
+- The hot paths use BCL features that are awkward to polyfill cleanly.
+- The remaining LTS surface (.NET 8 + .NET 10) covers every Microsoft runtime with active patch coverage at the time of writing.
+- Consumers on .NET Framework or out-of-support .NET Core SKUs can pin earlier ServiceConnect releases that targeted those runtimes; we are not adding support back to the current line.
+
+If your scenario needs `netstandard2.1` (or you'd like to upstream the work), please open an issue.
+
+### When `net8.0` will be dropped
+
+.NET 8 reaches end of Microsoft support on **November 10, 2026**. ServiceConnect will drop the `net8.0` target framework in the first major version released after that date — current consumers on .NET 8 should plan their migration to .NET 10 LTS during the second half of 2026 or pin to a pre-drop ServiceConnect major.
+
+## Other requirements
+
+- RabbitMQ 3.7+
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for project layout, build/test instructions, coding conventions, and the release process.
+
+## License
+
+MIT — see [LICENSE.md](LICENSE.md).

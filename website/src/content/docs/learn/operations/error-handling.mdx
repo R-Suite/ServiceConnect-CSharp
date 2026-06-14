@@ -1,0 +1,188 @@
+---
+title: Error Handling
+description: What happens when a handler throws — retries, the error queue, headers that tell you what went wrong, and when to replay.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A handler throws. What happens next is the most important operational contract a messaging library offers. ServiceConnect's answer is the same shape RabbitMQ's users will expect: a bounded retry loop, then a dead-letter queue, with enough metadata on the rejected message to diagnose and replay.
+
+## The failure path
+
+When `HandleAsync` throws, the consumer inspects a `RetryCount` header on the delivery:
+
+- If `RetryCount < MaxRetries`, the message is republished to a dedicated **retry queue** (`<queueName>.Retries`) with `RetryCount` incremented. That queue has a per-message TTL of `RetryDelay` milliseconds — when the TTL fires, RabbitMQ dead-letters the message back into the main queue, where the consumer picks it up again.
+- If `RetryCount >= MaxRetries`, the message is published to the **error queue** (`ErrorQueueName`, default `"errors"`) with an `Exception` header stamped on. It is not redelivered automatically.
+
+### Retry topology invariant: the DLX outlives the consumer
+
+The retry dead-letter exchange is always declared with `autoDelete: false`, even when the main consumer queue is auto-deleted. This guarantees that messages dwelling in the retry queue have somewhere to land when their TTL expires — without this invariant, retried messages would be silently dropped after a consumer disconnects.
+
+### Customising the retry queue: framework-wins on two keys
+
+The retry queue itself can be tuned via `RabbitMQSettingKeys.RetryQueueArguments` — for example, capping retry depth with `x-max-length` or switching to `x-queue-mode: lazy` for memory-bound brokers:
+
+```csharp
+transport.SetClientSetting(
+    RabbitMQSettingKeys.RetryQueueArguments,
+    new Dictionary<string, object?>
+    {
+        ["x-max-length"]  = 10_000,
+        ["x-queue-mode"]  = "lazy",
+    });
+```
+
+ServiceConnect manages two retry-queue AMQP arguments authoritatively: `x-dead-letter-exchange` and `x-message-ttl`. If the supplied dictionary includes either key, the caller-supplied value is overridden with the framework value at provisioning time and a Debug log records the override. Other `x-*` arguments flow through unchanged.
+
+`MaxRetries` and `RetryDelay` live on the transport configuration:
+
+```csharp
+builder.UseRabbitMQ(transport =>
+{
+    transport.MaxRetries = 3;           // default 3
+    transport.RetryDelay = 3_000;       // ms; default 3000
+});
+```
+
+Tuning hint: `MaxRetries * RetryDelay` is the *minimum* time a bad message blocks the queue head from progressing. Three retries at three seconds apart is fine for transient faults. If your handler's transient-failure mode is slow (a downstream RPC with a 30-second timeout, say), either raise `PrefetchCount` so the queue drains in parallel or accept that a burst of failures will slow the queue.
+
+## The error queue
+
+When retries are exhausted, the message lands in the error queue unchanged except for two header additions:
+
+- **`RetryCount`** — the number of attempts that were made (always equal to `MaxRetries` for messages that got here through exhaustion).
+- **`Exception`** — a JSON-serialised object:
+  ```json
+  { "TimeStamp": "2026-04-20T12:34:56Z", "ExceptionType": "System.InvalidOperationException", "Message": "Widget not found: W-001" }
+  ```
+
+Only the exception **type name and message** are stored. Stack traces are deliberately not serialised to the error queue — they are unbounded, sometimes sensitive, and already in your logs keyed to the same `MessageId`. Correlate the two via `MessageId` when triaging.
+
+The `Exception` header always identifies the **handler** failure that caused the message to enter retry — not any retry-publish or fallback-publish exception that may have occurred during error routing. If a retry-publish itself fails, that failure is logged separately and counted on `messaging.serviceconnect.retry.drops`; the original handler exception remains on the DLQ entry.
+
+The error queue is a normal RabbitMQ queue. You are not expected to consume it programmatically; it is an operator dashboard — `rabbitmqadmin get queue=errors`, a UI, a scheduled drain, a manual replay. Replay is: pull the message, fix the downstream condition, publish it back to the original queue.
+
+## Disabling the error queue
+
+For bus instances that should not have an error queue at all — a short-lived CLI tool, a load-test sender — set `DisableErrors = true`:
+
+```csharp
+builder.ConfigureQueues(q =>
+{
+    q.QueueName = "onetime-sender";
+    q.DisableErrors = true;
+});
+```
+
+With this on, retries still happen, but exhausted messages are dropped silently instead of going to the error queue — and so are validator-rejected messages, the no-handler dead-letter branch, AND the error-exchange fallback that normally runs when a retry-queue republish itself fails. Every drop surfaces on the `messaging.serviceconnect.retry.drops` counter with `error.type=errors-disabled` so operators can alert on the drop rate. Auditing is orthogonal: `DisableErrors=true` does NOT suppress audit publishes (those remain gated only by `IQueueConfiguration.AuditingEnabled`). This is a scalpel — don't use it in a consumer that processes real traffic without a working alert on the drop counter.
+
+## Retry-publish failure modes
+
+ServiceConnect publishes retry and error-queue messages with `mandatory: true`. If the target queue/exchange is missing (e.g. the retry queue was deleted out-of-band), the broker returns the message and `BasicPublishAsync` raises `PublishException`. ServiceConnect logs this at `Error` level and acknowledges the original delivery to break the redelivery loop. **The message is lost in this scenario** — operator action is required to restore the topology before the next failure can be retried.
+
+Publishing with `mandatory: true` is what makes this failure mode visible — the broker returns the unroutable message rather than silently dropping it. Operators monitoring `PublishException` logs see the topology issue immediately instead of discovering it later when messages are missing from the error queue.
+
+## Terminal failures
+
+Not every failure is retryable. A message with no `TypeName` header, a message that exceeds the transport's `MessageSize` limit, a payload the serialiser can't parse — these land straight in the error queue on the first attempt, without consuming retry budget. The log line for these reads `"Rejecting permanently invalid inbound message..."` rather than `"Max retries exceeded..."`.
+
+This is the right distinction. A message that is malformed at the wire level can't be fixed by trying harder; retrying it just wastes broker time. A message that a handler *chose* to reject (because its own dependencies are down) gets the full retry budget.
+
+### Unregistered message types
+
+When a message arrives with a type that isn't in the dispatch registry, ServiceConnect treats it as a **terminal failure** — retrying never resolves the type. The message is routed via the not-handled path:
+
+- If `DeadLetterUnhandledMessages` is enabled, the message goes directly to the error queue.
+- Otherwise the message is acked and dropped.
+
+The not-handled path short-circuits the retry budget: there is no point retrying a message whose type isn't registered, because the registry won't change between deliveries. Bypassing nack-with-requeue means unhandled messages clear the inbound queue immediately rather than re-circulating through retries that can't resolve the type.
+
+## Observing failures in code
+
+`IBusConfiguration.ExceptionHandler` is an async callback invoked on every dispatch-level exception. It runs alongside the retry machinery — not instead of it:
+
+```csharp
+builder.ConfigureBus(bus =>
+{
+    bus.ExceptionHandler = (ex, ct) =>
+    {
+        _metrics.RecordHandlerFailure(ex.GetType().Name);
+        _alerting.NotifyIfBudgetExceeded();
+        return ValueTask.CompletedTask;
+    };
+});
+```
+
+If the callback performs async work, await it directly:
+
+```csharp
+builder.ConfigureBus(bus =>
+{
+    bus.ExceptionHandler = async (ex, ct) => await _sentry.CaptureAsync(ex, ct);
+});
+```
+
+Two things to notice:
+
+- **It is observational.** You cannot change the retry/error-queue decision from inside the callback. That machinery has already run.
+- **It is a callback, not an interceptor.** Use it for metrics, alerting, a Sentry push. If you need to wrap the whole handler call with a `try`/`finally` — opening a span, starting a timer — reach for message-processing middleware instead.
+
+If the callback itself throws, the framework catches and logs at **Error** so a bug in an opt-in user-installed hook is unmissable, and the dispatcher continues — message processing is never blocked by a faulty `ExceptionHandler`. The original dispatch exception is unaffected: it's still attached to the returned `ConsumeEventResult` and drives the retry/error-queue path normally.
+
+## Exception hierarchy
+
+Framework exceptions live under `ServiceConnect.Interfaces.Exceptions`. Most derive from one abstract base — `ServiceConnectException` — so a single catch can quarantine the bulk of framework-originated failures without swallowing user exceptions:
+
+```csharp
+try
+{
+    await bus.SendAsync(message);
+}
+catch (ServiceConnectException ex)
+{
+    // Any framework-level failure — transport, serialization, persistence, filter block,
+    // request-reply timeout, concurrency. The inner exception holds the underlying cause
+    // when the framework wrapped a third-party error.
+    _logger.LogError(ex, "ServiceConnect failed for {MessageType}", typeof(T).Name);
+    throw;
+}
+```
+
+The one exception is `RequestSendCancelledException`, which derives from `OperationCanceledException` rather than `ServiceConnectException` so it composes with existing `catch (OperationCanceledException)` handlers callers already have around request-reply calls. Catch it alongside other `OperationCanceledException`s, or list it explicitly if you want it routed to the framework-error catch path:
+
+```csharp
+try
+{
+    var reply = await bus.SendRequestAsync<TRequest, TReply>(request, ct: cancellationToken);
+}
+catch (RequestSendCancelledException) { /* outbound send aborted (transport drop, shutdown) */ }
+catch (OperationCanceledException)    { /* caller cancellation */ }
+catch (ServiceConnectException)       { /* everything else (timeout, transport, filter block, …) */ }
+```
+
+The concrete types and when each is raised:
+
+| Type | Raised when |
+|---|---|
+| `ServiceConnectException` | Abstract base — never thrown directly; use as the catch-all for any framework error. |
+| `TransportException` | Broker-layer failure during send, publish, or consume. Carries the affected `Endpoint` when known, and wraps the underlying transport exception via `InnerException`. |
+| `PersistenceException` | Persistor-layer failure (process-manager store, aggregator store, timeout store). BSON/serialization failures from the MongoDB persistors surface as this rather than as raw driver exceptions. |
+| `ConcurrencyException` | Optimistic-concurrency conflict on a process-manager or aggregator write. The retry path replays the state load + handler, not the side-effects from the failed attempt. |
+| `SerializationException` | Payload could not be serialised on send or deserialised on consume. Inbound failures are marked as terminal — see [Terminal failures](#terminal-failures). |
+| `OutgoingFiltersBlockedException` | An outgoing filter returned `FilterAction.Stop`. The send never reached the producer; the call site decides whether to retry or drop. |
+| `RequestTimeoutException` | A request-reply call didn't receive enough replies inside `options.Timeout`. Partial replies are surfaced on `PartialReplies` so callers can recover them. |
+| `RequestSendCancelledException` | The outbound send pipeline of a request-reply call cancelled before the request reached the broker. Derives from `OperationCanceledException` so existing `catch (OperationCanceledException)` handlers still match. |
+
+`TransportException` is the one most operational alerting cares about — it's the signal that the broker is unreachable or the topology is wrong, distinct from cooperative cancellation or a serialization mistake. Wire it to your paging path; let `ServiceConnectException` cover the rest.
+
+## Idempotency is part of error handling
+
+A message that retries has a non-trivial chance of being redelivered after partial success — the handler did its work, then failed before acknowledging. The retry loop amplifies the duplicate rate that's inherent to ServiceConnect's at-least-once delivery contract.
+
+For the full delivery contract and the strategies that handle redelivery correctly, see [The delivery contract](/ServiceConnect-CSharp/learn/operations/idempotency/#the-delivery-contract). The short version: handlers must tolerate being run twice on the same message — upsert instead of insert, check state before acting, use the correlation id or message id as the idempotency key for downstream calls. The retry loop assumes it.
+
+## What comes next
+
+- [Observability](/ServiceConnect-CSharp/learn/operations/observability/) — the log lines this page references and how to correlate them with error-queue entries.
+- [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) — the `MaxRetries`, `RetryDelay`, `ErrorQueueName`, `DisableErrors` knobs.
+- [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) — why idempotency is load-bearing.

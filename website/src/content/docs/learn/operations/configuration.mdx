@@ -1,0 +1,245 @@
+---
+title: Configuration
+description: The ServiceConnect builder's configuration surface — the transport, queues, persistence, and bus callbacks plus the pipeline helpers — and what each one controls.
+---
+
+ServiceConnect is configured through a single builder on the service collection. Every production setting — connection, retries, queue names, TLS, filters, handler scanning — lives under one of four `Configure*` callbacks plus typed pipeline-builder helpers. This page is the map.
+
+```csharp
+services.AddServiceConnect(builder =>
+{
+    builder.UseRabbitMQ(transport => { /* transport */ });
+    builder.ConfigureQueues(queues => { /* queues */ });
+    builder.ConfigurePersistence(p => { /* persistence */ });
+    builder.ConfigureBus(bus => { /* runtime behaviour */ });
+
+    // Filters and middleware register via typed builder methods, not a single
+    // ConfigurePipeline callback. See the "Pipeline filters and middleware" section
+    // below for the full list.
+    builder.AddBeforeConsumingFilter<MyFilter>();
+});
+```
+
+Each `Configure*` callback mutates an options object. You never construct the configuration yourself — the builder hands you the live instance to edit.
+
+## Transport
+
+`ConfigureTransport` (or the `UseRabbitMQ` shortcut, which wraps it) sets everything about the connection to the broker.
+
+```csharp
+builder.UseRabbitMQ(transport =>
+{
+    transport.Host = "rabbit.prod.example.com";
+    transport.Username = "service-connect";
+    transport.Password = Environment.GetEnvironmentVariable("RMQ_PASSWORD");
+    transport.VirtualHost = "/production";
+
+    transport.MaxRetries = 3;
+    transport.RetryDelay = 3_000;           // ms between retries
+    transport.PrefetchCount = 50;           // unacked messages per consumer
+    transport.GracefulShutdownTimeoutMilliseconds = 30_000;  // default is 5,000 ms
+});
+```
+
+The essentials: `Host` is required — a single hostname or a comma-separated list for clustered brokers. `Username`/`Password`/`VirtualHost` are optional and default to the broker's guest settings.
+
+For multi-node clusters — host-list parsing rules, failover behaviour, and how to declare replicated quorum queues — see [Clustering & Quorum Queues](/ServiceConnect-CSharp/learn/operations/clustering/).
+
+Retry knobs drive the error-handling pipeline — see [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) for what happens after `MaxRetries` is exhausted.
+
+### TLS
+
+TLS is enabled by default — `SslEnabled` defaults to `true`, and ServiceConnect connects on the default AMQPS port (5671). For production deployments connecting to a broker with TLS configured, no transport setup is required beyond `Host` and credentials.
+
+For brokers behind TLS with custom server names or client certificates:
+
+```csharp
+transport.SslEnabled = true;            // (default)
+transport.ServerName = "rabbit.prod.example.com";
+transport.CertPath = "/etc/ssl/client.pfx";
+transport.CertPassphrase = Environment.GetEnvironmentVariable("CLIENT_CERT_PASSPHRASE");
+```
+
+Client certs can also be supplied in memory via `Certs`, or selected dynamically via `CertificateSelectionCallback`. For broker chains that don't validate cleanly, `AcceptablePolicyErrors` lets you widen acceptance — use sparingly, and never `SslPolicyErrors.RemoteCertificateNameMismatch` in production.
+
+#### Connecting to a plaintext broker (local dev)
+
+If your broker runs without TLS — typically the official `rabbitmq:3-management` Docker image on port 5672 — set `SslEnabled = false`:
+
+```csharp
+transport.SslEnabled = false;          // local-dev plaintext; production must use TLS
+```
+
+ServiceConnect logs a `Warning`-level message under the `ServiceConnect` category when plaintext is configured against a non-loopback host. To silence the warning in environments where plaintext is intentional (e.g. an isolated VPC, Docker Compose network, internal LAN), set `SuppressPlaintextWarning = true` on the transport configuration — this is the supported mechanism. Adjusting the log-level filter is a secondary option but does not signal intent to the framework.
+
+### Provider-specific settings
+
+Anything RabbitMQ-specific that isn't on the interface — connection timeout, heartbeat, socket options — goes through `SetClientSetting`:
+
+```csharp
+transport.SetClientSetting("Port", 5671);
+transport.SetClientSetting("HeartbeatTime", (ushort)30); // heartbeat interval, in seconds
+// PublisherAcknowledgements defaults to true; PublishTimeout to 30s.
+// See the reference for opting out (rare; rejected if combined with a finite timeout).
+```
+
+The keys are passed through to the RabbitMQ client; see that client's documentation for the full list.
+
+#### Typed RabbitMQ options overload
+
+A typed `Action<RabbitMqOptions>` overload of `UseRabbitMQ` is available when you prefer named properties over string-keyed settings:
+
+```csharp
+builder.UseRabbitMQ(transport =>
+{
+    transport.Host = "rabbit.prod.example.com";
+    transport.Username = "user";
+    transport.Password = "pass";
+    transport.VirtualHost = "/vhost";
+    transport.SslEnabled = true;
+});
+builder.UseRabbitMQ(opts =>
+{
+    opts.PrefetchCount = 25;
+    opts.HeartbeatTime = 30;
+    opts.PublishTimeout = TimeSpan.FromSeconds(10);
+    opts.MaxHeaderCount = 128;
+    opts.MaxHeaderValueBytes = 16 * 1024;
+});
+```
+
+The typed overload is equivalent to `SetClientSetting` — internally the option values are written back into `ClientSettings` — so the two forms are interchangeable. Use whichever reads more clearly for your project's configuration style.
+
+- **`PublishTimeout`** (default **30 seconds**) — time to wait for a broker publisher-confirm before failing a publish. Prevents a half-open connection from blocking a producer indefinitely. `TimeoutException` on this path is *not* retried.
+- **`MaxHeaderCount`** (default **64**) — maximum number of headers allowed on an inbound message. Raise when producers stamp wide header sets (heavy distributed-tracing baggage); lower to harden against hostile inputs. Inbound messages above the cap are rejected to the error queue rather than retried.
+- **`MaxHeaderValueBytes`** (default **8192**) — maximum bytes per individual header value on an inbound message. Raise for large correlation / tracing payloads; lower to harden against hostile inputs.
+
+### Producer concurrency invariants
+
+Adapter authors studying the bundled RabbitMQ producer as reference will see two synchronisation primitives with distinct, non-overlapping responsibilities:
+
+- **`_publishLock`** (a `SemaphoreSlim(1, 1)` on `Producer`) gates the actual publish step: building the `BasicProperties`, the `BasicPublishAsync` call, and the publisher-confirms wait. Each retry attempt acquires the lock, performs one publish, releases the lock. The lock is **never** held across `EnsureConnectedAsync`, the inter-attempt delay, or any reconnect — those run outside, so a slow reconnect cannot block other publishers.
+- **`_connectionSemaphore`** (a `SemaphoreSlim(1, 1)` on `ProducerConnection`) gates the connection lifecycle: build, teardown, dispose. It is held for the duration of `EnsureConnectedAsync`'s reset-and-recreate path so that a concurrent peeker cannot observe a half-open window between teardown and reconnect.
+
+Custom transports do not need to mirror this layout exactly — the goal is correctness against the contracts the bus expects (publish completes only after broker durability; dispose terminates promptly; concurrent publishers do not deadlock on a slow reconnect). The two-semaphore split is one way to satisfy those contracts cleanly.
+
+## Queues
+
+`ConfigureQueues` sets the queue names the bus uses and any explicit message-to-queue routing.
+
+```csharp
+builder.ConfigureQueues(queues =>
+{
+    queues.QueueName = "orders-service";
+    queues.ErrorQueueName = "orders-service.errors";
+    queues.AuditQueueName = "orders-service.audit";
+    queues.AuditingEnabled = true;
+    queues.DisableErrors = false;
+    queues.PurgeQueueOnStartup = false;
+
+    queues.AddQueueMapping(typeof(ShipOrder), "shipping-service");
+});
+```
+
+The main setting is `QueueName`. `ErrorQueueName` and `AuditQueueName` have fixed defaults (`errors` and `audit`) that do not derive from `QueueName`, so set them explicitly to namespace them under your service name. `PurgeQueueOnStartup` is a development-only knob; leave it `false` in anything you care about.
+
+Queue mappings are the static routing table: "when the bus sees a `ShipOrder`, send it to `shipping-service`." See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) for how this plays against per-call `SendOptions.EndPoint`.
+
+## Persistence
+
+`ConfigurePersistence` — or one of the `Use*Persistence` extension methods — sets the store used for process-manager state, aggregator buffers, and timeout storage:
+
+```csharp
+builder.UseMongoDbPersistence(options =>
+{
+    options.ConnectionString = "mongodb://mongo:27017";
+    options.DatabaseName = "service-connect-state";
+});
+```
+
+There's also an in-memory provider (`UseInMemoryPersistence`) useful for tests and short-lived workflows. If your bus never uses a process manager, aggregator, or timeout, you can omit persistence entirely — the bus will fail fast if you later try to use one without it.
+
+## Pipeline filters and middleware
+
+Filters and middleware are registered via typed builder methods — one per stage and registration shape:
+
+```csharp
+// Filters (run before / after handler dispatch).
+builder.AddOutgoingFilter<TraceHeaderFilter>();
+builder.AddBeforeConsumingFilter<AuthFilter>();
+builder.AddOnConsumedSuccessfullyFilter<OutboxFilter>();
+builder.AddAfterConsumingFilter<AuditFilter>();
+
+// Middleware (wraps the send or processing call site).
+builder.AddSendMessageMiddleware<EncryptionMiddleware>();
+builder.AddMessageProcessingMiddleware<RetryBudgetMiddleware>();
+
+// Outermost-position middleware (runs first on the way out, last on the way back).
+// Useful for tracing / metrics middleware that must bracket every other layer.
+// De-duplicates by type — a repeat call with the same T is a no-op.
+builder.InsertSendMessageMiddlewareOutermost<TelemetrySendMiddleware>();
+builder.InsertMessageProcessingMiddlewareOutermost<TelemetryProcessingMiddleware>();
+```
+
+There is no public `ConfigurePipeline` callback; the typed builder methods are the supported surface. Each `Add*` call appends to its stage's middleware/filter list; each `Insert*Outermost` call prepends with type-dedup. Order matters within a stage — the first `Add*` call runs first.
+
+The full shape of filters, what they can do, and when to prefer middleware is [Filters](/ServiceConnect-CSharp/learn/messaging-patterns/filters/).
+
+## Bus runtime behaviour
+
+`ConfigureBus` is the catch-all for runtime behaviour that doesn't fit the other four:
+
+```csharp
+builder.ConfigureBus(bus =>
+{
+    bus.ScanForMessageHandlers = false;     // prefer explicit HandlerReference lists
+    bus.AutoStartConsuming = true;          // start when the host starts
+    bus.ConsumerCount = 4;                  // parallel consumer loops
+
+    bus.EnableProcessManagerTimeouts = true;
+    bus.ProcessManagerTimeoutPollInterval = TimeSpan.FromSeconds(10);  // default is 30 s
+
+    bus.EnableRoutingSlipProcessing = true; // default; set false to ignore slips
+    bus.ValidateReplyDestinations = true;   // default; guard against unknown reply queues
+
+    bus.IncludeMachineNameInHeaders = false; // default; opt in only when safe
+    bus.MaxInflightRequests = 25_000;        // raise for high-concurrency request fans
+    bus.MaxStreamSizeBytes = 500L * 1024 * 1024; // 500 MB for large file streams
+    bus.MaxActiveStreams = 5_000;             // raise for high-concurrency file transfers
+    bus.ExceptionHandler = (ex, _) => { _metrics.RecordHandlerFailure(ex); return ValueTask.CompletedTask; };
+});
+```
+
+A few worth a note:
+
+- **`ScanForMessageHandlers`** — when `true`, loaded assemblies are scanned for `IMessageHandler<T>` implementations. Deterministic, testable code sets this `false` and registers handlers explicitly via `IReadOnlyList<HandlerReference>` ([Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/)).
+- **`AutoStartConsuming`** — when `true`, the bus starts consuming when the host starts; when `false`, you call `bus.StartConsumingAsync()` yourself. [Hosting & Lifecycle](/ServiceConnect-CSharp/learn/operations/hosting/) covers the trade-off.
+- **`ConsumerCount`** — how many parallel dispatch loops the bus runs. See [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for when to raise it.
+- **`IncludeMachineNameInHeaders`** — adds `SourceMachine`/`DestinationMachine` headers. Off by default because the hostname leak is a problem in shared-broker deployments.
+- **`MaxInflightRequests`** (default **10,000**) — caps concurrent `SendRequestAsync` / `SendRequestMultiAsync` exchanges. Each pending request pins a timer + TCS + cancellation registration; the cap defends against `Timeout.Infinite` leaks and unawaited request loops. Raise for genuine high-concurrency request fans; lower to harden against caller bugs.
+- **`MaxStreamSizeBytes`** (default **100 MB**) — maximum bytes a single inbound stream may reassemble. `MessageBusReadStream.Write` throws `InvalidOperationException` if exceeded. Raise for file-upload or large-artefact workloads; lower to harden memory-constrained hosts.
+- **`MaxActiveStreams`** (default **1,000**) — maximum concurrent partial inbound streams. Defends against DoS via stream-slot exhaustion. Raise for high-concurrency file transfers; lower to harden memory-constrained hosts.
+
+## Configuration is immutable after build
+
+`BusConfiguration` and all four sub-configurations (`Transport`, `Queues`, `Persistence`, `Pipeline`) are frozen at the end of `AddServiceConnect`. Any setter mutation on these objects after that point throws `InvalidOperationException`. This includes resolving `ITransportConfiguration` from DI and mutating it — a pattern that was previously silently accepted. Treat the configuration objects as sealed once the service provider is built.
+
+## Validation is at startup, not runtime
+
+The builder validates as you go: a missing `Host`, a negative `RetryDelay` or `MaxRetries` (validated at both the setter and the builder), an empty or whitespace-only `QueueName` — any of these throw `InvalidOperationException` when `AddServiceConnect` runs. That is by design; configuration errors should fail the process at startup, not surface as confusing broker errors hours later.
+
+If you're writing a config file or a builder helper, structure it so every required setting runs through `ConfigureTransport`, `ConfigureQueues`, and so on — not through field assignment on a bare options object. That's what gets you the validation.
+
+## Reference
+
+- [`IBusConfiguration`](/ServiceConnect-CSharp/reference/bus/ibusconfiguration/) — the configure delegate target
+- [`ITransportConfiguration`](/ServiceConnect-CSharp/reference/configuration/itransportconfiguration/) — transport-level config
+- [`IQueueConfiguration`](/ServiceConnect-CSharp/reference/configuration/iqueueconfiguration/) — per-queue config
+- [`IPersistenceConfiguration`](/ServiceConnect-CSharp/reference/configuration/ipersistenceconfiguration/) — persistence provider selection
+- [`IPipelineConfiguration`](/ServiceConnect-CSharp/reference/configuration/ipipelineconfiguration/) — pipeline wiring
+
+## What comes next
+
+- [Hosting & Lifecycle](/ServiceConnect-CSharp/learn/operations/hosting/) — `AutoStartConsuming`, `BusHostedService`, manual control.
+- [Error Handling](/ServiceConnect-CSharp/learn/operations/error-handling/) — what retries and the error queue actually do.
+- [Observability](/ServiceConnect-CSharp/learn/operations/observability/) — auditing, logging, tracing.

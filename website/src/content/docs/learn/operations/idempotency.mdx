@@ -1,0 +1,142 @@
+---
+title: Idempotency
+description: Why duplicates happen in ServiceConnect, how to design handlers that tolerate them, and when to add a filter-based deduplication backstop.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## The delivery contract
+
+ServiceConnect delivers each message **at least once** — see [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for the delivery model. A handler may run more than once for the same message —
+the broker can redeliver, the consumer can redeliver, and a process crash between
+handler success and the broker recording the ack causes a redelivery on next
+startup.
+
+The framework persists state (process-manager finders, aggregator data, scheduled
+timeouts) **before** sending the ack. So when a redelivery happens, your handler
+runs against state that may already reflect the prior attempt's effects.
+
+Concretely: a payment handler that calls `chargeCard(...)` and then crashes after
+the API call but before the broker records the ack will charge the card twice on
+redelivery. The framework will not stop this for you — it cannot tell your
+business intent from the message bytes. There are two places to defend, in
+preference order:
+
+1. **Make the handler naturally idempotent.** Look up by a stable business key
+   first; reconcile rather than overwrite. (Most of this page from here on
+   documents this approach.)
+2. **Deduplicate at the framework boundary.** Build a per-consumer dedup filter
+   pair (`BeforeConsuming` + `OnConsumedSuccessfully`) that records each
+   completed `MessageId` and short-circuits redeliveries. Useful when the work
+   itself is hard to make idempotent and you want a generic guard. See
+   [Filter-based deduplication](#filter-based-deduplication-for-non-idempotent-side-effects)
+   below.
+
+Both are valid; the first is cheaper and composes better. Idempotent handlers
+also survive scenarios deduplication doesn't catch (e.g. a manual replay through
+a tool that mints fresh IDs).
+
+## Handler-side idempotency (preferred)
+
+Design the handler so that processing the same message twice produces the same
+end state as processing it once. This is the most reliable defence because it
+survives every kind of duplicate — broker redelivery, publisher retries, manual
+requeues — and requires no external infrastructure.
+
+Common patterns:
+
+- **Natural keys and upserts.** `INSERT ... ON CONFLICT DO NOTHING` against a
+  table with a unique index on the message's business id. The second delivery
+  does nothing.
+- **Check-then-act in the same transaction.** Write the `MessageId` alongside
+  the side effect in a single database transaction. Before doing work, check
+  whether the id is already present.
+- **Outbox / inbox pattern.** The handler writes the processed id alongside any
+  outgoing events in one transaction. Subsequent deliveries find the inbox row
+  and skip.
+
+The common thread: the dedup check lives inside the **same consistency boundary**
+as the side effect — no window between the check and the write.
+
+## Filter-based deduplication (for non-idempotent side effects)
+
+When the side effect is outside your consistency boundary — calling a
+third-party API, sending an email, taking a payment — you cannot always make
+the handler idempotent. For these cases, build a pair of per-consumer filters
+that wrap the pipeline:
+
+1. **Before-consuming filter** — checks whether the incoming `MessageId` is
+   already in the dedup store. If it is, return `FilterAction.Stop` to
+   short-circuit the pipeline without redelivering.
+2. **OnConsumedSuccessfully filter** — records the `MessageId` in the dedup
+   store only *after* the handler completes successfully.
+
+The `OnConsumedSuccessfully` stage is specifically designed for this use case:
+it fires only when the handler returned without throwing and the message was
+not unhandled, so a handler crash will not cause a key to be recorded
+prematurely — the broker will redeliver, and the before-filter will not find
+the id.
+
+```csharp
+// Register both ends of the pair
+services.AddSingleton<IDeduplicationStore, MyDeduplicationStore>();
+services.AddSingleton<DeduplicationCheckFilter>();
+services.AddSingleton<DeduplicationRecordFilter>();
+
+services.AddServiceConnect(builder =>
+{
+    // ...
+    builder.AddBeforeConsumingFilter<DeduplicationCheckFilter>();
+    builder.AddOnConsumedSuccessfullyFilter<DeduplicationRecordFilter>();
+});
+```
+
+A worked implementation is in the
+[`CustomFilterAndMiddleware` sample](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CustomFilterAndMiddleware).
+See the [`IFilter` reference](/ServiceConnect-CSharp/reference/filters/ifilter/)
+for the filter interface and all registration methods.
+
+<Aside type="caution">
+  **TOCTOU under contention.** A read-then-write dedup pattern is racy when two
+  deliveries race each other (rare, but possible with competing consumers at
+  high throughput). Production persistors should use atomic insert primitives —
+  a unique index plus duplicate-key detection — so only one writer wins without
+  silent data loss.
+</Aside>
+
+<Aside type="caution">
+  **Per-process vs. cross-process store.** An in-process dictionary deduplicates
+  only within a single replica. If you run multiple instances of the same
+  consumer, each replica has its own dictionary and a redelivered message may
+  land on a different replica than the one that first processed it. Use a shared
+  external store (MongoDB, Redis, or any database) when you run more than one
+  consumer replica.
+</Aside>
+
+<Aside type="note">
+  **Broker redelivery vs. duplicate publish.** These are different problems.
+  Broker redelivery preserves the original `MessageId` — the broker resends the
+  same envelope. That is the canonical use case for this filter pair. Duplicate
+  publish from application code typically generates two messages with *different*
+  `MessageId`s for the same logical event; the filter pair will not stop those
+  because it never sees the same id twice. Prevent duplicate publishes at the
+  source.
+</Aside>
+
+## Combining the two
+
+In practice, production services use both defences. Handler-side idempotency is
+the correctness guarantee. The filter pair is a performance optimisation (skip
+the work entirely) and a backstop for the cases where handler-side idempotency
+is impractical.
+
+Rough rule:
+
+- **Small, idempotent handlers** — handler-side only. No extra infrastructure.
+- **Expensive or externally-visible side effects with a natural upsert key** —
+  both. The filter stops duplicates cheaply; the handler's own check handles any
+  that slip through.
+- **Purely external side effects with no natural idempotency key** (e.g. sending
+  an SMS) — filter pair is your primary option short of redesigning the
+  downstream API. Consider whether the external API offers an idempotency key
+  header you can derive from the `MessageId`.

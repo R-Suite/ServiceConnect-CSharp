@@ -1,0 +1,342 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Moq;
+using ServiceConnect.Configuration;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Interfaces.Options;
+using ServiceConnect.Services;
+using Xunit;
+
+namespace ServiceConnect.UnitTests.Services;
+
+public class ConsumeContextTestReply(Guid correlationId) : Message(correlationId)
+{
+    public string? Value { get; set; }
+}
+
+public class ConsumeContextTests
+{
+    private readonly Mock<IBus> _mockBus;
+    private readonly TestReplyStatusRequestReplyManager _replyStatusRequestReplyManager;
+    private readonly IQueueConfiguration _queueConfig;
+    private readonly IBusConfiguration _busConfig;
+
+    public ConsumeContextTests()
+    {
+        _mockBus = new Mock<IBus>();
+        _replyStatusRequestReplyManager = new TestReplyStatusRequestReplyManager();
+        _mockBus
+            .Setup(b => b.SendAsync(It.IsAny<ConsumeContextTestReply>(), It.IsAny<SendOptions?>()))
+            .Returns(Task.CompletedTask);
+
+        var queueConfig = new QueueConfiguration
+        {
+            QueueName = "my-queue",
+            ErrorQueueName = "errors",
+            AuditQueueName = "audit"
+        };
+        _queueConfig = queueConfig;
+
+        _busConfig = new BusConfiguration();
+    }
+
+    [Fact]
+    public void Properties_AreSetFromConstructor()
+    {
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.MessageId, "msg-123" }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+
+        Assert.Same(_mockBus.Object, context.Bus);
+        // Dictionary<string,object> implements IReadOnlyDictionary, so compare contents not reference.
+        Assert.Equal(headers, context.Headers);
+        Assert.Equal("msg-123", context.MessageId);
+    }
+
+    [Fact]
+    public void MessageId_ReturnsNull_WhenNotInHeaders()
+    {
+        var headers = new Dictionary<string, object>();
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+
+        Assert.Null(context.MessageId);
+    }
+
+    [Fact]
+    public void CorrelationId_ParsesFromHeaders()
+    {
+        var expected = Guid.NewGuid();
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.CorrelationId, expected.ToString() }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+
+        Assert.Equal(expected, context.CorrelationId);
+    }
+
+    [Fact]
+    public void CorrelationId_ReturnsEmptyGuid_WhenNotInHeaders()
+    {
+        var headers = new Dictionary<string, object>();
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+
+        Assert.Equal(Guid.Empty, context.CorrelationId);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_SendsToSourceAddress_WhenKnownQueue()
+    {
+        var requestMessageId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "my-queue" },
+            { HeaderKeys.RequestMessageId, requestMessageId }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        await context.ReplyAsync(reply);
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o =>
+                o.HasValue &&
+                o.Value.EndPoint == "my-queue" &&
+                o.Value.Headers != null &&
+                o.Value.Headers["ResponseMessageId"] == requestMessageId)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_ThrowsWhenSourceAddressNotKnown()
+    {
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "unknown-evil-queue" }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => context.ReplyAsync(reply));
+        Assert.Contains("not a recognized queue", ex.Message);
+        Assert.Contains("unknown-evil-queue", ex.Message);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_AllowsUnknownQueue_WhenValidationDisabled()
+    {
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "unknown-but-allowed" },
+            { HeaderKeys.RequestMessageId, Guid.NewGuid().ToString() }
+        };
+
+        var busConfig = new BusConfiguration { ValidateReplyDestinations = false };
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        await context.ReplyAsync(reply);
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o => o.HasValue && o.Value.EndPoint == "unknown-but-allowed")),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_AllowsReplyToQueueMappingDestination()
+    {
+        var queueConfig = new QueueConfiguration { QueueName = "my-queue" };
+        queueConfig.AddQueueMapping(typeof(ConsumeContextTestReply), "mapped-reply-queue");
+
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "mapped-reply-queue" },
+            { HeaderKeys.RequestMessageId, Guid.NewGuid().ToString() }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, queueConfig, _busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        await context.ReplyAsync(reply);
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o => o.HasValue && o.Value.EndPoint == "mapped-reply-queue")),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_AllowsReplyToErrorQueue()
+    {
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "errors" },
+            { HeaderKeys.RequestMessageId, Guid.NewGuid().ToString() }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        await context.ReplyAsync(reply);
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o => o.HasValue && o.Value.EndPoint == "errors")),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_WithCallerHeaders_PropagatesIntoSendOptions_AndStampedResponseMessageIdWins()
+    {
+        var requestMessageId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "my-queue" },
+            { HeaderKeys.RequestMessageId, requestMessageId }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        var callerHeaders = new Dictionary<string, string>
+        {
+            { "X-Trace", "abc" },
+            // Caller-supplied ResponseMessageId is overwritten by the framework's stamp; the
+            // framework owns request/reply correlation and won't let callers spoof it.
+            { HeaderKeys.ResponseMessageId, "caller-supplied-should-be-overwritten" }
+        };
+
+        await context.ReplyAsync(reply, new ReplyOptions { Headers = callerHeaders });
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o =>
+                o.HasValue &&
+                o.Value.Headers != null &&
+                o.Value.Headers["X-Trace"] == "abc" &&
+                o.Value.Headers[HeaderKeys.ResponseMessageId] == requestMessageId)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_WithSpoofedRequestMessageIdAndUnknownSourceAddress_Throws()
+    {
+        var spoofedRequestId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "unknown-evil-queue" },
+            { HeaderKeys.RequestMessageId, spoofedRequestId }
+        };
+
+        _replyStatusRequestReplyManager.TrackedRequests.Clear();
+
+        var context = new ConsumeContext(
+            _mockBus.Object,
+            headers,
+            _queueConfig,
+            _busConfig,
+            _replyStatusRequestReplyManager,
+            default);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => context.ReplyAsync(reply));
+
+        Assert.Contains("not a recognized queue", ex.Message);
+        Assert.Contains("unknown-evil-queue", ex.Message);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_WithInboundFrameworkRequestEnvelopeAndUnknownSourceAddress_Succeeds()
+    {
+        var requestMessageId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "unknown-framework-requester" },
+            { HeaderKeys.RequestMessageId, requestMessageId },
+            { HeaderKeys.DestinationAddress, "my-queue" },
+            { HeaderKeys.MessageId, Guid.NewGuid().ToString() }
+        };
+
+        var context = new ConsumeContext(_mockBus.Object, headers, _queueConfig, _busConfig);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        await context.ReplyAsync(reply);
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o =>
+                o.HasValue &&
+                o.Value.EndPoint == "unknown-framework-requester" &&
+                o.Value.Headers != null &&
+                o.Value.Headers["ResponseMessageId"] == requestMessageId)),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ReplyAsync_WithTrackedRequestMessageIdAndUnknownSourceAddress_Succeeds()
+    {
+        var requestMessageId = Guid.NewGuid().ToString();
+        var headers = new Dictionary<string, object>
+        {
+            { HeaderKeys.SourceAddress, "unknown-but-tracked" },
+            { HeaderKeys.RequestMessageId, requestMessageId }
+        };
+
+        _replyStatusRequestReplyManager.TrackedRequests.Add(requestMessageId);
+
+        var context = new ConsumeContext(
+            _mockBus.Object,
+            headers,
+            _queueConfig,
+            _busConfig,
+            _replyStatusRequestReplyManager,
+            default);
+        var reply = new ConsumeContextTestReply(Guid.NewGuid()) { Value = "hello" };
+
+        await context.ReplyAsync(reply);
+
+        _mockBus.Verify(b => b.SendAsync(
+            reply,
+            It.Is<SendOptions?>(o =>
+                o.HasValue &&
+                o.Value.EndPoint == "unknown-but-tracked" &&
+                o.Value.Headers != null &&
+                o.Value.Headers["ResponseMessageId"] == requestMessageId)),
+            Times.Once);
+    }
+
+    [Fact]
+    public void IsKnownQueue_MatchesCaseInsensitively()
+    {
+        var queueConfig = new QueueConfiguration
+        {
+            QueueName = "MyQueue",
+            ErrorQueueName = "Errors",
+            AuditQueueName = "Audit"
+        };
+
+        Assert.True(ConsumeContext.IsKnownQueue("myqueue", queueConfig));
+        Assert.True(ConsumeContext.IsKnownQueue("ERRORS", queueConfig));
+        Assert.True(ConsumeContext.IsKnownQueue("audit", queueConfig));
+        Assert.False(ConsumeContext.IsKnownQueue("unknown", queueConfig));
+    }
+}
+
+internal sealed class TestReplyStatusRequestReplyManager : IReplyStatusRequestReplyManager
+{
+    public HashSet<string> TrackedRequests { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public bool TryProcessReply(string messageId, ReadOnlyMemory<byte> messageBytes, Type type) => false;
+
+    public bool IsTrackedRequest(string messageId) => TrackedRequests.Contains(messageId);
+}

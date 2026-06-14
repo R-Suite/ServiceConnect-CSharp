@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../../../examples/ExampleSupport/ServiceConnect.Examples.Support.csproj" />
+    <ProjectReference Include="../ServiceConnect.Examples.RoutingSlip.Contracts/ServiceConnect.Examples.RoutingSlip.Contracts.csproj" />
+  </ItemGroup>
+</Project>

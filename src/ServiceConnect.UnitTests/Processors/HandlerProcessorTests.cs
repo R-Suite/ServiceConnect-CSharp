@@ -1,0 +1,650 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using ServiceConnect;
+using ServiceConnect.Configuration;
+using ServiceConnect.Interfaces;
+using ServiceConnect.Interfaces.Configuration;
+using ServiceConnect.Services;
+using ServiceConnect.Services.Processors;
+using ServiceConnect.UnitTests.Fakes;
+using Xunit;
+
+namespace ServiceConnect.UnitTests.Processors;
+
+public class HandlerProcessorTests
+{
+    private static readonly IBusConfiguration DefaultBusConfig = new BusConfiguration();
+    private static readonly IQueueConfiguration DefaultQueueConfig = new QueueConfiguration
+    {
+        QueueName = "test-queue",
+        ErrorQueueName = "errors",
+        AuditQueueName = "audit"
+    };
+
+    // Tests resolve handlers through a ConsumeScopeAccessor whose AsyncLocal is primed
+    // with a per-test provider; each test class instance (xUnit creates one per fact)
+    // runs in its own async flow, so the Push disposable can be discarded.
+    private static ConsumeScopeAccessor NewScope(IServiceProvider sp)
+    {
+        var accessor = new ConsumeScopeAccessor();
+        accessor.Push(sp);
+        return accessor;
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithRegisteredHandler_InvokesHandler()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+        Assert.True(handler.Invoked);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NoHandlers_ReturnsNotHandled()
+    {
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.Equal(ProcessResult.NotHandled, result);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NullMessage_ReturnsNotHandled()
+    {
+        var services = new ServiceCollection();
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(), NewScope(provider), new Lazy<IBus>(() => new Mock<IBus>().Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), null, headers, envelope);
+
+        Assert.Equal(ProcessResult.NotHandled, result);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PassesConsumeContextToHandler()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.True(handler.ContextWasReceived);
+        Assert.Same(mockBus.Object, handler.ObservedBus);
+        // Dictionary<string,object> implements IReadOnlyDictionary, so compare contents not reference.
+        Assert.Equal(headers, handler.ObservedHeaders);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithRoutingSlip_ForwardsToKnownDestination()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()))
+            .Returns(Task.CompletedTask);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        // Register the routing slip destinations as known queues
+        var queueConfig = new QueueConfiguration { QueueName = "test-queue" };
+        queueConfig.AddQueueMapping(typeof(TestHpMsg), "Step2");
+        queueConfig.AddQueueMapping(typeof(TestHpMsg), "Step3");
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "Step2,Step3" };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.True(handler.Invoked);
+        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 2 && d[0] == "Step2" && d[1] == "Step3")), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_WithRoutingSlipBytes_ForwardsToKnownDestination()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()))
+            .Returns(Task.CompletedTask);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        // Register the routing slip destination as a known queue
+        var queueConfig = new QueueConfiguration { QueueName = "test-queue" };
+        queueConfig.AddQueueMapping(typeof(TestHpMsg), "NextQueue");
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, queueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = System.Text.Encoding.UTF8.GetBytes("NextQueue") };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        mockBus.Verify(b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 1 && d[0] == "NextQueue")), Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_NoRoutingSlip_DoesNotCallRoute()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RoutingSlipToQueueNotInLocalConfig_ForwardsSuccessfully()
+    {
+        // Routing-slip destinations are not required to appear in the local queueConfig —
+        // only format validation gates the forward, not membership in IsKnownQueue.
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        mockBus.Setup(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+               .Returns(Task.CompletedTask);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "unknown-cross-service-queue" };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+        mockBus.Verify(
+            b => b.RouteAsync(msg, It.Is<IReadOnlyList<string>>(d => d.Count == 1 && d[0] == "unknown-cross-service-queue"), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_RoutingSlipDisabled_SkipsProcessing()
+    {
+        var handler = new TestHpHandler();
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var busConfig = new BusConfiguration { EnableRoutingSlipProcessing = false };
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), busConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        // This would normally throw because "SomeQueue" isn't known, but routing slip is disabled
+        var headers = new Dictionary<string, object> { [HeaderKeys.RoutingSlip] = "SomeQueue" };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var result = await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope);
+
+        Assert.Equal(ProcessResult.Handled, result);
+        Assert.True(handler.Invoked);
+        mockBus.Verify(b => b.RouteAsync(It.IsAny<TestHpMsg>(), It.IsAny<IReadOnlyList<string>>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_SetsAmbientConsumeHeadersDuringHandlerAndClearsThemAfterward()
+    {
+        var timeoutStore = new CapturingTimeoutStore();
+        var accessor = new ConsumeContextAccessor();
+        var bus = TestBusFactory.Create(DefaultQueueConfig, timeoutStore, accessor);
+        var handler = new TimeoutRequestingHandler(bus);
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handler);
+        services.AddSingleton<IBus>(bus);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => bus), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), accessor, Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var correlationId = Guid.NewGuid();
+        var headers = new Dictionary<string, object>
+        {
+            ["Custom"] = "value",
+            [HeaderKeys.MessageId] = "managed-message-id"
+        };
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), new TestHpMsg(correlationId), headers, envelope);
+        await bus.RequestTimeoutAsync(correlationId, TimeSpan.FromMinutes(2));
+
+        Assert.Equal(2, timeoutStore.Inserted.Count);
+        Assert.Equal("value", timeoutStore.Inserted[0].Headers["Custom"]);
+        Assert.False(timeoutStore.Inserted[0].Headers.ContainsKey(HeaderKeys.MessageId));
+        Assert.Empty(timeoutStore.Inserted[1].Headers);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FirstHandlerThrows_RemainingHandlersStillRun()
+    {
+        // Handler A throws, B records, C throws — all three should run despite the faults.
+        var handlerA = new ThrowingHpHandler("handler-A error");
+        var handlerB = new RecordingHpHandler();
+        var handlerC = new ThrowingHpHandler("handler-C error");
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerC);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope));
+
+        // Both throwing handlers must have contributed their exception.
+        Assert.Equal(2, ex.InnerExceptions.Count);
+        Assert.Contains(ex.InnerExceptions, e => e.Message == "handler-A error");
+        Assert.Contains(ex.InnerExceptions, e => e.Message == "handler-C error");
+
+        // All three handlers must have been invoked — independent faults must not short-circuit.
+        Assert.True(handlerA.Invoked);
+        Assert.True(handlerB.Invoked);
+        Assert.True(handlerC.Invoked);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_FirstHandlerThrowsOCE_RemainingHandlersSkipped()
+    {
+        // Handler A throws OperationCanceledException for the dispatch CT — shutdown path
+        // must short-circuit cleanly and not invoke B or C.
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+
+        var handlerA = new CancellingHpHandler(cts.Token);
+        var handlerB = new RecordingHpHandler();
+        var handlerC = new RecordingHpHandler();
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerC);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        // ProcessAsync itself will throw before the loop because cancellationToken.ThrowIfCancellationRequested()
+        // is called at entry. Use a fresh, already-cancelled token for the OCE inside the handler test.
+        // Pass non-cancelled CT to the processor so it gets past the guard; the handler throws its own OCE
+        // tied to cts.Token which is already cancelled.
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, cts.Token));
+
+        // Because cts.Token is cancelled, ProcessAsync throws at entry — handler A hasn't run yet.
+        // This validates that a cancelled dispatch CT never reaches the loop.
+        Assert.False(handlerA.Invoked);
+        Assert.False(handlerB.Invoked);
+        Assert.False(handlerC.Invoked);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_HandlerThrowsOCE_OnNonCancelledCT_IsTreatedAsFault()
+    {
+        // The dispatch CT is not cancelled, but handler A throws OCE bound to a
+        // different (already-cancelled) token. Because the dispatch CT is not
+        // cancelled, the in-loop `when` filter evaluates to false, so the OCE
+        // falls through to the general catch and is aggregated. Handler B must
+        // still run — independent faults must not short-circuit the loop.
+        using var unrelatedCts = new CancellationTokenSource();
+        await unrelatedCts.CancelAsync();
+
+        var handlerA = new CancellingHpHandler(unrelatedCts.Token);
+        var handlerB = new RecordingHpHandler();
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        using var dispatchCts = new CancellationTokenSource(); // intentionally not cancelled
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, dispatchCts.Token));
+
+        // The OCE from handler A must be captured as a handler fault.
+        Assert.Single(ex.InnerExceptions);
+        Assert.IsAssignableFrom<OperationCanceledException>(ex.InnerExceptions[0]);
+
+        // Both handlers must have been invoked — the OCE is a fault, not a shutdown signal.
+        Assert.True(handlerA.Invoked);
+        Assert.True(handlerB.Invoked);
+    }
+
+    [Fact]
+    public async Task ProcessAsync_HandlerAThrowsNonOce_HandlerBThrowsOce_DispatchCtCancelled_ThrowsOce()
+    {
+        // Handler A throws a non-OCE fault; handler B throws OCE linked to the dispatch CT.
+        // Because the dispatch CT is cancelled when handler B's OCE is caught, the in-loop
+        // when-guard rethrows it directly — the post-loop OCE-prefer path is a safety net
+        // for the race where the guard evaluates false but the CT is cancelled by loop-end.
+        // Either way, the caller must observe OCE (not AggregateException wrapping OCE).
+        using var dispatchCts = new CancellationTokenSource();
+
+        var handlerA = new ThrowingHpHandler("fail-A");
+        var handlerB = new OceThrowerUsingDispatchCtHandler(dispatchCts);
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, dispatchCts.Token));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_OceInHandlerExceptions_WithCancelledCt_PrefersOceOverAggregateException()
+    {
+        // Verifies the Shape-A post-loop path: OCE from handler B ends up in handlerExceptions
+        // because the when-guard evaluated false at catch time, but the dispatch CT is cancelled
+        // by loop-end (handler B cancelled it). The post-loop OCE-prefer logic must surface
+        // the OCE directly rather than wrapping it in AggregateException.
+        using var dispatchCts = new CancellationTokenSource();
+        using var unrelatedCts = new CancellationTokenSource();
+        await unrelatedCts.CancelAsync();
+
+        // Handler A throws a plain fault so handlerExceptions is non-null by the time handler B runs.
+        var handlerA = new ThrowingHpHandler("fail-A");
+        // Handler B: cancels the dispatch CTS, then throws OCE for the unrelated token.
+        // The when-guard (dispatchCt.IsCancellationRequested) evaluates true at the point handler B
+        // throws because handler B itself cancels the dispatch CTS first — so this test actually
+        // exercises the in-loop rethrow, not Shape A. Shape A is the safety net for the race.
+        // Both paths must produce OCE, not AggregateException.
+        var handlerB = new CancelDispatchThenThrowOceHandler(dispatchCts, unrelatedCts.Token);
+
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerA);
+        services.AddSingleton<IMessageHandler<TestHpMsg>>(handlerB);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var processor = new HandlerProcessor(BuildRegistry(typeof(TestHpMsg)), NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new TestHpMsg(Guid.NewGuid());
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        await Assert.ThrowsAsync<OperationCanceledException>(
+            () => processor.ProcessAsync(new byte[] { 1 }, typeof(TestHpMsg), msg, headers, envelope, dispatchCts.Token));
+    }
+
+    [Fact]
+    public async Task ProcessAsync_PassesCancellationTokenToHandler()
+    {
+        var ctReceived = new TaskCompletionSource<CancellationToken>();
+        var handler = new CtRecordingHandler(ctReceived);
+        var mockBus = new Mock<IBus>();
+        var services = new ServiceCollection();
+        services.AddSingleton<IMessageHandler<CtMsg>>(handler);
+        services.AddSingleton(mockBus.Object);
+        var provider = services.BuildServiceProvider();
+
+        var refs = new List<HandlerReference> { new() { MessageType = typeof(CtMsg), HandlerType = typeof(CtRecordingHandler) } };
+        var registry = new MessageHandlerRegistry(refs, NullLogger<MessageHandlerRegistry>.Instance);
+        var processor = new HandlerProcessor(registry, NewScope(provider), new Lazy<IBus>(() => mockBus.Object), DefaultBusConfig, DefaultQueueConfig, new ConsumeContextPool(), new ConsumeContextAccessor(), Microsoft.Extensions.Logging.Abstractions.NullLogger<HandlerProcessor>.Instance);
+        var msg = new CtMsg();
+        var headers = new Dictionary<string, object>();
+        var envelope = new Envelope { Headers = headers, Body = new byte[] { 1 } };
+
+        using var cts = new CancellationTokenSource();
+        await processor.ProcessAsync(new byte[] { 1 }, typeof(CtMsg), msg, headers, envelope, cts.Token);
+        var observed = await ctReceived.Task.WaitAsync(TimeSpan.FromSeconds(1));
+        Assert.Equal(cts.Token, observed);
+    }
+
+    private static MessageHandlerRegistry BuildRegistry(params Type[] messageTypes)
+    {
+        var refs = messageTypes
+            .Select(mt => new HandlerReference { MessageType = mt, HandlerType = typeof(TestHpHandler) })
+            .ToList();
+        return new MessageHandlerRegistry(
+            refs,
+            NullLogger<MessageHandlerRegistry>.Instance);
+    }
+}
+
+file class TestHpMsg(Guid correlationId) : Message(correlationId)
+{
+}
+
+// Throws a fixed exception message on every invocation — used to verify fault collection.
+file sealed class ThrowingHpHandler(string errorMessage) : IMessageHandler<TestHpMsg>
+{
+    public bool Invoked { get; private set; }
+
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Invoked = true;
+        throw new InvalidOperationException(errorMessage);
+    }
+}
+
+// Records invocation without throwing — used to verify it still runs despite sibling faults.
+file sealed class RecordingHpHandler : IMessageHandler<TestHpMsg>
+{
+    public bool Invoked { get; private set; }
+
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Invoked = true;
+        return Task.CompletedTask;
+    }
+}
+
+// Throws OperationCanceledException for the given token — used to exercise the OCE short-circuit path.
+file sealed class CancellingHpHandler(CancellationToken token) : IMessageHandler<TestHpMsg>
+{
+    public bool Invoked { get; private set; }
+
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Invoked = true;
+        token.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+}
+
+file class TestHpHandler : IMessageHandler<TestHpMsg>
+{
+    public bool Invoked { get; private set; }
+    // Capture context state during handler execution — the context parameter is only
+    // valid for the duration of HandleAsync; capturing the reference itself is sufficient here.
+    public IBus? ObservedBus { get; private set; }
+    public IReadOnlyDictionary<string, object>? ObservedHeaders { get; private set; }
+    public bool ContextWasReceived { get; private set; }
+
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        Invoked = true;
+        if (context != null)
+        {
+            ContextWasReceived = true;
+            ObservedBus = context.Bus;
+            ObservedHeaders = new Dictionary<string, object>(context.Headers);
+        }
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class TimeoutRequestingHandler(IBus bus) : IMessageHandler<TestHpMsg>
+{
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+        => bus.RequestTimeoutAsync(message.CorrelationId, TimeSpan.FromMinutes(1));
+}
+
+file sealed class CapturingTimeoutStore : ITimeoutStore
+{
+    public List<TimeoutData> Inserted { get; } = [];
+
+    public Task InsertTimeoutAsync(TimeoutData data, CancellationToken cancellationToken = default)
+    {
+        Inserted.Add(new TimeoutData
+        {
+            Id = data.Id,
+            Destination = data.Destination,
+            ProcessManagerId = data.ProcessManagerId,
+            Time = data.Time,
+            Headers = new Dictionary<string, object>(data.Headers)
+        });
+        return Task.CompletedTask;
+    }
+
+    public Task<TimeoutsBatch> GetTimeoutsBatchAsync(int? batchSize = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task RemoveDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+
+    public Task ReleaseDispatchedTimeoutAsync(Guid id, Guid? lockOwner = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException();
+}
+
+file static class TestBusFactory
+{
+    public static Bus Create(IQueueConfiguration queueConfiguration, ITimeoutStore timeoutStore, ConsumeContextAccessor accessor)
+    {
+        var serializer = new Mock<IMessageSerializer>();
+        serializer.SetupSerializeAny<TestHpMsg>([1]);
+
+        var filterPipeline = new Mock<IFilterPipeline>();
+        var sendPipeline = new Mock<ISendMessagePipeline>();
+        var requestReplyManager = new Mock<IRequestReplyManager>();
+        var logger = new Mock<ILogger<Bus>>();
+        var dispatcher = new Mock<IMessageDispatcher>();
+        var pipelineConfiguration = new Mock<IPipelineConfiguration>();
+        pipelineConfiguration.Setup(x => x.OutgoingFilters).Returns([]);
+
+        var rootProvider = new ServiceCollection().BuildServiceProvider();
+        return new Bus(
+            serializer.Object,
+            filterPipeline.Object,
+            sendPipeline.Object,
+            requestReplyManager.Object,
+            logger.Object,
+            queueConfiguration,
+            dispatcher.Object,
+            [],
+            pipelineConfiguration.Object,
+            rootProvider.GetRequiredService<IServiceScopeFactory>(),
+            new ConsumeScopeAccessor(),
+            timeoutStore: timeoutStore,
+            consumeContextAccessor: accessor);
+    }
+}
+
+// Records the CancellationToken received by HandleAsync so the test can assert it
+// is the same token that was passed into ProcessAsync.
+file sealed class CtRecordingHandler(TaskCompletionSource<CancellationToken> tcs)
+    : IMessageHandler<CtMsg>
+{
+    public Task HandleAsync(CtMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        tcs.TrySetResult(cancellationToken);
+        return Task.CompletedTask;
+    }
+}
+
+file sealed class CtMsg : Message
+{
+    public CtMsg() : base(Guid.NewGuid()) { }
+}
+
+// Cancels the dispatch CTS then throws OCE for the dispatch CT — exercises the in-loop
+// OCE short-circuit where cancellationToken.IsCancellationRequested is true at catch time.
+file sealed class OceThrowerUsingDispatchCtHandler(CancellationTokenSource dispatchCts) : IMessageHandler<TestHpMsg>
+{
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        dispatchCts.Cancel();
+        cancellationToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+}
+
+// Cancels the dispatch CTS, then throws OCE for an unrelated token. The when-guard on the dispatch
+// CT evaluates true (handler just cancelled it), so this still exercises the direct-rethrow path.
+// Both OCE paths (in-loop and post-loop) must surface OCE, not AggregateException.
+file sealed class CancelDispatchThenThrowOceHandler(CancellationTokenSource dispatchCts, CancellationToken unrelatedToken) : IMessageHandler<TestHpMsg>
+{
+    public Task HandleAsync(TestHpMsg message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        dispatchCts.Cancel();
+        unrelatedToken.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+}

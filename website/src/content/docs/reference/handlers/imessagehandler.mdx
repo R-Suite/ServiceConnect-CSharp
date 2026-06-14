@@ -1,0 +1,106 @@
+---
+title: IMessageHandler<T>
+description: The contract for consuming a single message type; implementations are discovered via DI and invoked per message.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+## Overview
+
+`IMessageHandler<TMessage>` is the contract you implement to consume a single message type. Implementations are discovered by the handler registry and resolved from DI per message; the dispatch pipeline invokes `HandleAsync`, passing the per-message context directly as a parameter. Multiple handlers may be registered for the same message type — all of them run.
+
+See [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) for the conceptual tour.
+
+## Reference
+
+The interface is declared with a contravariant type parameter constrained to `Message`:
+
+```csharp
+public interface IMessageHandler<in TMessage> where TMessage : Message
+```
+
+### `HandleAsync`
+
+```csharp
+Task HandleAsync(TMessage message, IConsumeContext context, CancellationToken cancellationToken = default);
+```
+
+Invoked once per delivered message. The dispatch pipeline passes the per-message `IConsumeContext` directly so handlers are safe to register as singletons or across concurrent dispatches without races on shared state. Returning a faulted `Task` (or throwing synchronously) signals failure to the pipeline, which applies the configured retry and error-handling policy.
+
+**Parameters**
+- `message` — the deserialised message; guaranteed non-null when `HandleAsync` is invoked by the dispatcher.
+- `context` — the per-message consume context (bus handle, correlation id, reply helper); guaranteed non-null when invoked by the dispatcher.
+- `cancellationToken` — sourced from the transport consume context; signals cooperative shutdown. Pass it through to downstream awaits so long-running handlers unwind cleanly when the bus stops consuming.
+
+**Remarks.** The generic parameter is constrained to `Message`, matching the constraint on `IBus.PublishAsync` and `IBus.SendAsync`. Keep the handler's work inside the awaited task — the pipeline acknowledges the broker only once this task completes successfully.
+
+<Aside type="note" title="No ambient Context property">
+  Handlers receive the consume context as an explicit `IConsumeContext` parameter on `HandleAsync`. There is no property setter the framework writes between dispatches — the context flows in with the message.
+</Aside>
+
+## Usage
+
+### Idempotent handler
+
+```csharp
+public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
+{
+    private readonly IOrderRepository _orders;
+
+    public OrderPlacedHandler(IOrderRepository orders) => _orders = orders;
+
+    public async Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        // Use the message id as a deduplication key so retries and duplicate
+        // deliveries never write the same row twice.
+        var dedupKey = context.MessageId ?? message.CorrelationId.ToString();
+
+        if (await _orders.ExistsAsync(dedupKey))
+        {
+            return;
+        }
+
+        await _orders.InsertAsync(new OrderRecord
+        {
+            DedupKey = dedupKey,
+            OrderId = message.OrderId,
+            CustomerId = message.CustomerId,
+            Total = message.Total,
+        });
+    }
+}
+```
+
+A handler is the natural place to enforce idempotency. Writing through a deduplication key (message id or correlation id) means redelivered messages collapse to a single row even when the broker retries after a transient acknowledgement failure.
+
+### Handler publishing a follow-up event
+
+```csharp
+public sealed class OrderPlacedHandler : IMessageHandler<OrderPlaced>
+{
+    private readonly IPaymentGateway _payments;
+
+    public OrderPlacedHandler(IPaymentGateway payments) => _payments = payments;
+
+    public async Task HandleAsync(OrderPlaced message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        var authorization = await _payments.AuthorizeAsync(
+            message.CustomerId,
+            message.Total);
+
+        await context.Bus.PublishAsync(new OrderConfirmed(message.CorrelationId)
+        {
+            OrderId = message.OrderId,
+            AuthorizationCode = authorization.Code,
+        });
+    }
+}
+```
+
+Handlers routinely trigger the next step of a workflow. Reach `IBus` through the supplied `context.Bus` and `PublishAsync` the follow-up event once the handler's side-effects are durable. The broker acknowledgement for `OrderPlaced` is only sent after `HandleAsync` returns, so the follow-up publish and the ack form a conceptual unit.
+
+## See also
+
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — concept
+- [`IConsumeContext`](../iconsumecontext/) — related reference
+- [`IStreamHandler`](../istreamhandler/) — related reference

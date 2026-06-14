@@ -1,0 +1,40 @@
+---
+title: Extension Points
+description: Pluggable internals — only touch these when replacing a default implementation.
+---
+
+import { CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+export const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+Extension points are the interfaces the framework calls *into*. You only need this section if you're replacing a default implementation — shipping a custom persistence store, serializer, or transport.
+
+Most consumers never open this section. If you're wiring the bus into a new database or message broker, start here; otherwise the [API Reference](/ServiceConnect-CSharp/reference/) has what you need.
+
+<CardGrid>
+  <LinkCard
+    title="Persistence"
+    href={`${base}/reference/extension-points/persistence/iaggregatorpersistor/`}
+    description="Custom stores for aggregators, process managers, and timeouts."
+  />
+  <LinkCard
+    title="Serialization"
+    href={`${base}/reference/extension-points/serialization/imessageserializer/`}
+    description="Custom message serializers and type-id registries."
+  />
+  <LinkCard
+    title="Transport"
+    href={`${base}/reference/extension-points/transport/iproducer/`}
+    description="Plug in a new message broker — implement IProducer + IConsumer."
+  />
+  <LinkCard
+    title="Registry"
+    href={`${base}/reference/extension-points/registry/ihandlerregistry/`}
+    description="Replace handler discovery, dispatch, or top-level processing."
+  />
+  <LinkCard
+    title="Bus"
+    href={`${base}/reference/extension-points/bus/irequestreplymanager/`}
+    description="Replace the request/reply orchestration with your own correlation strategy."
+  />
+</CardGrid>

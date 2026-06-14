@@ -1,0 +1,409 @@
+---
+title: Migrating from v6 to v7
+description: A focused walkthrough of the v6 → v7 upgrade — the mechanical conversions the compiler will demand, and the silent bear traps it won't.
+---
+
+v7 is a clean-architecture rewrite of ServiceConnect. The public surface, the hosting model, the wire format, the broker defaults, and the observability shape have all moved. Most of the upgrade is compiler-driven; the parts that aren't are listed below as **bear traps** — code that compiles and runs against v7 but behaves differently from v6 in ways that will only show up under load, on the broker, or in your dashboards.
+
+This guide is deliberately narrow. It walks you through the mechanical conversions in roughly the order you should tackle them, then enumerates the runtime-behaviour traps. It is **not** a complete changelog — see [the v7 release notes](/releases/#v7) for the full inventory.
+
+## Before you start
+
+1. **Pin a target.** Every v7 package supports `net8.0` and `net10.0`. There is no `netstandard2.x`, `net6.0`, or `net7.0` build. If you're on `net6.0` or `net7.0`, upgrade to `net8.0` first; if you're already on `net8.0`, you can stay there (it will be dropped in the first major after Microsoft's EoL on 2026-11-10).
+2. **Map your packages.** The solution collapsed from 17 production projects to 7 packages. If you depend on any of these, you need to make a decision before upgrading:
+
+   | v6 package                                  | v7 status                                              |
+   | ------------------------------------------- | ------------------------------------------------------ |
+   | `ServiceConnect`                            | shipped as v7.0.0                                      |
+   | `ServiceConnect.Interfaces`                 | shipped as v7.0.0                                      |
+   | `ServiceConnect.Client.RabbitMQ`            | shipped as v7.0.0                                      |
+   | `ServiceConnect.Persistence.MongoDb`        | shipped as v7.0.0 (typo fixed: was `Persistance`)      |
+   | `ServiceConnect.Persistence.InMemory`       | shipped as v7.0.0                                      |
+   | `ServiceConnect.Telemetry`                  | shipped as v7.0.0 (major rework — see below)           |
+   | `ServiceConnect.HealthChecks`               | **new** in v7                                          |
+   | `ServiceConnect.Persistence.SqlServer`      | **removed**, no replacement                            |
+   | `ServiceConnect.Persistence.Redis`          | **removed**, no replacement                            |
+   | `ServiceConnect.Filters.MessageDeduplication` | **removed** — rebuild using `OnConsumedSuccessfully` (see below) |
+
+3. **Stage your broker.** Several broker-visible defaults flipped (TLS on, publisher confirms on, retry/error publishes `mandatory:true`, exchange-name scheme changed). If v6 and v7 will share a broker during rollout, read the [bear traps](#bear-traps) section first.
+
+4. **Branch and pin v6.** Tag your last-good v6 deploy and start the migration on a branch — the API rewrite touches every consumer codebase, and reverting halfway is awkward.
+
+## Step 1 — Replace the static `Bus` with DI
+
+The biggest mechanical change. The static `Bus.Initialize(...)` entry point is gone; everything is `Microsoft.Extensions.DependencyInjection`-driven, and `IBus` is `IAsyncDisposable`.
+
+**Before (v6):**
+
+```csharp
+var bus = Bus.Initialize(config =>
+{
+    config.SetContainer<StructureMapContainer>();
+    config.TransportSettings.SetHost("rabbit.local");
+    config.TransportSettings.Username = "guest";
+    config.TransportSettings.Password = "guest";
+    config.PersistenceSettings.SetConnectionString("mongodb://mongo.local/sc");
+    config.SetAuditingEnabled(false);
+});
+
+bus.StartConsuming();
+// ...
+bus.Dispose();
+```
+
+**After (v7):**
+
+```csharp
+var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddServiceConnect(sc =>
+{
+    sc.UseRabbitMQ(t =>
+    {
+        t.Host = "rabbit.local";
+        t.Username = "guest";
+        t.Password = "guest";
+        // t.SslEnabled = false;  // see the TLS bear trap below
+    });
+    sc.UseMongoDbPersistence(p =>
+    {
+        p.ConnectionString = "mongodb://mongo.local/sc";
+    });
+    sc.ScanAssemblies(typeof(Program).Assembly);
+    sc.ConfigureBus(bus => bus.AutoStartConsuming = true);
+});
+
+using var app = builder.Build();
+await app.RunAsync();
+```
+
+Key points:
+
+- The bus is now resolved as `IBus` from DI and runs under `BusHostedService`.
+- `AutoStartConsuming = true` (set via `ConfigureBus`) replaces the explicit `bus.StartConsuming()` call.
+- `IBus` is **single-use**. Once stopped or disposed, calling `StartConsumingAsync` again throws — you must resolve a new instance from DI.
+- `Bus` no longer disposes transport singletons; lifetimes are owned by the DI container.
+
+## Step 2 — Convert handlers
+
+Every handler interface gained an `Async` suffix, takes the per-message context as a parameter, and accepts a `CancellationToken`.
+
+**Before (v6):**
+
+```csharp
+public class OrderPlacedHandler : IMessageHandler<OrderPlaced>
+{
+    public IConsumeContext Context { get; set; }  // settable property
+
+    public void Execute(OrderPlaced message)
+    {
+        Context.Reply(new OrderConfirmed { OrderId = message.OrderId });
+    }
+}
+```
+
+**After (v7):**
+
+```csharp
+public class OrderPlacedHandler : IMessageHandler<OrderPlaced>
+{
+    public Task HandleAsync(
+        OrderPlaced message,
+        IConsumeContext ctx,
+        CancellationToken ct)
+    {
+        return ctx.ReplyAsync(new OrderConfirmed { OrderId = message.OrderId }, cancellationToken: ct);
+    }
+}
+```
+
+The settable `Context` (and `Stream` on `IStreamHandler<T>`) property is gone — it was unsafe under singleton handlers. Pass the context through to any code that needs it.
+
+`IProcessHandler<TData, TMessage>` and `IStreamHandler<TMessage>` follow the same shape:
+
+```csharp
+Task IProcessHandler<TData, TMessage>.HandleAsync(
+    TMessage message, TData data, IConsumeContext ctx, CancellationToken ct);
+
+Task IStreamHandler<TMessage>.ExecuteAsync(
+    TMessage message, IMessageBusReadStream stream, CancellationToken ct);
+```
+
+## Step 3 — Convert filters and middleware
+
+Pipeline configuration is now typed: each stage has its own `Add*` builder, and `ConfigurePipeline(Action<PipelineConfiguration>)` is internal.
+
+**Before (v6):**
+
+```csharp
+config.ConfigurePipeline(p =>
+{
+    p.AddBeforeConsume<AuthFilter>();
+    p.AddOutgoing<EnrichHeadersFilter>();
+});
+```
+
+**After (v7):**
+
+```csharp
+sc.AddBeforeConsumingFilter<AuthFilter>();
+sc.AddOutgoingFilter<EnrichHeadersFilter>();
+// New: fires only after successful handler invocation (see Step 7 for dedupe).
+sc.AddOnConsumedSuccessfullyFilter<RecordProcessedFilter>();
+sc.AddAfterConsumingFilter<MetricsFilter>();
+
+// Middleware (was IProcessMessageMiddleware, now IMessageProcessingMiddleware):
+sc.AddMessageProcessingMiddleware<MyMiddleware>();
+sc.AddSendMessageMiddleware<MySendMiddleware>();
+```
+
+If you previously relied on insertion order beyond "first registered wins outermost", use the explicit `InsertOutermost` helpers:
+
+```csharp
+sc.InsertSendMessageMiddlewareOutermost<DiagnosticsMiddleware>();      // dedup-safe
+sc.InsertMessageProcessingMiddlewareOutermost<CorrelationMiddleware>(); // dedup-safe
+```
+
+`IProcessMessageMiddleware` is removed. Convert to `IMessageProcessingMiddleware` (same idea, async signature).
+
+## Step 4 — Replace `SendOptions.EndPoints` / `RequestOptions.EndPoints`
+
+Multi-destination fan-out is now explicit, and partial-reply detection is no longer silent.
+
+**Before (v6):**
+
+```csharp
+bus.Send(new ChargeCard(), new SendOptions
+{
+    EndPoints = new[] { "payments-a", "payments-b" }
+});
+
+var replies = bus.SendRequest<ChargeCard, ChargeResult>(
+    new ChargeCard(),
+    new RequestOptions
+    {
+        EndPoints = new[] { "payments-a", "payments-b" },
+        ExpectedReplyCount = 2
+    });
+// returned whatever arrived before the timeout — silent under-delivery
+```
+
+**After (v7):**
+
+```csharp
+await bus.SendToManyAsync(
+    new ChargeCard(),
+    new[] { "payments-a", "payments-b" },
+    cancellationToken: ct);
+
+// SendRequestMultiAsync routes via the registered queue mapping for the message type
+// — register multiple endpoints up front via AddQueueMapping(typeof(ChargeCard), new[] { "payments-a", "payments-b" }).
+try
+{
+    var replies = await bus.SendRequestMultiAsync<ChargeCard, ChargeResult>(
+        new ChargeCard(),
+        new RequestOptions { ExpectedReplyCount = 2 },
+        ct);
+}
+catch (RequestTimeoutException ex)
+{
+    // Under-delivery is now a fault; partials are on the exception.
+    var partials = ex.PartialReplies;
+}
+```
+
+If your code listened for `SendEventArgs.EndPoints` (plural), drop that — multi-endpoint sends now raise one event per destination, each with a singular `EndPoint`. Correlate by `CorrelationId`.
+
+## Step 5 — Convert remaining async signatures
+
+Every public bus operation took an `Async` suffix and a `CancellationToken`. Walk these compiler errors mechanically:
+
+```csharp
+// v6
+bus.Publish(msg);
+bus.Send("queue", msg);
+ctx.Reply(reply, headers);
+
+// v7
+await bus.PublishAsync(msg, cancellationToken: ct);
+await bus.SendAsync(msg, new SendOptions { EndPoint = "queue" }, ct);
+await ctx.ReplyAsync(reply, new ReplyOptions { Headers = headers }, ct);
+```
+
+Reading collections off the wire are now `IReadOnly*`:
+
+```csharp
+// v6
+IList<string> destinations = routingSlip.Destinations;
+IDictionary<string, object> headers = ctx.Headers;
+
+// v7 (just rename — mutating call sites need a new instance)
+IReadOnlyList<string> destinations = routingSlip.Destinations;
+IReadOnlyDictionary<string, object> headers = ctx.Headers;
+```
+
+`IBusConfiguration.ExceptionHandler` is now async — convert `Action<Exception>` to `Func<Exception, CancellationToken, ValueTask>`.
+
+## Step 6 — Replace `MessageDeduplication`
+
+The old `ServiceConnect.Filters.MessageDeduplication` package is gone outright. It silently dropped legitimate broker redeliveries and shared in-memory state via a static field, which made it unsafe across competing consumers.
+
+The replacement is the new fourth pipeline stage, `OnConsumedSuccessfully`, which fires only after a handler invocation succeeded — so any side effect you record there reflects an actual successful consume, not a broker redelivery.
+
+```csharp
+public class MessageProcessedRecorder : IFilter
+{
+    private readonly IMessageProcessedStore store;
+
+    public MessageProcessedRecorder(IMessageProcessedStore store) => this.store = store;
+
+    public async Task<FilterAction> ProcessAsync(Envelope envelope, CancellationToken ct)
+    {
+        var messageId = (string)envelope.Headers[HeaderKeys.MessageId];
+        await store.RecordAsync(messageId, ct);
+        return FilterAction.Continue;
+    }
+}
+
+sc.AddBeforeConsumingFilter<DedupeGuard>();           // short-circuits on already-seen
+sc.AddOnConsumedSuccessfullyFilter<MessageProcessedRecorder>();
+```
+
+A reference implementation lives in [`examples/CustomFilterAndMiddleware`](https://github.com/R-Suite/ServiceConnect-CSharp/tree/master/examples/CustomFilterAndMiddleware).
+
+## Step 7 — Adopt the new health checks (optional but recommended)
+
+v7 ships a dedicated `ServiceConnect.HealthChecks` package. If you previously rolled your own probe by reading bus state, replace it:
+
+```csharp
+builder.Services
+    .AddHealthChecks()
+    .AddServiceConnectBus("bus")            // BusConsumingHealthCheck
+    .AddServiceConnectConsumer("consumer")  // ConsumerConnectionHealthCheck
+    .AddServiceConnectProducer("producer"); // ProducerConnectionHealthCheck
+```
+
+Each check supports a `recoveryGraceWindow` (default 30s) that absorbs transient broker disconnects. Permanent broker-cancel signals (queue deleted, policy expired, mirror promoted) bypass the grace and flip to unhealthy immediately — that's the new `IBus.IsCancelledByBroker` / `IConsumer.IsCancelledByBroker` signal at work.
+
+## Bear traps
+
+These are the things the compiler **will not** catch. Read this section before you cut a release.
+
+### Wire format: System.Text.Json is stricter than Newtonsoft
+
+v7 ships System.Text.Json across all production packages. The wire format is JSON-equivalent for typical messages, but System.Text.Json rejects payloads that Newtonsoft tolerated:
+
+| Payload                            | Newtonsoft (v6)  | STJ (v7)                                     |
+| ---------------------------------- | ---------------- | -------------------------------------------- |
+| `NaN`, `Infinity`, `-Infinity` doubles | accepted     | `JsonException`                              |
+| JSON object/array nesting > 32     | accepted (>100)  | `JsonException` ("max depth")                |
+| Trailing commas                    | accepted         | `JsonException`                              |
+| JavaScript-style `//` comments     | accepted         | `JsonException`                              |
+| Numbers as JSON strings            | accepted         | rejected for numeric properties              |
+
+**Mitigation:** Audit producers (especially older v6 services that will publish during rollout) for these patterns. The repo ships a `ServiceConnect.SerializationCompatTests` project that enforces v6↔v7 round-trip on every PR — run it against representative payloads from your domain.
+
+If you have a transitional period where v6 and v7 services coexist on the same broker, plan to clean the lax-JSON producers first, then upgrade consumers.
+
+### Mongo aggregator partition rename
+
+The aggregator's `Name` partition value changed from the open-generic `typeof(Aggregator<T>).FullName` to the closed concrete `typeof(ConcreteAggregator).FullName`. **Existing v6 rows will be invisible to v7 and accumulate forever.** Rename them before deploy:
+
+```javascript
+// Run against the AggregatorPersistence collection (one document per aggregator instance).
+db.AggregatorPersistence.find({ Name: /^ServiceConnect\.Aggregator/ }).forEach(doc => {
+    const concrete = mapV6NameToV7(doc.Name);  // your mapping
+    db.AggregatorPersistence.updateOne(
+        { _id: doc._id },
+        { $set: { Name: concrete } }
+    );
+});
+```
+
+The exact mapping depends on which concrete aggregators you registered. If you only have one or two, hand-map them in a Mongo shell session. Keep a backup of the collection before running.
+
+### Mongo generic-saga collection rename
+
+Saga data collections derived from generic `FullName`s used characters that v7 sanitizes (`+`, backtick, `[`, `]`, `,` → `_`). For example, a v6 saga data type `Sc.OrderSaga+Data` lived in collection `Sc.OrderSaga+Data`; under v7 the same type uses `Sc.OrderSaga_Data`.
+
+```javascript
+db.runCommand({
+    renameCollection: "<db>.Sc.OrderSaga+Data",
+    to:              "<db>.Sc.OrderSaga_Data"
+});
+```
+
+Only generic sagas are affected — non-generic saga data collections keep their names.
+
+### TLS is on by default
+
+`TransportSettings.SslEnabled` defaults to `true` in v7 (was `false`). Connections go to AMQPS on port 5671 unless you override:
+
+```csharp
+sc.UseRabbitMQ(t =>
+{
+    t.Host = "rabbit.local";
+    t.SslEnabled = false;            // local plaintext dev only
+    // t.SuppressPlaintextWarning = true;  // if you want the warning gone too
+});
+```
+
+A non-loopback plaintext connection now logs a `Warning`. Suppress it explicitly with `SuppressPlaintextWarning` if you've deliberately chosen plaintext (e.g., a VPN-isolated broker).
+
+### Publisher confirms are on by default
+
+`PublisherAcknowledgements = true` is the new default. Every publish blocks until the broker has acked the message. This is correct for at-least-once delivery but can shift throughput characteristics if your v6 deployment was implicitly relying on fire-and-forget publishing.
+
+If you really want fire-and-forget (e.g., for a metrics ingestion path), set `PublisherAcknowledgements = false`. Combining `PublisherAcknowledgements=false` with a finite `PublishTimeout` is now a startup error — pick one.
+
+### Retry / error publishes use `mandatory:true`
+
+If your v6 deployment was running with a topology gap (missing exchange or routing key) that silently dropped retry-bound or error-queue-bound messages, those drops will now surface as `PublishException`. Fix the topology before deploy; you have been warned by the message that v6 was eating.
+
+### Exchange-name hash changed for shared brokers
+
+The exchange name for a published message used to embed the assembly-qualified `Type.AssemblyQualifiedName` hash; v7 derives it from `type.FullName` with the namespace dots removed (`type.FullName.Replace(".", string.Empty)`) — no hash and no assembly metadata, so the exchange name is stable across assembly-version bumps and matches the wire format of the deployed C# `master` services.
+
+The practical consequence: **v6 and v7 services publishing the same message type on the same broker will use different exchange names**. During rollout, expect both exchanges to exist until you have fully migrated. Bridge the two with a manual exchange-to-exchange binding if you need v6 publishers to be visible to v7 consumers (or vice versa) during the transition.
+
+### Reserved-header trust boundary
+
+Several headers are now server-authoritative — v7 stamps them on outbound and ignores caller-supplied values on inbound. The reserved set: `DestinationAddress`, `MessageId`, `MessageType`, `TypeName`, `FullTypeName`.
+
+If any of your code paths today rely on injecting one of these headers on inbound (e.g., a custom router that forges `DestinationAddress` to reroute), it will silently break — your forged header is dropped and the framework's own value takes effect. The right replacement is a custom send-message middleware that stamps an *application* header instead of one of the reserved names.
+
+Reply routing also no longer falls back to `Type.GetType(callerSuppliedString)` — replies are matched through registered handlers. If you opt in with `BusConfiguration.StrictReplyValidation = true`, the cross-bus fallback (which an external producer aware of the queue name could spoof) is rejected.
+
+### OTel dashboards filtering legacy attributes
+
+The telemetry rework moves to OTel semconv 1.x messaging attributes. Two specific filter changes will break dashboards silently:
+
+- `messaging.operation` (the pre-1.x string attribute) is **no longer emitted**. Replace dashboard filters with `messaging.operation.type` (`publish` / `process`) and `messaging.operation.name` (`publish` / `process`).
+- `messaging.destination.name` no longer carries the CLR type's `FullName` — it now carries the broker exchange or routing key. Anything filtering on `messaging.destination.name = "MyCompany.Domain.OrderPlaced"` should switch to the new attribute, or filter on the broker-level value instead.
+
+There's also only one `ActivitySource` now: `"ServiceConnect.Telemetry.Bus"`. OTel listeners that subscribed to the three pre-v7 sources should collapse to a single `AddSource("ServiceConnect.Telemetry.Bus")` call.
+
+### Mongo driver bumped to 3.x
+
+`MongoDB.Driver` went from 2.23.1 to 3.8.0. The bundled persistor handles `GuidRepresentationMode = V3` and the `RenderArgs<T>` shape transparently — but if your application code uses `MongoDB.Driver` types directly (custom serializers, `IMongoCollection<T>` callers, etc.), you need to follow [MongoDB's official 2.x → 3.x migration guide](https://www.mongodb.com/docs/drivers/csharp/v3.0/upgrade/) for that code.
+
+The MongoDB persistor also gained startup guards that will throw at process start (not at first write) if your setup is mis-configured:
+
+- `WriteConcern.Unacknowledged` (`w:0`) on the configured `MongoClient` is rejected. Use `W1` or higher.
+- A conflicting `Guid` serializer registered before ServiceConnect starts is rejected. Either skip the prior registration or align on `GuidRepresentation.Standard`.
+
+### In-memory persistence no longer expires after 2 days
+
+If your tests previously relied on `InMemory` persistence dropping state after 2 days as a passive cleanup mechanism, that's gone — state lives for the lifetime of the persistor instance, and the persistor is now `IDisposable`. Test cleanup is your responsibility.
+
+## Verifying the upgrade
+
+Once your code compiles and your config is wired:
+
+1. **Run the SerializationCompatTests project against your domain payloads.** It catches the most common silent serializer surprises before they hit production.
+2. **Run a representative subset of `examples/` against your broker.** They double as smoke tests — Aggregator, ProcessManager, RequestReply, RoutingSlip, and Streaming cover the most lifecycle-sensitive paths.
+3. **Add the new health checks** and probe them through your existing platform's liveness/readiness mechanism. Set the `recoveryGraceWindow` to a value that matches your broker's recovery characteristics (default 30s suits most deployments; cluster failover may need longer).
+4. **Sanity-check your OTel pipeline.** Confirm the dashboards you rely on still light up under the new attribute names and the single `ServiceConnect.Telemetry.Bus` source.
+5. **Watch `PublishException` counts during the first deploy.** A surge points at a topology gap that v6 was silently swallowing — fix the topology, don't suppress the exception.
+
+For the full inventory of changes (including every breaking change, new feature, and hardening fix), see [the v7 release notes](/releases/#v7).

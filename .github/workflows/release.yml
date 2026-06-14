@@ -1,0 +1,144 @@
+name: Release to NuGet
+
+# Triggered on a `v*` tag push (e.g. `v7.0.0`). The tag value drives the package Version
+# property — release the same source tree against a new tag by retagging, not by editing
+# csprojs. The "Verify tag matches Version property" step blocks a mismatched cut.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version override (without leading v). Used only for manual dispatch; tag pushes use the tag value.'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  ContinuousIntegrationBuild: true
+
+jobs:
+  release:
+    name: Pack + push
+    runs-on: ubuntu-latest
+    environment:
+      name: nuget
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so the release guard can test whether the tagged commit
+          # is contained in origin/master; the ancestry walk needs the commit
+          # graph, not just the tag tip a shallow clone would provide.
+          fetch-depth: 0
+
+      # Releases are cut from master only. A v* tag (or a manual dispatch ref) can
+      # point at any commit, so gate the publish on the tagged commit being reachable
+      # from origin/master: a tag pushed on a feature branch fails here, before
+      # anything is built or pushed to NuGet.org.
+      - name: Verify tag is on master
+        run: |
+          git fetch origin master --quiet
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::Tag ${GITHUB_REF#refs/tags/} ($GITHUB_SHA) is not contained in origin/master; refusing to release."
+            exit 1
+          fi
+          echo "Tag commit $GITHUB_SHA is contained in origin/master — proceeding."
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # github.ref is "refs/tags/v7.0.0"; strip the prefix.
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION"
+
+      # The package version comes from the tag (passed to build/pack as -p:Version
+      # below), so this step only sanity-checks that the tag's BASE version matches
+      # the <Version> declared in Directory.Build.props. "Base" is the tag minus any
+      # SemVer pre-release suffix, so one declared base (e.g. 7.1.0) covers a whole
+      # cut: v7.1.0-beta.1, v7.1.0-rc.1, then v7.1.0 — no props edit between
+      # pre-releases. Bump <Version> only when moving to the next base version.
+      - name: Verify tag matches csproj Version property
+        working-directory: src
+        run: |
+          set -e
+          DECLARED=$(grep -oP '<Version>\K[^<]+' Directory.Build.props | head -1)
+          TAGVER="${{ steps.version.outputs.version }}"
+          BASE="${TAGVER%%-*}"
+          if [ "$DECLARED" != "$BASE" ]; then
+            echo "ERROR: Tag base version '$BASE' (from '$TAGVER') does not match Directory.Build.props <Version> '$DECLARED'."
+            echo "Bump src/Directory.Build.props and retag, or correct the tag. Pre-release suffixes (e.g. -rc.1) are allowed and do not need a props change."
+            exit 1
+          fi
+
+      - name: Restore
+        working-directory: src
+        run: dotnet restore ServiceConnect.slnx
+
+      - name: Build
+        working-directory: src
+        run: dotnet build ServiceConnect.slnx --configuration Release --no-restore -p:Version=${{ steps.version.outputs.version }}
+
+      # Re-run the full test suite against the exact tagged commit before pushing to NuGet.org.
+      # CI already gates merges to master, but a tag can point at any commit and NuGet packages
+      # cannot be unpublished — only delisted — so a green test run here is the last line of defence.
+      - name: Unit tests
+        working-directory: src
+        run: dotnet test ServiceConnect.UnitTests/ServiceConnect.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unittests.trx"
+
+      - name: E2E tests
+        working-directory: src
+        run: dotnet test ServiceConnect.EndToEndTests/ServiceConnect.EndToEndTests.csproj --configuration Release --no-build --logger "trx;LogFileName=e2e.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-test-results-${{ steps.version.outputs.version }}
+          path: src/**/TestResults/*.trx
+          if-no-files-found: ignore
+          retention-days: 90
+
+      - name: Pack
+        working-directory: src
+        run: dotnet pack ServiceConnect.slnx --configuration Release --no-build -p:Version=${{ steps.version.outputs.version }} --output ../artifacts
+
+      - name: List produced packages
+        run: ls -la artifacts/
+
+      - name: Upload artifacts (audit trail)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkgs-${{ steps.version.outputs.version }}
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Push to NuGet.org
+        # --skip-duplicate so a re-run after a partial failure doesn't error on packages
+        # already pushed; NuGet.org treats a re-push of the same version as a conflict.
+        run: |
+          dotnet nuget push 'artifacts/*.nupkg' \
+            --api-key "${{ secrets.NUGET_API_KEY }}" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <!-- Keep this E2E project on net10.0 only. Multi-targeting would require
+             rewriting several Moq Setup expression-trees that omit the optional
+             CancellationToken (CS0854 under C# 12). The libraries under test are
+             multi-targeted to net8.0;net10.0, so the runtime behaviour on the
+             older TFM is exercised by consumers — duplicating that exercise in
+             the E2E suite isn't worth the maintenance tax. -->
+        <TargetFrameworks>net10.0</TargetFrameworks>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+        <!-- Test projects don't ship API docs. Override the solution-wide
+             GenerateDocumentationFile=true so CS1591 (missing XML comment)
+             stops being raised on test classes/methods (where names are docs
+             enough). Without this, every test build needs -p:NoWarn=CS1591. -->
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    </PropertyGroup>
+    <ItemGroup>
+        <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\ServiceConnect.HealthChecks\ServiceConnect.HealthChecks.csproj" />
+        <ProjectReference Include="..\ServiceConnect.Interfaces\ServiceConnect.Interfaces.csproj" />
+        <ProjectReference Include="..\ServiceConnect\ServiceConnect.csproj" />
+        <ProjectReference Include="..\ServiceConnect.Client.RabbitMQ\ServiceConnect.Client.RabbitMQ.csproj" />
+        <ProjectReference Include="..\ServiceConnect.Persistence.MongoDb\ServiceConnect.Persistence.MongoDb.csproj" />
+        <ProjectReference Include="..\ServiceConnect.Persistence.InMemory\ServiceConnect.Persistence.InMemory.csproj" />
+        <ProjectReference Include="..\ServiceConnect.Telemetry\ServiceConnect.Telemetry.csproj" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="6.0.4">
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+          <PrivateAssets>all</PrivateAssets>
+        </PackageReference>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.0" />
+        <PackageReference Include="Testcontainers" Version="4.4.0" />
+        <PackageReference Include="xunit" Version="2.9.2" />
+        <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+        <PackageReference Include="Moq" Version="4.20.72" />
+        <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
+        <PackageReference Include="Testcontainers.RabbitMq" Version="4.4.0" />
+        <PackageReference Include="Testcontainers.MongoDb" Version="4.4.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="9.0.0" />
+    </ItemGroup>
+</Project>

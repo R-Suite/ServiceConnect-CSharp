@@ -1,0 +1,130 @@
+---
+title: Messages
+description: The contract types ServiceConnect moves between services — base class, correlation id, serialisation, and design guidance.
+---
+
+A **message** is the contract your services agree on. It is a plain CLR type that inherits from `ServiceConnect.Interfaces.Message`, carries a correlation id, and travels between services as serialised bytes.
+
+Keep contracts boring on purpose. They are the most-shared part of a distributed system and the part you least want to break.
+
+## The base class
+
+```csharp
+public class Message(Guid correlationId) : IHasCorrelationId
+{
+    public Guid CorrelationId { get; init; } = correlationId;
+}
+```
+
+That's the entire base. One property — `CorrelationId` — wired through a primary constructor. The `init` accessor allows deserialisers and object-initializer expressions to populate it, but ordinary post-construction code cannot mutate it.
+
+ServiceConnect uses the correlation id to **relate related messages across a conversation**: a request and its reply, a command and the events it triggers, every message produced by a process manager instance. If you reply to a request, the reply carries the same correlation id as the request. If you publish an event in response to a command, standard practice is to pass the incoming correlation id through to the outgoing event.
+
+## Defining a message
+
+```csharp
+using ServiceConnect.Interfaces;
+
+public sealed class OrderPlaced(Guid correlationId) : Message(correlationId)
+{
+    public string OrderId { get; init; } = string.Empty;
+    public decimal Total { get; init; }
+    public DateTime PlacedAt { get; init; }
+}
+```
+
+A few conventions worth following:
+
+- **Primary constructor, passing `correlationId` through**. This is the idiomatic C# 12 form and matches the pattern in every example project.
+- **`sealed`**. Messages are contracts, not inheritance targets. Sealing keeps your contract closed and stops a subclass from silently changing the serialised shape.
+- **`init`-only properties**. A message should be immutable once constructed — nothing downstream should be able to mutate it during dispatch.
+- **Non-null defaults** for reference types (`= string.Empty`, `= Array.Empty<T>()`) so deserialisation never leaves a property `null` by omission.
+
+## Where messages live
+
+Put message contracts in their **own project** that both the sender and the receiver reference. In the examples directory, every pattern has a `Contracts` project next to its sender and consumer:
+
+```
+PointToPoint/
+  src/
+    ServiceConnect.Examples.PointToPoint.Contracts/   ← shared by both sides
+    ServiceConnect.Examples.PointToPoint.Sender/
+    ServiceConnect.Examples.PointToPoint.Consumer/
+```
+
+That shape keeps the contract physically separate from the code that uses it, which is exactly what you want when you version one side independently of the other.
+
+The `Contracts` project needs a reference to `ServiceConnect.Interfaces` so it can see the `Message` base:
+
+```bash
+dotnet add Your.Contracts package ServiceConnect.Interfaces
+```
+
+## Serialisation
+
+The default `IMessageSerializer` is `SystemTextJsonMessageSerializer` (backed by System.Text.Json). Messages are serialised to JSON and travel as a byte array in the AMQP payload.
+
+You can replace the serialiser by registering your own `IMessageSerializer` singleton before `AddServiceConnect`:
+
+```csharp
+services.AddSingleton<IMessageSerializer, MyCustomSerializer>();
+services.AddServiceConnect(/* … */);
+```
+
+But don't do that unless you have a concrete reason. JSON is the interop default for a reason — it survives logging, tooling, manual inspection in the RabbitMQ management UI, and polyglot consumers that might eventually be written in something other than .NET.
+
+## Designing contracts that age well
+
+Messages are the surface that binds services together. Changes to a message type are essentially API changes to every consumer of that type. A few rules that save pain later:
+
+**Add fields; don't change fields.** JSON serialisation tolerates new optional properties on either side. Renaming a property, changing a type, or making an optional field required breaks every consumer that hasn't shipped the new contract yet.
+
+**Inheritance is supported, but use it deliberately.** A single level of inheritance (`OrderPlaced : DomainEvent : Message`) lets one handler catch a whole category of events — useful for audit, metrics, and outbox subscribers. See [Polymorphic Messages](/ServiceConnect-CSharp/learn/messaging-patterns/polymorphic-messages/) for the pattern. Keep the hierarchy shallow: deep trees make the serialised shape harder to reason about, especially for polyglot consumers.
+
+**Keep them small.** A message names a fact ("an order was placed") and carries just enough data for a handler to act or to look the rest up. If your message exceeds a couple of kilobytes, you probably want a reference id rather than the full payload. For genuinely large payloads use [Streaming](/ServiceConnect-CSharp/learn/messaging-patterns/streaming/).
+
+**Separate commands from events.** A **command** names an intent (`PlaceOrder`, `RefundRequested`) and typically goes to one handler via `SendAsync`. An **event** names a fact (`OrderPlaced`, `RefundIssued`) and typically goes to many subscribers via `PublishAsync`. Naming commands as imperatives and events as past-tense facts makes intent obvious at the call site.
+
+## Correlation id in practice
+
+When you create a fresh conversation — a user clicks Checkout, a scheduled job fires — generate a new `Guid`:
+
+```csharp
+await bus.SendAsync(
+    new PlaceOrder(Guid.NewGuid()) { Cart = cart },
+    new SendOptions { EndPoint = "orders" });
+```
+
+When you produce a message **in response to** another, pass the incoming correlation id through:
+
+```csharp
+public sealed class PlaceOrderHandler : IMessageHandler<PlaceOrder>
+{
+    public async Task HandleAsync(PlaceOrder message, IConsumeContext context, CancellationToken cancellationToken = default)
+    {
+        // Carry the correlation id forward so downstream logs and
+        // process managers can tie every subsequent message back to
+        // this conversation.
+        await context.Bus.PublishAsync(new OrderPlaced(message.CorrelationId)
+        {
+            OrderId = Guid.NewGuid().ToString(),
+            Total = message.Cart.Total,
+            PlacedAt = DateTime.UtcNow,
+        });
+    }
+}
+```
+
+The reply helper on `IConsumeContext` does this for you automatically — replies always carry the request's correlation id. For `PublishAsync` and forward `SendAsync` calls, it's on you to carry it through.
+
+## Reference
+
+- [`Message`](/ServiceConnect-CSharp/reference/messages/message/) — base class and correlation id
+- [`Envelope`](/ServiceConnect-CSharp/reference/messages/envelope/) — transport-level wrapper
+- [Message options](/ServiceConnect-CSharp/reference/messages/options/) — `PublishOptions`, `SendOptions`, `RequestOptions`, `ReplyOptions`
+
+## What comes next
+
+- [Handlers](/ServiceConnect-CSharp/learn/core-concepts/handlers/) — how incoming messages reach code.
+- [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) — how sends and publishes find their destination.
+- [Pub/Sub](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/) — the first messaging pattern you'll likely reach for.
