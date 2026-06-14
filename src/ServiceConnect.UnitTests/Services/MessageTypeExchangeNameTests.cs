@@ -5,36 +5,17 @@ namespace ServiceConnect.UnitTests.Services;
 
 public class MessageTypeExchangeNameTests
 {
-    // Nested types whose FullName flattens to the same dot-stripped prefix.
-    // Both "A.BC.X" and "A.B.CX" collapse to "ABCX" under the old sanitizer
-    // — the hash suffix must keep them apart.
-    public sealed class SampleA
-    {
-        public sealed class BC
-        {
-            public sealed class X;
-        }
-    }
-
-    public sealed class SampleB
-    {
-        public sealed class B
-        {
-            public sealed class CX;
-        }
-    }
+    public sealed class SampleMessage;
 
     [Fact]
-    public void From_SharedPrefixAfterDotStripping_StillProducesUniqueNames()
+    public void From_ReturnsFullNameWithDotsRemoved()
     {
-        // Types whose FullName differs only by dot position (e.g. "A.BC" vs "AB.C")
-        // must map to distinct exchange/binding names. A naive dot-stripping scheme
-        // would collapse them and cross-wire routing; the hash suffix keeps the
-        // mapping injective so publishers and consumers don't share a binding.
-        var a = MessageTypeExchangeName.From(typeof(SampleA.BC.X));
-        var b = MessageTypeExchangeName.From(typeof(SampleB.B.CX));
+        // Master convention: the exchange/binding name is Type.FullName with the namespace
+        // dots removed (no hash suffix), so the C# and Node runtimes share the same exchange.
+        var type = typeof(SampleMessage);
+        var expected = type.FullName!.Replace(".", string.Empty);
 
-        Assert.NotEqual(a, b);
+        Assert.Equal(expected, MessageTypeExchangeName.From(type));
     }
 
     [Fact]
@@ -42,9 +23,20 @@ public class MessageTypeExchangeNameTests
     {
         // Producer and consumer both call From(type) to agree on the name — the
         // mapping must be deterministic across calls.
-        var first = MessageTypeExchangeName.From(typeof(SampleA.BC.X));
-        var second = MessageTypeExchangeName.From(typeof(SampleA.BC.X));
+        var first = MessageTypeExchangeName.From(typeof(SampleMessage));
+        var second = MessageTypeExchangeName.From(typeof(SampleMessage));
 
         Assert.Equal(first, second);
+    }
+
+    [Fact]
+    public void From_HasNoHashSuffix_MatchesMaster()
+    {
+        // Regression guard: the name must be exactly the flattened FullName with no
+        // underscore-hash suffix, so it stays byte-identical to master and Node on the wire.
+        var actual = MessageTypeExchangeName.From(typeof(SampleMessage));
+
+        Assert.DoesNotContain('_', actual);
+        Assert.Equal(typeof(SampleMessage).FullName!.Replace(".", string.Empty), actual);
     }
 }

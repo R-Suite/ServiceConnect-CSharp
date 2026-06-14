@@ -163,6 +163,12 @@ internal sealed class Bus : IBus
             effectiveRoutingKey = headerRoutingKey;
         }
 
+        // Snapshot the prepared headers before the publish pipeline mutates them (trace
+        // propagation, dedup keys, …) so each polymorphic ancestor hop below starts from the
+        // same clean header set and gets its own per-hop pipeline mutations. MessageId is
+        // already stamped into these headers, so every hop shares the one id, as master does.
+        var baseHeaders = new Dictionary<string, string>(headers, StringComparer.Ordinal);
+
         var context = new SendContext
         {
             Message = message,
@@ -174,6 +180,29 @@ internal sealed class Bus : IBus
             Operation = SendOperation.Publish,
         };
         await _sendPipeline.ExecutePublishMessagePipelineAsync(context, cancellationToken).ConfigureAwait(false);
+
+        // Polymorphic fan-out: publish the same body to each ancestor type's exchange (walking
+        // BaseType up to, but excluding, Message), re-stamped with that ancestor's TypeName, so a
+        // subscriber bound to a base-type exchange receives derived messages. The producer derives
+        // the exchange name and stamps TypeName/FullTypeName from SendContext.MessageType, so
+        // varying only MessageType per hop reproduces master's recursive Publish<TBase> behaviour.
+        for (var ancestor = typeof(T).BaseType;
+             ancestor is not null && ancestor != typeof(Message);
+             ancestor = ancestor.BaseType)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var ancestorContext = new SendContext
+            {
+                Message = message,
+                MessageType = ancestor,
+                MessageBytes = messageBytes,
+                Headers = new Dictionary<string, string>(baseHeaders, StringComparer.Ordinal),
+                EndPoint = null,
+                RoutingKey = effectiveRoutingKey,
+                Operation = SendOperation.Publish,
+            };
+            await _sendPipeline.ExecutePublishMessagePipelineAsync(ancestorContext, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
