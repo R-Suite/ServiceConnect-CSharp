@@ -46,9 +46,9 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     description="Dispatch a single publish to handlers of the message type and every base type or interface it satisfies."
   />
   <LinkCard
-    title="Message Deduplication"
-    href={`${base}/reference/filters/messagededuplication/`}
-    description="Drop duplicate deliveries at the pipeline boundary using a pluggable idempotency store."
+    title="Idempotency & Dedupe"
+    href={`${base}/learn/operations/idempotency/`}
+    description="Tolerate at-least-once redelivery with idempotent handlers and a filter-based deduplication backstop."
   />
   <LinkCard
     title="Telemetry"

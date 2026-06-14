@@ -27,7 +27,7 @@ Broadcasts a message to every subscriber of the message type. Use for domain eve
 
 **Parameters**
 - `message` — the event instance to publish; must derive from `Message`.
-- `options` — optional headers, routing key override, priority, or per-call overrides.
+- `options` — optional headers and a routing-key override (`PublishOptions`).
 - `cancellationToken` — cancels the publish before the broker acknowledges.
 
 **Throws**
@@ -53,7 +53,7 @@ Sends a message to a specific endpoint or to the queue resolved from the configu
 
 **Parameters**
 - `message` — the command instance; must derive from `Message`.
-- `options` — optional destination override, headers, or priority.
+- `options` — an optional destination endpoint override and headers (`SendOptions`).
 - `cancellationToken` — cancels the send before the broker acknowledges.
 
 **Throws**
@@ -344,6 +344,7 @@ Schedules a `TimeoutMessage` to be delivered back to the current bus's queue aft
 - `ArgumentException` — `correlationId` is `Guid.Empty`.
 - `ArgumentOutOfRangeException` — `delay` is less than or equal to `TimeSpan.Zero`.
 - `InvalidOperationException` — no `ITimeoutStore` is registered (first-party Bus only; see the Aside below for the default-interface-method path).
+- `NotSupportedException` — the bus implementation does not support scheduling timeouts; the default-interface-method path defers it into the returned task rather than throwing synchronously (see the Aside below).
 - `ObjectDisposedException` — the bus has been disposed.
 
 <Aside type="note" title="Not every implementation supports this">

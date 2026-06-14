@@ -66,8 +66,6 @@ Opt in by passing `x-queue-type: quorum` through the transport's three argument 
 ```csharp
 builder.UseRabbitMQ(opts =>
 {
-    opts.Host = "rabbit-a,rabbit-b,rabbit-c";
-
     var quorumArgs = new Dictionary<string, object?>
     {
         ["x-queue-type"] = "quorum",
@@ -78,7 +76,9 @@ builder.UseRabbitMQ(opts =>
     opts.Arguments              = quorumArgs;  // primary consumer queue
     opts.RetryQueueArguments    = quorumArgs;  // .Retries queue
     opts.UtilityQueueArguments  = quorumArgs;  // error + audit queues
-});
+})
+// Host is a transport-connection setting, not a RabbitMqOptions value — set it via ConfigureTransport.
+.ConfigureTransport(t => t.Host = "rabbit-a,rabbit-b,rabbit-c");
 ```
 
 ServiceConnect's queue declarations already meet the quorum-queue constraints — queues are declared `durable: true, exclusive: false, autoDelete: false`, and the framework does not set any of the classic-only arguments (`x-max-priority`, `x-queue-mode: lazy`) that would conflict. The retry-queue topology, which sets `x-dead-letter-exchange` and `x-message-ttl` internally, is fully compatible with quorum queues; your arguments are merged with the framework's, not replaced.

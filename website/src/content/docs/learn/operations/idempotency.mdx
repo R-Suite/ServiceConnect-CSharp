@@ -7,8 +7,7 @@ import { Aside } from '@astrojs/starlight/components';
 
 ## The delivery contract
 
-ServiceConnect delivers each logical [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/)
-message **at least once**. A handler may run more than once for the same message —
+ServiceConnect delivers each message **at least once** — see [Competing Consumers](/ServiceConnect-CSharp/learn/messaging-patterns/competing-consumers/) for the delivery model. A handler may run more than once for the same message —
 the broker can redeliver, the consumer can redeliver, and a process crash between
 handler success and the broker recording the ack causes a redelivery on next
 startup.

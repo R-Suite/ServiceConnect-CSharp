@@ -136,6 +136,12 @@ export default defineConfig({
                 { label: 'ServiceConnect.Telemetry', link: '/reference/telemetry/' },
               ],
             },
+            {
+              label: 'Health Checks',
+              items: [
+                { label: 'ServiceConnect.HealthChecks', link: '/reference/healthchecks/' },
+              ],
+            },
           ],
         },
         {

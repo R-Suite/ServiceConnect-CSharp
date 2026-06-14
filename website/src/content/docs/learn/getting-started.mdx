@@ -168,6 +168,9 @@ services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference
 {
     new() { HandlerType = typeof(WorkSubmittedHandler), MessageType = typeof(WorkSubmitted) }
 });
+// Scanning is disabled below, so AddServiceConnect does not register handler types itself.
+// Register the handler under its IMessageHandler<T> interface so the dispatcher can resolve it.
+services.AddTransient<IMessageHandler<WorkSubmitted>, WorkSubmittedHandler>();
 services.AddServiceConnect(builder =>
 {
     builder.UseRabbitMQ(transport =>
@@ -189,7 +192,7 @@ Console.WriteLine("Consumer ready. Ctrl-C to exit.");
 await Task.Delay(Timeout.InfiniteTimeSpan);
 ```
 
-We register handlers explicitly via `HandlerReference` and disable `ScanForMessageHandlers`. The scanner works for full applications; explicit registration is clearer for a first example and shows exactly what ServiceConnect needs to know.
+We register the handler explicitly in two parts — the `HandlerReference` list maps each message type to its handler, and the `AddTransient<IMessageHandler<WorkSubmitted>, …>` registration makes the handler resolvable from DI — then disable `ScanForMessageHandlers`. The scanner does both steps automatically for full applications; doing it by hand here shows exactly what ServiceConnect needs to know.
 
 ## Run it
 

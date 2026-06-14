@@ -112,7 +112,7 @@ public class OrderPlacedHandler : IMessageHandler<OrderPlaced>
         IConsumeContext ctx,
         CancellationToken ct)
     {
-        return ctx.ReplyAsync(new OrderConfirmed { OrderId = message.OrderId }, ct);
+        return ctx.ReplyAsync(new OrderConfirmed { OrderId = message.OrderId }, cancellationToken: ct);
     }
 }
 ```
@@ -225,8 +225,8 @@ bus.Send("queue", msg);
 ctx.Reply(reply, headers);
 
 // v7
-await bus.PublishAsync(msg, ct);
-await bus.SendAsync("queue", msg, ct);
+await bus.PublishAsync(msg, cancellationToken: ct);
+await bus.SendAsync(msg, new SendOptions { EndPoint = "queue" }, ct);
 await ctx.ReplyAsync(reply, new ReplyOptions { Headers = headers }, ct);
 ```
 

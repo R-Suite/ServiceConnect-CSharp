@@ -18,7 +18,7 @@ The four send-shaped methods cover distinct routing patterns:
 
 `MaximumMessageSize` lets the pipeline pre-check payload size before attempting a send, avoiding a roundtrip to the broker for a message that will be rejected.
 
-Note the header asymmetry: outgoing headers are `IReadOnlyDictionary<string, string>?` (string values only) because transport headers are stringified on the wire. On the receive side, `ConsumerEventHandler` receives `IDictionary<string, object>` because some broker clients restore typed values (integers, timestamps) during deserialisation. See [`IConsumer`](./iconsumer/) for the receiving contract.
+Note the header asymmetry: outgoing headers are `IReadOnlyDictionary<string, string>?` (string values only) because transport headers are stringified on the wire. On the receive side, `ConsumerEventHandler` receives `IDictionary<string, object>` because some broker clients restore typed values (integers, timestamps) during deserialisation. See [`IConsumer`](../iconsumer/) for the receiving contract.
 
 See [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) for how the producer fits into the full message pipeline.
 
@@ -464,4 +464,4 @@ When `PaymentProcessor` publishes a `PaymentAuthorised` message, the pipeline se
 ## See also
 
 - [The Bus](/ServiceConnect-CSharp/learn/core-concepts/the-bus/) — how the producer fits into the message pipeline
-- [`IConsumer`](./iconsumer/) — the inbound counterpart
+- [`IConsumer`](../iconsumer/) — the inbound counterpart

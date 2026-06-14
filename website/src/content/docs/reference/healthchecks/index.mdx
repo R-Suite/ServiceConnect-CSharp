@@ -28,7 +28,7 @@ Static class containing the three registration extension methods. Each registers
 ### `AddServiceConnectBus`
 
 ```csharp
-// Default — resolves IBus via ActivatorUtilities from DI
+// Default — resolves IBus via GetRequiredService<IBus>() from DI
 public static IHealthChecksBuilder AddServiceConnectBus(
     this IHealthChecksBuilder builder,
     string name = "serviceconnect-bus",
@@ -79,7 +79,7 @@ Registers `BusConsumingHealthCheck`. The default overload resolves `IBus` via `G
 ### `AddServiceConnectConsumer`
 
 ```csharp
-// Default — resolves IConsumer via ActivatorUtilities from DI
+// Default — resolves IConsumer via GetRequiredService<IConsumer>() from DI
 public static IHealthChecksBuilder AddServiceConnectConsumer(
     this IHealthChecksBuilder builder,
     string name = "serviceconnect-consumer",
@@ -122,7 +122,7 @@ Registers `ConsumerConnectionHealthCheck`. Same factory pattern as `AddServiceCo
 ### `AddServiceConnectProducer`
 
 ```csharp
-// Default — resolves IProducer via ActivatorUtilities from DI
+// Default — resolves IProducer via GetRequiredService<IProducer>() from DI
 public static IHealthChecksBuilder AddServiceConnectProducer(
     this IHealthChecksBuilder builder,
     string name = "serviceconnect-producer",

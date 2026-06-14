@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: The five knobs on the ServiceConnect builder — transport, queues, persistence, pipeline, bus — and what each one controls.
+description: The ServiceConnect builder's configuration surface — the transport, queues, persistence, and bus callbacks plus the pipeline helpers — and what each one controls.
 ---
 
 ServiceConnect is configured through a single builder on the service collection. Every production setting — connection, retries, queue names, TLS, filters, handler scanning — lives under one of four `Configure*` callbacks plus typed pipeline-builder helpers. This page is the map.
@@ -78,7 +78,7 @@ Anything RabbitMQ-specific that isn't on the interface — connection timeout, h
 
 ```csharp
 transport.SetClientSetting("Port", 5671);
-transport.SetClientSetting("RequestedHeartbeat", TimeSpan.FromSeconds(30));
+transport.SetClientSetting("HeartbeatTime", (ushort)30); // heartbeat interval, in seconds
 // PublisherAcknowledgements defaults to true; PublishTimeout to 30s.
 // See the reference for opting out (rare; rejected if combined with a finite timeout).
 ```
@@ -141,7 +141,7 @@ builder.ConfigureQueues(queues =>
 });
 ```
 
-The main setting is `QueueName` — every other queue name defaults off of it if you leave them unset. `PurgeQueueOnStartup` is a development-only knob; leave it `false` in anything you care about.
+The main setting is `QueueName`. `ErrorQueueName` and `AuditQueueName` have fixed defaults (`errors` and `audit`) that do not derive from `QueueName`, so set them explicitly to namespace them under your service name. `PurgeQueueOnStartup` is a development-only knob; leave it `false` in anything you care about.
 
 Queue mappings are the static routing table: "when the bus sees a `ShipOrder`, send it to `shipping-service`." See [Endpoints](/ServiceConnect-CSharp/learn/core-concepts/endpoints/) for how this plays against per-call `SendOptions.EndPoint`.
 

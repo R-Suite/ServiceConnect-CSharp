@@ -1,23 +1,18 @@
 namespace ServiceConnect.Interfaces.Exceptions;
 
 /// <summary>
-/// Thrown by request-reply paths (<see cref="IBus.SendRequestAsync"/>,
-/// <see cref="IBus.SendRequestMultiAsync"/>, <see cref="IBus.PublishRequestAsync"/>)
-/// when an outgoing filter returned <see cref="FilterAction.Stop"/>, blocking the
-/// request before it reached the transport. Distinct from a raw
-/// <see cref="System.InvalidOperationException"/> (which would conflate filter-stop with
-/// state-misuse) and from <see cref="OperationCanceledException"/> (which signals caller
-/// cancellation, not deliberate filter rejection).
+/// Thrown by an outgoing send path — <see cref="IBus.PublishAsync"/>, <see cref="IBus.SendAsync"/>,
+/// <see cref="IBus.SendToManyAsync"/>, <see cref="IBus.RouteAsync"/>, <see cref="IBus.SendRequestAsync"/>,
+/// <see cref="IBus.SendRequestMultiAsync"/>, or <see cref="IBus.PublishRequestAsync"/> — when an outgoing
+/// filter returned <see cref="FilterAction.Stop"/>, blocking the message before it reached the transport.
+/// Distinct from a raw <see cref="System.InvalidOperationException"/> (which would conflate filter-stop with
+/// state-misuse) and from <see cref="OperationCanceledException"/> (which signals caller cancellation, not
+/// deliberate filter rejection).
 /// </summary>
 /// <remarks>
-/// <b>Fire-and-forget paths do NOT throw this exception.</b> When an outgoing filter
-/// returns <see cref="FilterAction.Stop"/> on <see cref="IBus.PublishAsync"/>,
-/// <see cref="IBus.SendAsync"/>, <see cref="IBus.SendToManyAsync"/>, or
-/// <see cref="IBus.RouteAsync"/>, the call returns silently and the message is dropped
-/// before the transport publish. Callers that need a typed signal for filter-stop on those
-/// paths should either route through a request-reply variant or instrument the filter
-/// itself (a custom filter can log or emit a counter on its
-/// <see cref="FilterAction.Stop"/> return path).
+/// Every outgoing send path throws this when an outgoing filter returns <see cref="FilterAction.Stop"/>,
+/// so a filter-blocked send surfaces as a typed exception rather than a silent drop. A custom filter can
+/// additionally log or emit a counter on its <see cref="FilterAction.Stop"/> return path.
 /// </remarks>
 public sealed class OutgoingFiltersBlockedException : ServiceConnectException
 {

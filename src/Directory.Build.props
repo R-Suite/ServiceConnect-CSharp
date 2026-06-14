@@ -1,7 +1,7 @@
 <Project>
   <PropertyGroup>
     <!-- Default target frameworks for every project under src/. The library packages
-         multi-target the current LTS (net8.0) and the latest STS (net10.0); test
+         multi-target the previous LTS (net8.0) and the current LTS (net10.0); test
          projects, the example filter, and anything else with framework-specific
          requirements override this in their own .csproj.
 

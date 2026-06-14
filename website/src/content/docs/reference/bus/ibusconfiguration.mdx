@@ -55,7 +55,7 @@ TimeSpan ProcessManagerTimeoutPollInterval { get; set; }
 
 Sets how often the timeout-polling hosted service scans the timeout store for due timeouts.
 
-**Remarks.** Shorter intervals reduce latency between scheduled delivery and actual delivery at the cost of more database round-trips. A few seconds is typical.
+**Remarks.** Shorter intervals reduce latency between scheduled delivery and actual delivery at the cost of more database round-trips. A few seconds is typical. **Default:** 30 seconds.
 
 ---
 
@@ -67,7 +67,7 @@ int ConsumerCount { get; set; }
 
 Sets the number of consumer loops that run in parallel against the configured queue.
 
-**Remarks.** Higher values improve throughput for handlers that spend time in I/O; they do not improve throughput for CPU-bound handlers and increase memory footprint per consumer.
+**Remarks.** Higher values improve throughput for handlers that spend time in I/O; they do not improve throughput for CPU-bound handlers and increase memory footprint per consumer. **Default:** 1.
 
 ---
 

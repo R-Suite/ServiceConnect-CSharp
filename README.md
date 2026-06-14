@@ -24,6 +24,9 @@ dotnet add package ServiceConnect.Persistence.MongoDb
 
 # Distributed tracing (W3C traceparent injection, OTel messaging semconv)
 dotnet add package ServiceConnect.Telemetry
+
+# Liveness/readiness health checks
+dotnet add package ServiceConnect.HealthChecks
 ```
 
 ## Quick start

@@ -185,7 +185,7 @@ public sealed class ProtobufMessageSerializer : IMessageSerializer
 }
 ```
 
-Register the serializer during bus startup (register a `ProtobufMessageTypeRegistry` alongside it if your transport needs one — see [`IMessageTypeRegistry`](./imessagetyperegistry/) for the full registry example):
+Register the serializer during bus startup (register a `ProtobufMessageTypeRegistry` alongside it if your transport needs one — see [`IMessageTypeRegistry`](../imessagetyperegistry/) for the full registry example):
 
 ```csharp
 services.AddServiceConnect(builder =>
@@ -227,5 +227,5 @@ When an `OrderPlaced` message is published by `OrderService`, the pipeline calls
 ## See also
 
 - [Messages](/ServiceConnect-CSharp/learn/core-concepts/messages/) — concept
-- [`IMessageTypeRegistry`](./imessagetyperegistry/) — companion registry interface
-- [`Envelope`](../../messages/envelope/) — the message wrapper the transport works with
+- [`IMessageTypeRegistry`](../imessagetyperegistry/) — companion registry interface
+- [`Envelope`](../../../messages/envelope/) — the message wrapper the transport works with

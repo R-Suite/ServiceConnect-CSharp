@@ -15,7 +15,7 @@ See [Configuration](/ServiceConnect-CSharp/learn/operations/configuration/) for 
 
 ## `PublishOptions`
 
-Passed to `IBus.PublishAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. The struct shape matches `SendOptions` so concurrent `PublishAsync` callers cannot share a mutable instance and clobber each other's headers between construction and the async pipeline's read.
+Passed to `IBus.PublishAsync`. A `readonly record struct` — construct with object-initialiser syntax; values cannot be reassigned after construction. Like `SendOptions`, it is immutable, so concurrent `PublishAsync` callers cannot share a mutable instance and clobber each other's headers between construction and the async pipeline's read.
 
 ### `Headers`
 

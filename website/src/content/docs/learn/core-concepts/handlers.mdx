@@ -114,6 +114,12 @@ services.AddSingleton<IReadOnlyList<HandlerReference>>(new List<HandlerReference
     new() { HandlerType = typeof(OrderPlacedAuditHandler), MessageType = typeof(OrderPlaced) },
 });
 
+// With scanning disabled, AddServiceConnect does not register handler types itself.
+// Register each handler under its IMessageHandler<T> interface so the dispatcher can resolve
+// it: the HandlerReference list maps message types to handlers; these make them DI-resolvable.
+services.AddTransient<IMessageHandler<WorkSubmitted>, WorkSubmittedHandler>();
+services.AddTransient<IMessageHandler<OrderPlaced>, OrderPlacedAuditHandler>();
+
 services.AddServiceConnect(builder =>
 {
     builder.ConfigureBus(bus => bus.ScanForMessageHandlers = false);
@@ -127,7 +133,7 @@ You can combine approaches — enable scanning and also add a `HandlerReference`
 
 ## Handler lifetime
 
-ServiceConnect registers handlers as transient and rejects pre-registered singletons at `AddServiceConnect` time.
+When scanning is enabled (the default), ServiceConnect registers discovered handlers as transient and rejects any handler pre-registered as a singleton at `AddServiceConnect` time. With explicit registration (scanning off) you register each handler yourself — as transient or scoped, never singleton.
 
 ```csharp
 // This will throw during AddServiceConnect:

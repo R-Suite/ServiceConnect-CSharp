@@ -29,7 +29,7 @@ Registers the core ServiceConnect services, handler discovery, message processor
 
 **Returns.** The same `services` instance for chaining.
 
-**Remarks.** Transport selection is not baked in; pick a transport via extension methods on `ServiceConnectBuilder` (`UseRabbitMQ`, etc.). Handler types are discovered from `builder.ScanAssemblies(...)` when `IBusConfiguration.ScanForMessageHandlers` is true. Call `AddServiceConnect` exactly once per service collection.
+**Remarks.** Transport selection is not baked in; pick a transport via extension methods on `ServiceConnectBuilder` (`UseRabbitMQ`, etc.). Handler types are discovered from `builder.ScanAssemblies(...)` when `IBusConfiguration.ScanForMessageHandlers` is true. Calling `AddServiceConnect` more than once on the same `IServiceCollection` throws `InvalidOperationException` — ServiceConnect is single-bus per collection. Consolidate all feature-module registrations into one call, or use a separate `IServiceCollection` per bus instance.
 
 ### Builder methods
 

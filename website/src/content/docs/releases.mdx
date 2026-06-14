@@ -160,7 +160,7 @@ For application code, the upgrade path is roughly:
 7. If you query `Aggregator<T>`-named partitions or generic-saga collections directly, run the rename scripts before deploying.
 8. If your dashboards filter on the old `messaging.operation` attribute or on `messaging.destination.name = "<CLR type FullName>"`, update them.
 
-For full per-commit context, see the v7 release on GitHub and the `git log master..v7.0.0` range.
+For full per-commit context, see the v7 release on GitHub and — once the `v7.0.0` tag is pushed — the `git log master..v7.0.0` range.
 
 ## Source and tags
 

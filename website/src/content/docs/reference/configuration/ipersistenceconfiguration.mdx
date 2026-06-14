@@ -171,7 +171,7 @@ services.AddServiceConnect(builder =>
 | --- | --- | --- | --- |
 | `ConnectionString` | `string` | `""` | MongoDB connection URI. Required for production deployments. |
 | `DatabaseName` | `string` | `""` | Database name for process manager, aggregator, and timeout collections. |
-| `TimeoutLockLeaseDuration` | `TimeSpan` | `TimeSpan.FromMinutes(5)` | Lease duration applied when claiming a timeout row for dispatch. See [Timeout lease semantics](../../extension-points/persistence/itimeoutstore/#timeout-lease-semantics). |
+| `TimeoutLockLeaseDuration` | `TimeSpan` | `TimeSpan.FromMinutes(5)` | Lease duration applied when claiming a timeout row for dispatch. See [Timeout lease semantics](../../extension-points/persistence/itimeoutstore/#lease-semantics). |
 | `TimeoutBatchSize` | `int` | `100` | Maximum number of due timeout rows returned by a single `GetTimeoutsBatchAsync` call. |
 
 Configure via the `UseMongoDbPersistence` extension's options delegate:
