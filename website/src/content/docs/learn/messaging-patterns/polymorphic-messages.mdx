@@ -99,11 +99,11 @@ public sealed class OrderShippedHandler : IMessageHandler<OrderShipped>
 }
 ```
 
-Both subscribers receive the `OrderShipped` publish. The polymorphic one receives it **because its handler is registered for an ancestor type**; the specific one receives it because its handler is registered for the exact type. Nothing weird happens — the publish produces one message, two queues copy it, each queue's handler runs.
+Both subscribers receive the `OrderShipped` publish. The polymorphic one receives it **because its handler is registered for an ancestor type**; the specific one receives it because its handler is registered for the exact type. Nothing weird happens — the `OrderShipped` exchange fans the publish out to both bound queues, and each queue's handler runs.
 
 ## Wiring the cross-cutting subscriber
 
-Here's where the pattern has its one genuine subtlety. The audit subscriber has one handler class, and needs three `HandlerReference` entries:
+Here's where the pattern has its one genuine subtlety. The audit subscriber has one handler class, registered against each **concrete** event it audits — one `HandlerReference` per subtype, and deliberately **not** one for the base type:
 
 ```csharp
 // AuditSubscriber/Program.cs
@@ -111,7 +111,6 @@ using ServiceConnect.Interfaces;
 
 var handlerReferences = new List<HandlerReference>
 {
-    new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(DomainEvent) },
     new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(OrderPlaced) },
     new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(OrderShipped) },
 };
@@ -127,20 +126,21 @@ services.AddServiceConnect(builder =>
 });
 ```
 
-The three references look redundant — the DI registration only mentions `IMessageHandler<DomainEvent>`, so why list the derived types? Because:
+The handler is registered in DI against the **base** type (`IMessageHandler<DomainEvent>`), but the `HandlerReference` entries name the **concrete** types. Why the split?
 
 ## Dispatch versus subscription
 
-- **Dispatch walks the type hierarchy.** When a message arrives, the bus finds every handler whose registered message type is an ancestor of the concrete message type. That's what makes one handler receive both `OrderPlaced` and `OrderShipped`.
-- **Subscription does not walk the hierarchy.** Each `HandlerReference` binds the subscriber's queue to exactly one RabbitMQ exchange — the one derived from that `MessageType` (the full type name with the namespace dots removed; [as described on the Pub/Sub page](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/#how-the-fan-out-works)). The publisher emits `OrderPlaced` to the `OrderPlaced` exchange; if nothing bound the audit queue to that exchange, the message never arrives.
+- **Subscription is per concrete type.** Each `HandlerReference` binds the subscriber's queue to exactly one RabbitMQ exchange — the one derived from that `MessageType` (the full type name with the namespace dots removed; [as described on the Pub/Sub page](/ServiceConnect-CSharp/learn/messaging-patterns/pub-sub/#how-the-fan-out-works)). Listing `OrderPlaced` and `OrderShipped` binds the audit queue to those two concrete exchanges.
+- **Dispatch walks the type hierarchy.** When a delivery arrives, the bus resolves its concrete type and walks up the inheritance chain, invoking every handler registered for that type or any ancestor. `DomainEventHandler` is registered as `IMessageHandler<DomainEvent>`, so the walk from `OrderPlaced` up to `DomainEvent` finds it. The handler receives the **concrete** instance, so `message.GetType()` and the type `switch` above work.
+- **Don't list the base type.** The publisher fans every derived publish out to its own exchange **and** every ancestor exchange (see [The publisher](#the-publisher) below). The audit queue is already bound to the concrete exchanges, so it gets each event exactly once. Adding a `HandlerReference` for `DomainEvent` would *also* bind the `DomainEvent` exchange and deliver each event a **second** time — and that base-exchange copy is re-stamped to `DomainEvent`, which, being abstract, cannot be deserialised at all.
 
-So the three `HandlerReference` entries aren't redundant — they do two different jobs. The `DomainEvent` entry is what the runtime dispatcher matches when resolving the handler. The `OrderPlaced` and `OrderShipped` entries are what binds the audit queue to each concrete exchange at startup. You need both.
+Listing the concrete subtypes and omitting the base keeps the subscription surface explicit in the bootstrap code, and means a brand-new subtype isn't silently swept in until you add it.
 
-This is deliberate, not a rough edge. Auto-subscribing a base-type handler to every possible subtype would surprise consumers who don't want the base class treated as "subscribe to everything below it." Making the subtypes explicit keeps the subscription surface visible in the bootstrap code.
+If instead you want a base-type subscriber to catch **new** subtypes automatically without enumerating them, register a single `HandlerReference` for the base type and make that base type **concrete** (not `abstract`). The producer's fan-out delivers every derived event to the base exchange, and the handler receives it typed as the base — you give up the concrete runtime type (`GetType()` returns the base) in exchange for not listing subtypes. Choose whichever fits how the handler uses the message.
 
 ## The publisher
 
-The publisher has nothing special to do:
+The publisher has nothing special to do — `PublishAsync` automatically fans each derived event out to its own exchange and every ancestor exchange, so both concrete subscribers and base-type subscribers receive it:
 
 ```csharp
 // Publisher/Program.cs

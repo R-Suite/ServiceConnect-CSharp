@@ -13,15 +13,14 @@ await DependencyWaiter.WaitForRabbitMqAsync(
     settings.RabbitMqPassword,
     CancellationToken.None);
 
-// One handler class, three handler references. The DomainEvent entry registers
-// the handler with the dispatcher for the base type; the OrderPlaced and
-// OrderShipped entries bind the audit queue to those two concrete exchanges in
-// RabbitMQ. Without the concrete entries the queue would only bind to the
-// DomainEvent exchange — which is never published to, because DomainEvent is
-// abstract — and the concrete events the publisher emits would never arrive.
+// One handler class, registered against each CONCRETE event it audits. Each entry binds the
+// audit queue to that concrete exchange; the dispatcher's type-hierarchy walk routes the
+// delivery to DomainEventHandler (registered for the base type below). The base type is NOT
+// listed: the publisher fans every derived publish out to its own exchange AND every ancestor
+// exchange, so also binding the DomainEvent exchange would deliver each event twice — and that
+// base copy can't be deserialised, since DomainEvent is abstract.
 var handlerReferences = new List<HandlerReference>
 {
-    new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(DomainEvent) },
     new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(OrderPlaced) },
     new() { HandlerType = typeof(DomainEventHandler), MessageType = typeof(OrderShipped) },
 };

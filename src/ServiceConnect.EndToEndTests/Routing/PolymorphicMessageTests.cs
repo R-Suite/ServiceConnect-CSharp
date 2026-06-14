@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
 using ServiceConnect.Client.RabbitMQ;
 using ServiceConnect.DependencyInjection;
@@ -15,25 +16,23 @@ public class PolymorphicMessageTests(MessagingFixture fixture)
 
     [Fact]
     [Trait("Category", "Docker")]
-    public async Task Publish_DerivedMessage_BaseHandlerReceivesIt()
+    public async Task Publish_DerivedMessage_BaseHandlerReceivesItExactlyOnce()
     {
         // Arrange
-        var tcs = new TaskCompletionSource<TestMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var received = new ConcurrentQueue<TestMessage>();
+        var firstReceived = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var queueName = _fixture.GetUniqueQueueName("polymorphic");
 
+        // A base-type handler subscribes to a category by registering the CONCRETE subtypes it
+        // expects — one HandlerReference per concrete type. That binds the queue to each concrete
+        // exchange; the dispatcher's type-hierarchy walk routes the concrete delivery to the
+        // base-type handler. Do NOT also register the base type: the producer fans a derived
+        // publish out to its own exchange AND every ancestor exchange, so binding the base
+        // exchange too would deliver the message twice (and the base copy is re-stamped to the
+        // base type, which an abstract base can't even deserialise).
         var handlerReferences = new List<HandlerReference>
         {
-            new() {
-                HandlerType = typeof(CallbackHandler<TestMessage>),
-                MessageType = typeof(TestMessage)
-            },
-            // HandlerReference for DerivedTestMessage is needed so the bus subscribes
-            // to this message type's exchange in RabbitMQ. Handler resolution happens
-            // via DI + type hierarchy walking in the dispatcher.
-            new() {
-                HandlerType = typeof(CallbackHandler<TestMessage>),
-                MessageType = typeof(DerivedTestMessage)
-            }
+            new() { HandlerType = typeof(CallbackHandler<TestMessage>), MessageType = typeof(DerivedTestMessage) },
         };
 
         var services = new ServiceCollection();
@@ -42,9 +41,14 @@ public class PolymorphicMessageTests(MessagingFixture fixture)
         // Register handler references before AddServiceConnect so TryAddSingleton keeps this list
         services.AddSingleton<IReadOnlyList<HandlerReference>>(handlerReferences);
 
-        // Register the handler for the BASE type only
+        // Register the handler for the BASE type — the hierarchy walk dispatches the concrete
+        // delivery to it.
         services.AddTransient<IMessageHandler<TestMessage>>(_ =>
-            new CallbackHandler<TestMessage>(msg => tcs.TrySetResult(msg)));
+            new CallbackHandler<TestMessage>(msg =>
+            {
+                received.Enqueue(msg);
+                firstReceived.TrySetResult();
+            }));
 
         services.AddServiceConnect(builder =>
         {
@@ -65,10 +69,7 @@ public class PolymorphicMessageTests(MessagingFixture fixture)
         var provider = services.BuildServiceProvider();
         var bus = provider.GetRequiredService<IBus>();
 
-        // Start consuming
         await bus.StartConsumingAsync();
-
-
 
         try
         {
@@ -81,16 +82,22 @@ public class PolymorphicMessageTests(MessagingFixture fixture)
             };
             await bus.PublishAsync(sent);
 
-            // Assert: wait up to 30 seconds for the handler to be called
+            // Wait up to 30s for the first delivery, then a short grace window to surface any
+            // duplicate delivery/invocation before asserting exactly-once.
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            cts.Token.Register(() => tcs.TrySetCanceled());
+            await using (cts.Token.Register(() => firstReceived.TrySetCanceled()))
+            {
+                await firstReceived.Task;
+            }
+            await Task.Delay(TimeSpan.FromSeconds(2));
 
-            var received = await tcs.Task;
-
-            Assert.Equal("polymorphic-test", received.Content);
-            Assert.Equal(correlationId, received.CorrelationId);
-            Assert.IsType<DerivedTestMessage>(received);
-            Assert.Equal("extra-data", ((DerivedTestMessage)received).Extra);
+            // Exactly one delivery + one handler invocation — no double-bind, no double-walk.
+            Assert.Single(received);
+            Assert.True(received.TryPeek(out var msg));
+            Assert.Equal("polymorphic-test", msg!.Content);
+            Assert.Equal(correlationId, msg.CorrelationId);
+            Assert.IsType<DerivedTestMessage>(msg);
+            Assert.Equal("extra-data", ((DerivedTestMessage)msg).Extra);
         }
         finally
         {
