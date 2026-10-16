@@ -53,7 +53,7 @@ namespace ServiceConnect.IntegrationTests
 
         public SqlServerProcessManagerFinderTest()
         {
-            _connectionString = SqlServerFactAttribute.ConnectionString;
+            _connectionString = SqlServerProcessManagerFinder.WithUnencryptedDefault(SqlServerFactAttribute.ConnectionString);
 
             _mapper = new ProcessManagerPropertyMapper();
             _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);

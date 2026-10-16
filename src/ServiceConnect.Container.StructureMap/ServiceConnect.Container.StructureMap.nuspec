@@ -21,6 +21,7 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\net10.0\ServiceConnect.Container.StructureMap.*" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Container.StructureMap.dll" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Container.StructureMap.pdb" target="lib\net10.0" />
   </files>
 </package>

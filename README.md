@@ -111,21 +111,36 @@ These packages target `net10.0` only. Applications on .NET 6 or .NET 8 must stay
 
 Both MongoDB packages now use MongoDB.Driver 3.12. `ServiceConnect.Persistance.MongoDb` no longer depends on the legacy `mongocsharpdriver` package.
 
-Earlier versions stored GUIDs as `CSharpLegacy` (binary subtype 3). MongoDB.Driver 3 has no default GUID representation, so the persistence classes register a `CSharpLegacy` Guid serializer the first time you create one. If your application registers its own Guid serializer, do it before you create the persistence classes. Use `CSharpLegacy` to keep reading data written by earlier versions.
+Earlier versions stored GUIDs as `CSharpLegacy` (binary subtype 3). MongoDB.Driver 3 has no default GUID representation. When you create a persistence class, ServiceConnect does one of these:
+
+* If your application has not registered a Guid serializer, ServiceConnect registers a `CSharpLegacy` one for the whole process.
+* If your application has registered one, ServiceConnect uses it. Timeout ids are always stored as `CSharpLegacy`.
+* If MongoDB is already using its default Guid serializer, which has no representation, the constructor throws an `InvalidOperationException`. This happens when your application serialized or looked up a Guid before registering a serializer.
+
+To choose the representation yourself, register the serializer at startup, before any MongoDB serialization and before you create the persistence classes. MongoDB.Driver does not let you register a Guid serializer after one is in use.
+
+```c#
+BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.CSharpLegacy));
+```
+
+Keep `CSharpLegacy` if you have process manager or aggregator data written by an earlier version. With any other representation, `FindData` does not find process manager data written by earlier versions, so new process manager instances start instead. The aggregator persistors throw a `FormatException` when they read aggregated messages written by earlier versions.
 
 You no longer need to register an `ObjectSerializer` that allows your process manager data and message types. The persistence classes allow any `IProcessManagerData` or `Message` type in the data they store.
 
 The `nodes` setting of the `MongoDbSsl` connection string now accepts `host:port`. A host without a port still uses 27017.
 
+Client certificates load through `X509CertificateLoader`. PKCS#12 files with high iteration counts still load.
+
 These bugs are fixed:
 
 * `MongoDbSslProcessManagerFinder.GetTimeoutsBatch` threw for every due timeout and left it locked, so timeouts never fired.
 * `MongoDbSslProcessManagerFinder.RemoveDispatchedTimeout` could remove a different locked timeout from the one it was given.
-* `MongoDbProcessManagerFinder.InsertData` added a new document on every call instead of replacing the one with the same correlation ID.
+* `MongoDbProcessManagerFinder.InsertData` added a new document on every call instead of replacing the one with the same correlation ID. Two calls that run at the same time for a new correlation ID can still each add a document, in both MongoDB packages.
+* `MongoDbProcessManagerFinder.UpdateData` now updates the document that `FindData` returned, even when an earlier version left duplicates.
 
 ### SQL Server persistence
 
-`SqlServerProcessManagerFinder` now uses `Microsoft.Data.SqlClient` instead of the deprecated `System.Data.SqlClient`. `Microsoft.Data.SqlClient` encrypts connections by default and checks the server certificate. If your SQL Server uses a certificate your machine does not trust, the connection fails with `UntrustedRoot`. Install a trusted certificate, or add `TrustServerCertificate=True` to the connection string.
+`SqlServerProcessManagerFinder` now uses `Microsoft.Data.SqlClient` instead of the deprecated `System.Data.SqlClient`. `Microsoft.Data.SqlClient` encrypts connections by default. To keep existing connection strings working, `SqlServerProcessManagerFinder` sets `Encrypt=False` when the connection string does not set `Encrypt`. To encrypt the connection, add `Encrypt=True` to the connection string. The server certificate must then be trusted by your machine, or the connection string must also set `TrustServerCertificate=True`.
 
 ### Packages
 
@@ -151,7 +166,7 @@ The integration tests need real servers. Each test is skipped when the server it
 
    ```bash
    docker run -d --name serviceconnect-test-sqlserver -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD='<password>' -p 14333:1433 mcr.microsoft.com/mssql/server:2019-latest
-   export SERVICECONNECT_SQLSERVER="Server=localhost,14333;User ID=sa;Password=<password>;TrustServerCertificate=True"
+   export SERVICECONNECT_SQLSERVER="Server=localhost,14333;User ID=sa;Password=<password>"
    ```
 
 3. The bus tests connect to RabbitMQ on `localhost:5672` with the default `guest` account.

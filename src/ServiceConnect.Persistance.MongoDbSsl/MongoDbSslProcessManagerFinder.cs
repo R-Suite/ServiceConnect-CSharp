@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -30,6 +31,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
     public class MongoDbSslProcessManagerFinder : IProcessManagerFinder
     {
         private readonly IMongoDatabase _mongoDatabase;
+        private readonly ConcurrentDictionary<string, bool> _indexes = new ConcurrentDictionary<string, bool>();
         private const string TimeoutsCollectionName = "Timeouts";
 
         public MongoDbSslProcessManagerFinder(string connectionString, string databaseName)
@@ -53,10 +55,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
             var collectionName = typeof(T).Name;
             IMongoCollection<MongoDbSslData<T>> collection = _mongoDatabase.GetCollection<MongoDbSslData<T>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<MongoDbSslData<T>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<MongoDbSslData<T>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             object msgPropValue = null;
 
@@ -102,9 +101,8 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         }
 
         /// <summary>
-        /// Create new instance of ProcessManager
-        /// When multiple threads try to create new ProcessManager instance, only the first one is allowed. 
-        /// All subsequent threads will update data instead.
+        /// Create new instance of ProcessManager, or replace the data of the one with the same CorrelationId.
+        /// Calls that run at the same time for a new CorrelationId can each insert a document.
         /// </summary>
         /// <param name="data"></param>
         public void InsertData(IProcessManagerData data)
@@ -112,10 +110,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             var collectionName = GetCollectionName(data);
 
             IMongoCollection<MongoDbSslData<IProcessManagerData>> collection = _mongoDatabase.GetCollection<MongoDbSslData<IProcessManagerData>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<MongoDbSslData<IProcessManagerData>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<MongoDbSslData<IProcessManagerData>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             var mongoDbData = new MongoDbSslData<IProcessManagerData>
             {
@@ -138,10 +133,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             var collectionName = GetCollectionName(persistanceData.Data);
 
             IMongoCollection<MongoDbSslData<T>> collection = _mongoDatabase.GetCollection<MongoDbSslData<T>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<MongoDbSslData<T>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<MongoDbSslData<T>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             var versionData = (MongoDbSslData<T>)persistanceData;
 
@@ -165,10 +157,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             var collectionName = GetCollectionName(persistanceData.Data);
 
             IMongoCollection<IPersistanceData<T>> collection = _mongoDatabase.GetCollection<IPersistanceData<T>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<IPersistanceData<T>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<IPersistanceData<T>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             var filter = Builders<IPersistanceData<T>>.Filter.Eq("Data.CorrelationId", persistanceData.Data.CorrelationId);
             collection.DeleteOne(filter);
@@ -177,10 +166,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         public void InsertTimeout(TimeoutData timeoutData)
         {
             IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<TimeoutData>.IndexKeys.Ascending("Id");
-            var indexModel = new CreateIndexModel<TimeoutData>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Id");
 
             collection.InsertOne(timeoutData);
 
@@ -208,23 +194,12 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             }
 
             // Get next query time
-            var nextQueryTime = DateTime.MaxValue;
-            var filter = Builders<TimeoutData>.Filter.Gt(_ => _.Time, utcNow);
-            var upcomingTimeoutsRes = collection.Find(filter);
-            foreach (TimeoutData upcomingTimeout in upcomingTimeoutsRes.ToList())
-            {
-                if (upcomingTimeout.Time < nextQueryTime)
-                {
-                    nextQueryTime = upcomingTimeout.Time;
-                }
-            }
+            var nextTimeout = collection.Find(Builders<TimeoutData>.Filter.Gt(_ => _.Time, utcNow))
+                .SortBy(_ => _.Time)
+                .Limit(1)
+                .FirstOrDefault();
 
-            if (nextQueryTime == DateTime.MaxValue)
-            {
-                nextQueryTime = utcNow.AddMinutes(1);
-            }
-
-            retval.NextQueryTime = nextQueryTime;
+            retval.NextQueryTime = nextTimeout?.Time ?? utcNow.AddMinutes(1);
 
             return retval;
         }
@@ -237,6 +212,18 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                           Builders<TimeoutData>.Filter.Eq(_ => _.Id, id);
 
             collection.DeleteOne(filter);
+        }
+
+        private void EnsureIndex<TDocument>(IMongoCollection<TDocument> collection, string field)
+        {
+            var key = collection.CollectionNamespace.CollectionName + "/" + field;
+            if (_indexes.ContainsKey(key))
+            {
+                return;
+            }
+
+            collection.Indexes.CreateOne(new CreateIndexModel<TDocument>(Builders<TDocument>.IndexKeys.Ascending(field)));
+            _indexes.TryAdd(key, true);
         }
 
         private static string GetCollectionName<T>(T data) where T : class, IProcessManagerData

@@ -15,12 +15,15 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistance.MongoDb
 {
     public class MongoDbData<T> : IPersistanceData<T>
     {
+        [BsonGuidRepresentation(GuidRepresentation.CSharpLegacy)]
         public Guid Id { get; set; }
         public int Version { get; set; }
         public T Data { get; set; }

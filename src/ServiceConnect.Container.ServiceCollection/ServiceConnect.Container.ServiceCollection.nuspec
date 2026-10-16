@@ -21,6 +21,7 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\net10.0\ServiceConnect.Container.ServiceCollection.*" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Container.ServiceCollection.dll" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Container.ServiceCollection.pdb" target="lib\net10.0" />
   </files>
 </package>

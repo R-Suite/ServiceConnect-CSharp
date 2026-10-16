@@ -46,7 +46,7 @@ namespace ServiceConnect.Persistance.SqlServer
         /// <param name="databaseName"></param>
         public SqlServerProcessManagerFinder(string connectionString, string databaseName)
         {
-            _connectionString = connectionString;
+            _connectionString = WithUnencryptedDefault(connectionString);
         }
 
         /// <summary>
@@ -58,11 +58,40 @@ namespace ServiceConnect.Persistance.SqlServer
         /// <param name="commandTimeout"></param>
         public SqlServerProcessManagerFinder(string connectionString, string databaseName, int commandTimeout)
         {
-            _connectionString = connectionString;
+            _connectionString = WithUnencryptedDefault(connectionString);
             _commandTimeout = commandTimeout;
         }
 
         public event TimeoutInsertedDelegate TimeoutInserted;
+
+        /// <summary>
+        /// Keeps the connection unencrypted unless the connection string sets <c>Encrypt</c>, as it was with
+        /// System.Data.SqlClient. Microsoft.Data.SqlClient encrypts by default and rejects untrusted server certificates.
+        /// </summary>
+        internal static string WithUnencryptedDefault(string connectionString)
+        {
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                return connectionString;
+            }
+
+            try
+            {
+                var builder = new SqlConnectionStringBuilder(connectionString);
+                if (builder.ShouldSerialize("Encrypt"))
+                {
+                    return connectionString;
+                }
+
+                builder.Encrypt = SqlConnectionEncryptOption.Optional;
+                return builder.ConnectionString;
+            }
+            catch (ArgumentException)
+            {
+                // Leave a malformed connection string to fail when it is first used, as before.
+                return connectionString;
+            }
+        }
 
         /// <summary>
         /// Find existing instance of ProcessManager

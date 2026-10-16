@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -30,6 +31,7 @@ namespace ServiceConnect.Persistance.MongoDb
     public class MongoDbProcessManagerFinder : IProcessManagerFinder
     {
         private readonly IMongoDatabase _mongoDatabase;
+        private readonly ConcurrentDictionary<string, bool> _indexedCollections = new ConcurrentDictionary<string, bool>();
         private const string TimeoutsCollectionName = "Timeouts";
 
         public event TimeoutInsertedDelegate TimeoutInserted;
@@ -97,9 +99,8 @@ namespace ServiceConnect.Persistance.MongoDb
         }
 
         /// <summary>
-        /// Create new instance of ProcessManager
-        /// When multiple threads try to create new ProcessManager instance, only the first one is allowed. 
-        /// All subsequent threads will update data instead.
+        /// Create new instance of ProcessManager, or replace the data of the one with the same CorrelationId.
+        /// Calls that run at the same time for a new CorrelationId can each insert a document.
         /// </summary>
         /// <param name="data"></param>
         public void InsertData(IProcessManagerData data)
@@ -127,7 +128,8 @@ namespace ServiceConnect.Persistance.MongoDb
             var versionData = (MongoDbData<T>)persistanceData;
 
             int currentVersion = versionData.Version;
-            var filter = Builders<MongoDbData<T>>.Filter.Eq("Data.CorrelationId", versionData.Data.CorrelationId) &
+            var filter = Builders<MongoDbData<T>>.Filter.Eq(_ => _.Id, versionData.Id) &
+                         Builders<MongoDbData<T>>.Filter.Eq("Data.CorrelationId", versionData.Data.CorrelationId) &
                          Builders<MongoDbData<T>>.Filter.Eq(_ => _.Version, currentVersion);
             versionData.Version += 1;
             var result = collection.ReplaceOne(filter, versionData);
@@ -177,22 +179,12 @@ namespace ServiceConnect.Persistance.MongoDb
             }
 
             // Get next query time
-            var nextQueryTime = DateTime.MaxValue;
-            var upcomingTimeouts = collection.Find(Builders<TimeoutData>.Filter.Gt(_ => _.Time, utcNow)).ToList();
-            foreach (TimeoutData upcomingTimeout in upcomingTimeouts)
-            {
-                if (upcomingTimeout.Time < nextQueryTime)
-                {
-                    nextQueryTime = upcomingTimeout.Time;
-                }
-            }
+            var nextTimeout = collection.Find(Builders<TimeoutData>.Filter.Gt(_ => _.Time, utcNow))
+                .SortBy(_ => _.Time)
+                .Limit(1)
+                .FirstOrDefault();
 
-            if (nextQueryTime == DateTime.MaxValue)
-            {
-                nextQueryTime = utcNow.AddMinutes(1);
-            }
-
-            retval.NextQueryTime = nextQueryTime;
+            retval.NextQueryTime = nextTimeout?.Time ?? utcNow.AddMinutes(1);
 
             return retval;
         }
@@ -208,7 +200,12 @@ namespace ServiceConnect.Persistance.MongoDb
         private IMongoCollection<MongoDbData<T>> GetCollection<T>(string collectionName)
         {
             var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
-            collection.Indexes.CreateOne(new CreateIndexModel<MongoDbData<T>>(Builders<MongoDbData<T>>.IndexKeys.Ascending("Data.CorrelationId")));
+            if (!_indexedCollections.ContainsKey(collectionName))
+            {
+                collection.Indexes.CreateOne(new CreateIndexModel<MongoDbData<T>>(Builders<MongoDbData<T>>.IndexKeys.Ascending("Data.CorrelationId")));
+                _indexedCollections.TryAdd(collectionName, true);
+            }
+
             return collection;
         }
 

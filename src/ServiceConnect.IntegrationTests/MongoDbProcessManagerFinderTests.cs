@@ -314,5 +314,74 @@ namespace ServiceConnect.IntegrationTests
             Assert.Equal(Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e"), timeout.ProcessManagerId);
             Assert.Equal(0, _testRepo.GetCollection<BsonDocument>("Timeouts").CountDocuments(new BsonDocument()));
         }
+
+        [MongoDbFact]
+        public void ShouldStoreTimeoutIdsAsLegacyBinarySubtype()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var id = Guid.NewGuid();
+
+            // Act
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = id, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow });
+
+            // Assert
+            var raw = _testRepo.GetCollection<BsonDocument>("Timeouts").Find(new BsonDocument()).Single();
+            Assert.Equal(BsonBinarySubType.UuidLegacy, raw["_id"].AsBsonBinaryData.SubType);
+            Assert.Equal(id.ToByteArray(), raw["_id"].AsBsonBinaryData.Bytes);
+            Assert.Equal(BsonBinarySubType.UuidLegacy, raw["ProcessManagerId"].AsBsonBinaryData.SubType);
+        }
+
+        [MongoDbFact]
+        public void ShouldUseEarliestUpcomingTimeoutAsNextQueryTime()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var earliest = DateTime.UtcNow.AddMinutes(5);
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = earliest.AddMinutes(20) });
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = earliest });
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = earliest.AddMinutes(10) });
+
+            // Act
+            var batch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            Assert.Empty(batch.DueTimeouts);
+            Assert.Equal(earliest.Ticks / TimeSpan.TicksPerMillisecond, batch.NextQueryTime.Ticks / TimeSpan.TicksPerMillisecond);
+        }
+
+        [MongoDbFact]
+        public void ShouldQueryAgainInAMinuteWhenNoTimeoutIsUpcoming()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var before = DateTime.UtcNow;
+
+            // Act
+            var batch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            Assert.InRange(batch.NextQueryTime, before.AddMinutes(1), DateTime.UtcNow.AddMinutes(1));
+        }
+        [MongoDbFact]
+        public void ShouldUpdateTheDocumentThatWasFoundWhenDuplicatesExist()
+        {
+            // Arrange: earlier versions inserted a new document on every InsertData call.
+            var collection = _testRepo.GetCollection<MongoDbData<IProcessManagerData>>(_testCollectionName);
+            var secondId = Guid.NewGuid();
+            collection.InsertOne(new MongoDbData<IProcessManagerData> { Id = Guid.NewGuid(), Version = 1, Data = new TestData { CorrelationId = _correlationId, Name = "first" } });
+            collection.InsertOne(new MongoDbData<IProcessManagerData> { Id = secondId, Version = 1, Data = new TestData { CorrelationId = _correlationId, Name = "second" } });
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var found = _testRepo.GetCollection<MongoDbData<TestData>>(_testCollectionName).Find(Builders<MongoDbData<TestData>>.Filter.Eq(_ => _.Id, secondId)).Single();
+            found.Data.Name = "updated";
+
+            // Act
+            processManagerFinder.UpdateData(found);
+
+            // Assert
+            var stored = _testRepo.GetCollection<MongoDbData<TestData>>(_testCollectionName).Find(Builders<MongoDbData<TestData>>.Filter.Eq(_ => _.Id, found.Id)).Single();
+            Assert.Equal("updated", stored.Data.Name);
+            Assert.Equal(2, stored.Version);
+        }
     }
 }

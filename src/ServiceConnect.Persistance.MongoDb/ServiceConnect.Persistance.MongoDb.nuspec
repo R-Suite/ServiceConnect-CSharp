@@ -20,6 +20,7 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\net10.0\ServiceConnect.Persistance.MongoDb.*" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Persistance.MongoDb.dll" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Persistance.MongoDb.pdb" target="lib\net10.0" />
   </files>
 </package>

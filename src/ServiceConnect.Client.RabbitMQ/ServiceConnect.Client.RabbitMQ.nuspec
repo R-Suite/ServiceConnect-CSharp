@@ -21,6 +21,7 @@
     </dependencies>
   </metadata>
   <files>
-    <file src="bin\Release\net10.0\ServiceConnect.Client.RabbitMQ.*" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Client.RabbitMQ.dll" target="lib\net10.0" />
+    <file src="bin\Release\net10.0\ServiceConnect.Client.RabbitMQ.pdb" target="lib\net10.0" />
   </files>
 </package> 

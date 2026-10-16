@@ -53,7 +53,16 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         {
             // Data is stored under its type's assembly-qualified name. Mapping that type first lets the driver
             // resolve the stored discriminator even when nothing has been inserted since the process started.
-            var dataType = Type.GetType(name, false);
+            Type dataType = null;
+            try
+            {
+                dataType = Type.GetType(name, false);
+            }
+            catch (Exception)
+            {
+                // Not a loadable type name; the stored discriminator may still resolve.
+            }
+
             if (dataType != null)
             {
                 BsonClassMap.LookupClassMap(dataType);

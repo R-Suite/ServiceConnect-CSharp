@@ -22,7 +22,7 @@ fi
 mkdir -p "$CERT_DIR"
 cd "$CERT_DIR"
 
-if [[ ! -f client.pfx ]]; then
+if [[ ! -f client-high-iteration.pfx ]]; then
   openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=ServiceConnect Test CA" \
     -keyout ca.key -out ca.pem 2>/dev/null
 
@@ -37,6 +37,9 @@ if [[ ! -f client.pfx ]]; then
   openssl x509 -req -in client.csr -CA ca.pem -CAkey ca.key -CAcreateserial -days 30 \
     -extfile client.ext -out client.crt 2>/dev/null
   openssl pkcs12 -export -in client.crt -inkey client.key -out client.pfx -passout "pass:$CLIENT_CERT_PASSWORD"
+  # The same certificate with a high iteration count, as some tools export it.
+  openssl pkcs12 -export -iter 400000 -in client.crt -inkey client.key -out client-high-iteration.pfx \
+    -passout "pass:$CLIENT_CERT_PASSWORD"
 
   chmod 644 ./*
 fi

@@ -334,5 +334,72 @@ namespace ServiceConnect.IntegrationTestsSsl
             // Assert
             Assert.Equal("TestData", processManagerFinder.FindData<TestDataSsl>(_mapper, new Message(_correlationId)).Data.Name);
         }
+
+        [MongoDbSslFact]
+        public void ShouldConnectWithHighIterationCertificate()
+        {
+            // Arrange: scripts/start-test-mongo.sh exports the client certificate a second time with 400,000 iterations.
+            var parts = _connectionString.Split(',');
+            var certPathPart = parts.Single(p => p.StartsWith("certpath=", StringComparison.OrdinalIgnoreCase));
+            var highIterationPath = Path.Combine(Path.GetDirectoryName(certPathPart.Substring("certpath=".Length)), "client-high-iteration.pfx");
+            Assert.True(File.Exists(highIterationPath), highIterationPath + " is missing; rerun scripts/start-test-mongo.sh.");
+            var connectionString = string.Join(",", parts.Select(p => p == certPathPart ? "certpath=" + highIterationPath : p));
+            IProcessManagerFinder processManagerFinder = new MongoDbSslProcessManagerFinder(connectionString, _dbName);
+
+            // Act
+            processManagerFinder.InsertData(new TestDataSsl { CorrelationId = _correlationId, Name = "TestData" });
+
+            // Assert
+            Assert.Equal("TestData", processManagerFinder.FindData<TestDataSsl>(_mapper, new Message(_correlationId)).Data.Name);
+        }
+
+        [MongoDbSslFact]
+        public void ShouldStoreTimeoutIdsAsLegacyBinarySubtype()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbSslProcessManagerFinder(_connectionString, _dbName);
+            var id = Guid.NewGuid();
+
+            // Act
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = id, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow });
+
+            // Assert
+            var raw = _testRepo.MongoDatabase.GetCollection<BsonDocument>("Timeouts").Find(new BsonDocument()).Single();
+            Assert.Equal(BsonBinarySubType.UuidLegacy, raw["_id"].AsBsonBinaryData.SubType);
+            Assert.Equal(id.ToByteArray(), raw["_id"].AsBsonBinaryData.Bytes);
+            Assert.Equal(BsonBinarySubType.UuidLegacy, raw["ProcessManagerId"].AsBsonBinaryData.SubType);
+        }
+
+        [MongoDbSslFact]
+        public void ShouldUseEarliestUpcomingTimeoutAsNextQueryTime()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbSslProcessManagerFinder(_connectionString, _dbName);
+            var earliest = DateTime.UtcNow.AddMinutes(5);
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = earliest.AddMinutes(20) });
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = earliest });
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = earliest.AddMinutes(10) });
+
+            // Act
+            var batch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            Assert.Empty(batch.DueTimeouts);
+            Assert.Equal(earliest.Ticks / TimeSpan.TicksPerMillisecond, batch.NextQueryTime.Ticks / TimeSpan.TicksPerMillisecond);
+        }
+
+        [MongoDbSslFact]
+        public void ShouldQueryAgainInAMinuteWhenNoTimeoutIsUpcoming()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbSslProcessManagerFinder(_connectionString, _dbName);
+            var before = DateTime.UtcNow;
+
+            // Act
+            var batch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            Assert.InRange(batch.NextQueryTime, before.AddMinutes(1), DateTime.UtcNow.AddMinutes(1));
+        }
     }
 }
