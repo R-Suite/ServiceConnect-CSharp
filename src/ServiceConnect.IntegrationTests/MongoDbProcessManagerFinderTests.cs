@@ -363,6 +363,7 @@ namespace ServiceConnect.IntegrationTests
             // Assert
             Assert.InRange(batch.NextQueryTime, before.AddMinutes(1), DateTime.UtcNow.AddMinutes(1));
         }
+
         [MongoDbFact]
         public void ShouldUpdateTheDocumentThatWasFoundWhenDuplicatesExist()
         {
@@ -382,6 +383,23 @@ namespace ServiceConnect.IntegrationTests
             var stored = _testRepo.GetCollection<MongoDbData<TestData>>(_testCollectionName).Find(Builders<MongoDbData<TestData>>.Filter.Eq(_ => _.Id, found.Id)).Single();
             Assert.Equal("updated", stored.Data.Name);
             Assert.Equal(2, stored.Version);
+        }
+
+        [MongoDbFact]
+        public void ShouldDeleteEveryCopyOfTheData()
+        {
+            // Arrange: earlier versions could store more than one document for a CorrelationId.
+            var collection = _testRepo.GetCollection<MongoDbData<IProcessManagerData>>(_testCollectionName);
+            collection.InsertOne(new MongoDbData<IProcessManagerData> { Id = Guid.NewGuid(), Version = 1, Data = new TestData { CorrelationId = _correlationId, Name = "first" } });
+            collection.InsertOne(new MongoDbData<IProcessManagerData> { Id = Guid.NewGuid(), Version = 1, Data = new TestData { CorrelationId = _correlationId, Name = "second" } });
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var found = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
+
+            // Act
+            processManagerFinder.DeleteData(found);
+
+            // Assert
+            Assert.Null(processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId)));
         }
     }
 }

@@ -65,12 +65,14 @@ namespace ServiceConnect.Persistance.SqlServer
         public event TimeoutInsertedDelegate TimeoutInserted;
 
         /// <summary>
-        /// Keeps the connection unencrypted unless the connection string sets <c>Encrypt</c>, as it was with
-        /// System.Data.SqlClient. Microsoft.Data.SqlClient encrypts by default and rejects untrusted server certificates.
+        /// Connects the way System.Data.SqlClient did unless the connection string sets <c>Encrypt=True</c>:
+        /// unencrypted, or, when the server forces encryption, without checking the server certificate.
+        /// Microsoft.Data.SqlClient would otherwise encrypt, and check the certificate whenever the
+        /// connection is encrypted.
         /// </summary>
         internal static string WithUnencryptedDefault(string connectionString)
         {
-            if (string.IsNullOrEmpty(connectionString))
+            if (string.IsNullOrWhiteSpace(connectionString))
             {
                 return connectionString;
             }
@@ -78,17 +80,18 @@ namespace ServiceConnect.Persistance.SqlServer
             try
             {
                 var builder = new SqlConnectionStringBuilder(connectionString);
-                if (builder.ShouldSerialize("Encrypt"))
+                if (builder.ShouldSerialize("Encrypt") && !SqlConnectionEncryptOption.Optional.Equals(builder.Encrypt))
                 {
                     return connectionString;
                 }
 
                 builder.Encrypt = SqlConnectionEncryptOption.Optional;
+                builder.TrustServerCertificate = true;
                 return builder.ConnectionString;
             }
-            catch (ArgumentException)
+            catch (Exception)
             {
-                // Leave a malformed connection string to fail when it is first used, as before.
+                // Leave a connection string that cannot be parsed to fail when it is first used, as before.
                 return connectionString;
             }
         }

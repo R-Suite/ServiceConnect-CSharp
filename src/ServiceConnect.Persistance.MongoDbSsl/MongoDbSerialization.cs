@@ -28,8 +28,8 @@ namespace ServiceConnect.Persistance.MongoDbSsl
     /// <remarks>
     /// Earlier versions stored GUIDs as CSharpLegacy (binary subtype 3), and MongoDB.Driver 3 has no default
     /// representation. If the application has not chosen one, CSharpLegacy is registered. If it has, its choice
-    /// is kept, and only the timeout ids stay CSharpLegacy. The stored <c>Data</c> member may hold any process
-    /// manager data or message type, so it gets its own allow-list rather than the driver's default one.
+    /// is kept. The stored <c>Data</c> member may hold any process manager data or message type, so it gets its
+    /// own allow-list rather than the driver's default one.
     /// </remarks>
     internal static class MongoDbSerialization
     {
@@ -68,7 +68,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
                 // A different Guid serializer is already registered or cached.
             }
 
-            if (lookup() is GuidSerializer { GuidRepresentation: GuidRepresentation.Unspecified })
+            if (lookup() is GuidSerializer { Representation: BsonType.Binary, GuidRepresentation: GuidRepresentation.Unspecified })
             {
                 throw new InvalidOperationException(
                     "MongoDB is already using a Guid serializer with no GuidRepresentation in this process, so " +
@@ -80,14 +80,6 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
         private static void RegisterClassMaps()
         {
-            var legacyGuid = new GuidSerializer(GuidRepresentation.CSharpLegacy);
-            BsonClassMap.TryRegisterClassMap<TimeoutData>(cm =>
-            {
-                cm.AutoMap();
-                cm.MapIdMember(c => c.Id).SetSerializer(legacyGuid);
-                cm.MapMember(c => c.ProcessManagerId).SetSerializer(legacyGuid);
-            });
-
             var processManagerConvention = BsonSerializer.LookupDiscriminatorConvention(typeof(IProcessManagerData));
             var processManagerDataSerializer = new DiscriminatedInterfaceSerializer<IProcessManagerData>(
                 processManagerConvention,

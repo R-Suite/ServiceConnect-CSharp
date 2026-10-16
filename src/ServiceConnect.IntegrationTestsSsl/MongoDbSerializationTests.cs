@@ -35,6 +35,16 @@ namespace ServiceConnect.IntegrationTestsSsl
         }
 
         [Fact]
+        public void ShouldKeepAStringGuidSerializer()
+        {
+            var exception = Record.Exception(() => MongoDbSerialization.EnsureGuidRepresentation(
+                _ => throw new BsonSerializationException("There is already a different serializer registered for type Guid."),
+                () => new GuidSerializer(BsonType.String)));
+
+            Assert.Null(exception);
+        }
+
+        [Fact]
         public void ShouldExplainHowToFixWhenTheDefaultSerializerIsAlreadyInUse()
         {
             var exception = Assert.Throws<InvalidOperationException>(() => MongoDbSerialization.EnsureGuidRepresentation(

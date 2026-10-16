@@ -111,10 +111,10 @@ These packages target `net10.0` only. Applications on .NET 6 or .NET 8 must stay
 
 Both MongoDB packages now use MongoDB.Driver 3.12. `ServiceConnect.Persistance.MongoDb` no longer depends on the legacy `mongocsharpdriver` package.
 
-Earlier versions stored GUIDs as `CSharpLegacy` (binary subtype 3). MongoDB.Driver 3 has no default GUID representation. When you create a persistence class, ServiceConnect does one of these:
+Earlier versions stored GUIDs in the representation set by `BsonDefaults.GuidRepresentation`, which defaults to `CSharpLegacy` (binary subtype 3). MongoDB.Driver 3 has no default GUID representation. When you create a persistence class, ServiceConnect does one of these:
 
 * If your application has not registered a Guid serializer, ServiceConnect registers a `CSharpLegacy` one for the whole process.
-* If your application has registered one, ServiceConnect uses it. Timeout ids are always stored as `CSharpLegacy`.
+* If your application has registered one, ServiceConnect uses it for every GUID it stores.
 * If MongoDB is already using its default Guid serializer, which has no representation, the constructor throws an `InvalidOperationException`. This happens when your application serialized or looked up a Guid before registering a serializer.
 
 To choose the representation yourself, register the serializer at startup, before any MongoDB serialization and before you create the persistence classes. MongoDB.Driver does not let you register a Guid serializer after one is in use.
@@ -123,7 +123,10 @@ To choose the representation yourself, register the serializer at startup, befor
 BsonSerializer.RegisterSerializer(new GuidSerializer(GuidRepresentation.CSharpLegacy));
 ```
 
-Keep `CSharpLegacy` if you have process manager or aggregator data written by an earlier version. With any other representation, `FindData` does not find process manager data written by earlier versions, so new process manager instances start instead. The aggregator persistors throw a `FormatException` when they read aggregated messages written by earlier versions.
+Register the representation your existing data uses. That is `CSharpLegacy` unless your application set `BsonDefaults.GuidRepresentation` to something else. With a different representation, ServiceConnect cannot read data written by earlier versions:
+
+* `Standard` does not match `CSharpLegacy` data. `FindData` returns `null`, so new process manager instances start, or it throws a `FormatException`. The aggregator persistors throw a `FormatException`.
+* `JavaLegacy` and `PythonLegacy` read `CSharpLegacy` data without an error, but with the bytes of each GUID in a different order. Lookups by GUID find nothing, and other GUIDs come back with wrong values.
 
 You no longer need to register an `ObjectSerializer` that allows your process manager data and message types. The persistence classes allow any `IProcessManagerData` or `Message` type in the data they store.
 
@@ -136,11 +139,12 @@ These bugs are fixed:
 * `MongoDbSslProcessManagerFinder.GetTimeoutsBatch` threw for every due timeout and left it locked, so timeouts never fired.
 * `MongoDbSslProcessManagerFinder.RemoveDispatchedTimeout` could remove a different locked timeout from the one it was given.
 * `MongoDbProcessManagerFinder.InsertData` added a new document on every call instead of replacing the one with the same correlation ID. Two calls that run at the same time for a new correlation ID can still each add a document, in both MongoDB packages.
-* `MongoDbProcessManagerFinder.UpdateData` now updates the document that `FindData` returned, even when an earlier version left duplicates.
+* `MongoDbProcessManagerFinder.UpdateData` now updates the document that `FindData` returned, even when an earlier version left duplicates. `MongoDbSslProcessManagerFinder.UpdateData` can still fail when duplicates exist.
+* `DeleteData` removes every document with the correlation ID, so a finished process manager does not come back from a duplicate.
 
 ### SQL Server persistence
 
-`SqlServerProcessManagerFinder` now uses `Microsoft.Data.SqlClient` instead of the deprecated `System.Data.SqlClient`. `Microsoft.Data.SqlClient` encrypts connections by default. To keep existing connection strings working, `SqlServerProcessManagerFinder` sets `Encrypt=False` when the connection string does not set `Encrypt`. To encrypt the connection, add `Encrypt=True` to the connection string. The server certificate must then be trusted by your machine, or the connection string must also set `TrustServerCertificate=True`.
+`SqlServerProcessManagerFinder` now uses `Microsoft.Data.SqlClient` instead of the deprecated `System.Data.SqlClient`. `Microsoft.Data.SqlClient` encrypts connections by default and checks the server certificate whenever a connection is encrypted. To keep existing connection strings working, `SqlServerProcessManagerFinder` connects as `System.Data.SqlClient` did unless the connection string sets `Encrypt=True`. The connection is unencrypted, or, when the server forces encryption, encrypted without a certificate check. To encrypt and check the certificate, add `Encrypt=True` to the connection string. Add `TrustServerCertificate=True` as well to encrypt without the check.
 
 ### Packages
 

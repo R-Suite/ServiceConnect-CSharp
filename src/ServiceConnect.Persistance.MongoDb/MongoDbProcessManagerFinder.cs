@@ -146,7 +146,7 @@ namespace ServiceConnect.Persistance.MongoDb
         {
             var collection = GetCollection<T>(GetCollectionName(persistanceData.Data));
 
-            collection.DeleteOne(Builders<MongoDbData<T>>.Filter.Eq("Data.CorrelationId", persistanceData.Data.CorrelationId));
+            collection.DeleteMany(Builders<MongoDbData<T>>.Filter.Eq("Data.CorrelationId", persistanceData.Data.CorrelationId));
         }
 
         public void InsertTimeout(TimeoutData timeoutData)

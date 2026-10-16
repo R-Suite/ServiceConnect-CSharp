@@ -401,5 +401,22 @@ namespace ServiceConnect.IntegrationTestsSsl
             // Assert
             Assert.InRange(batch.NextQueryTime, before.AddMinutes(1), DateTime.UtcNow.AddMinutes(1));
         }
+
+        [MongoDbSslFact]
+        public void ShouldDeleteEveryCopyOfTheData()
+        {
+            // Arrange: earlier versions could store more than one document for a CorrelationId.
+            var collection = _testRepo.MongoDatabase.GetCollection<MongoDbSslData<IProcessManagerData>>(_testCollectionName);
+            collection.InsertOne(new MongoDbSslData<IProcessManagerData> { Version = 1, Data = new TestDataSsl { CorrelationId = _correlationId, Name = "first" } });
+            collection.InsertOne(new MongoDbSslData<IProcessManagerData> { Version = 1, Data = new TestDataSsl { CorrelationId = _correlationId, Name = "second" } });
+            IProcessManagerFinder processManagerFinder = new MongoDbSslProcessManagerFinder(_connectionString, _dbName);
+            var found = processManagerFinder.FindData<TestDataSsl>(_mapper, new Message(_correlationId));
+
+            // Act
+            processManagerFinder.DeleteData(found);
+
+            // Assert
+            Assert.Null(processManagerFinder.FindData<TestDataSsl>(_mapper, new Message(_correlationId)));
+        }
     }
 }

@@ -160,7 +160,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             EnsureIndex(collection, "Data.CorrelationId");
 
             var filter = Builders<IPersistanceData<T>>.Filter.Eq("Data.CorrelationId", persistanceData.Data.CorrelationId);
-            collection.DeleteOne(filter);
+            collection.DeleteMany(filter);
         }
 
         public void InsertTimeout(TimeoutData timeoutData)
