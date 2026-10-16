@@ -19,7 +19,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using MongoDB.Driver;
-using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
 using System.Reflection;
 
@@ -30,16 +29,14 @@ namespace ServiceConnect.Persistance.MongoDb
     /// </summary>
     public class MongoDbProcessManagerFinder : IProcessManagerFinder
     {
-        private readonly MongoDatabase _mongoDatabase;
+        private readonly IMongoDatabase _mongoDatabase;
         private const string TimeoutsCollectionName = "Timeouts";
 
         public event TimeoutInsertedDelegate TimeoutInserted;
 
         public MongoDbProcessManagerFinder(string connectionString, string databaseName)
         {
-            var mongoClient = new MongoClient(connectionString);
-            MongoServer server = mongoClient.GetServer();
-            _mongoDatabase = server.GetDatabase(databaseName);
+            _mongoDatabase = MongoDbConnection.GetDatabase(connectionString, databaseName);
         }
 
         /// <summary>
@@ -54,9 +51,7 @@ namespace ServiceConnect.Persistance.MongoDb
             var mapping = mapper.Mappings.FirstOrDefault(m => m.MessageType == message.GetType()) ??
                           mapper.Mappings.First(m => m.MessageType == typeof(Message));
 
-            var collectionName = typeof(T).Name;
-            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
-            collection.CreateIndex("CorrelationId");
+            var collection = GetCollection<T>(typeof(T).Name);
 
             object msgPropValue = null;
             
@@ -97,9 +92,8 @@ namespace ServiceConnect.Persistance.MongoDb
             }
 
             var lambda = Expression.Lambda<Func<MongoDbData<T>, bool>>(expression, pe);
-            IMongoQuery query = Query<MongoDbData<T>>.Where(lambda);
-            
-            return collection.FindOneAs<MongoDbData<T>>(query);
+
+            return collection.AsQueryable().FirstOrDefault(lambda);
         }
 
         /// <summary>
@@ -110,19 +104,15 @@ namespace ServiceConnect.Persistance.MongoDb
         /// <param name="data"></param>
         public void InsertData(IProcessManagerData data)
         {
-            var collectionName = GetCollectionName(data);
+            var collection = GetCollection<IProcessManagerData>(GetCollectionName(data));
 
-            MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
-            collection.CreateIndex("CorrelationId");
+            var filter = Builders<MongoDbData<IProcessManagerData>>.Filter.Eq("Data.CorrelationId", data.CorrelationId);
+            var update = Builders<MongoDbData<IProcessManagerData>>.Update
+                .Set(_ => _.Data, data)
+                .Set(_ => _.Version, 1)
+                .SetOnInsert(_ => _.Id, Guid.NewGuid());
 
-            var mongoDbData = new MongoDbData<IProcessManagerData>
-            {
-                Data = data,
-                Version = 1,
-                Id = Guid.NewGuid()
-            };
-
-            collection.FindAndModify(Query.EQ("CorrelationId", mongoDbData.Data.CorrelationId), SortBy.Null, Update.Replace(mongoDbData), false, true);
+            collection.UpdateOne(filter, update, new UpdateOptions { IsUpsert = true });
         }
 
         /// <summary>
@@ -132,19 +122,17 @@ namespace ServiceConnect.Persistance.MongoDb
         /// <param name="persistanceData"></param>
         public void UpdateData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-            var collectionName = GetCollectionName(persistanceData.Data);
-
-            MongoCollection<T> collection = _mongoDatabase.GetCollection<T>(collectionName);
-            collection.CreateIndex("CorrelationId");
+            var collection = GetCollection<T>(GetCollectionName(persistanceData.Data));
 
             var versionData = (MongoDbData<T>)persistanceData;
 
             int currentVersion = versionData.Version;
-            var query = Query.And(Query.EQ("Data.CorrelationId", versionData.Data.CorrelationId), Query.EQ("Version", currentVersion));
+            var filter = Builders<MongoDbData<T>>.Filter.Eq("Data.CorrelationId", versionData.Data.CorrelationId) &
+                         Builders<MongoDbData<T>>.Filter.Eq(_ => _.Version, currentVersion);
             versionData.Version += 1;
-            var result = collection.FindAndModify(query, SortBy.Null, Update.Replace(versionData));
+            var result = collection.ReplaceOne(filter, versionData);
 
-            if (result.ModifiedDocument == null)
+            if (result.IsAcknowledged && result.MatchedCount == 0)
                 throw new ArgumentException(string.Format("Possible Concurrency Error. ProcessManagerData with CorrelationId {0} and Version {1} could not be updated.", versionData.Data.CorrelationId, versionData.Version));
         }
 
@@ -154,62 +142,44 @@ namespace ServiceConnect.Persistance.MongoDb
         /// <param name="persistanceData"></param>
         public void DeleteData<T>(IPersistanceData<T> persistanceData) where T : class, IProcessManagerData
         {
-            var collectionName = GetCollectionName(persistanceData.Data);
+            var collection = GetCollection<T>(GetCollectionName(persistanceData.Data));
 
-            MongoCollection collection = _mongoDatabase.GetCollection(collectionName);
-            collection.CreateIndex("CorrelationId");
-
-            collection.Remove(Query.EQ("Data.CorrelationId", persistanceData.Data.CorrelationId));
+            collection.DeleteOne(Builders<MongoDbData<T>>.Filter.Eq("Data.CorrelationId", persistanceData.Data.CorrelationId));
         }
 
         public void InsertTimeout(TimeoutData timeoutData)
         {
-            MongoCollection collection = _mongoDatabase.GetCollection(TimeoutsCollectionName);
-            collection.CreateIndex("Id");
+            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
-            collection.Insert(timeoutData);
+            collection.InsertOne(timeoutData);
 
-            if (TimeoutInserted != null)
-            {
-                TimeoutInserted(timeoutData.Time);
-            }
+            TimeoutInserted?.Invoke(timeoutData.Time);
         }
 
         public TimeoutsBatch GetTimeoutsBatch()
         {
             var retval = new TimeoutsBatch {DueTimeouts = new List<TimeoutData>()};
 
-            MongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
             DateTime utcNow = DateTime.UtcNow;
 
             // Find all the due timeouts and put a lock on each one to prevent multiple threads/processes getting hold of the same data.
-            bool doQuery = true;
-            while (doQuery)
-            {
-                var args = new FindAndModifyArgs
-                {
-                    Query = Query.And(Query.EQ("Locked", false), Query.LTE("Time", utcNow)),
-                    Update = Update<TimeoutData>.Set(c => c.Locked, true),
-                    Upsert = false,
-                    VersionReturned = FindAndModifyDocumentVersion.Original
-                };
-                FindAndModifyResult result = collection.FindAndModify(args);
+            var dueFilter = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, false) &
+                            Builders<TimeoutData>.Filter.Lte(_ => _.Time, utcNow);
+            var lockUpdate = Builders<TimeoutData>.Update.Set(_ => _.Locked, true);
+            var lockOptions = new FindOneAndUpdateOptions<TimeoutData> { ReturnDocument = ReturnDocument.After };
 
-                if (result.ModifiedDocument == null)
-                {
-                    doQuery = false;
-                }
-                else
-                {
-                    retval.DueTimeouts.Add(result.GetModifiedDocumentAs<TimeoutData>());
-                }
+            TimeoutData dueTimeout;
+            while ((dueTimeout = collection.FindOneAndUpdate(dueFilter, lockUpdate, lockOptions)) != null)
+            {
+                retval.DueTimeouts.Add(dueTimeout);
             }
 
             // Get next query time
             var nextQueryTime = DateTime.MaxValue;
-            var upcomingTimeoutsRes = collection.Find(Query.GT("Time", utcNow));
-            foreach (TimeoutData upcomingTimeout in upcomingTimeoutsRes)
+            var upcomingTimeouts = collection.Find(Builders<TimeoutData>.Filter.Gt(_ => _.Time, utcNow)).ToList();
+            foreach (TimeoutData upcomingTimeout in upcomingTimeouts)
             {
                 if (upcomingTimeout.Time < nextQueryTime)
                 {
@@ -229,14 +199,17 @@ namespace ServiceConnect.Persistance.MongoDb
 
         public void RemoveDispatchedTimeout(Guid id)
         {
-            MongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
-            var args = new FindAndRemoveArgs
-            {
-                Query = Query.And(Query.EQ("Locked", true), Query.EQ("_id", id))
-            };
+            collection.DeleteOne(Builders<TimeoutData>.Filter.Eq(_ => _.Locked, true) &
+                                 Builders<TimeoutData>.Filter.Eq(_ => _.Id, id));
+        }
 
-            collection.FindAndRemove(args);
+        private IMongoCollection<MongoDbData<T>> GetCollection<T>(string collectionName)
+        {
+            var collection = _mongoDatabase.GetCollection<MongoDbData<T>>(collectionName);
+            collection.Indexes.CreateOne(new CreateIndexModel<MongoDbData<T>>(Builders<MongoDbData<T>>.IndexKeys.Ascending("Data.CorrelationId")));
+            return collection;
         }
 
         private static string GetCollectionName<T>(T data) where T : class, IProcessManagerData

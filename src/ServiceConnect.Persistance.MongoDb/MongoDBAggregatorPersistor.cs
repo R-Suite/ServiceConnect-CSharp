@@ -17,15 +17,15 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
-using MongoDB.Driver.Builders;
 using ServiceConnect.Interfaces;
 
 namespace ServiceConnect.Persistance.MongoDb
 {
     public class MongoDBAggregatorPersistor : IAggregatorPersistor
     {
-        private readonly MongoCollection<MongoDbData<object>> _collection;
+        private readonly IMongoCollection<MongoDbData<object>> _collection;
 
         /// <summary>
         /// Constructor
@@ -35,16 +35,15 @@ namespace ServiceConnect.Persistance.MongoDb
         /// <param name="collectionName"></param>
         public MongoDBAggregatorPersistor(string connectionString, string databaseName, string collectionName)
         {
-            var mongoClient = new MongoClient(connectionString);
-            MongoServer server = mongoClient.GetServer();
-            var mongoDatabase = server.GetDatabase(databaseName);
+            var mongoDatabase = MongoDbConnection.GetDatabase(connectionString, databaseName);
             _collection = mongoDatabase.GetCollection<MongoDbData<object>>(collectionName);
         }
 
         public void InsertData(object data, string name)
         {
-            _collection.Insert(new MongoDbData<object>
+            _collection.InsertOne(new MongoDbData<object>
             {
+                Id = Guid.NewGuid(),
                 Name = name,
                 Data = data,
                 Version = 1
@@ -53,22 +52,28 @@ namespace ServiceConnect.Persistance.MongoDb
 
         public IList<object> GetData(string name)
         {
-            return _collection.Find(Query<MongoDbData<object>>.EQ(x => x.Name, name)).Select(x => x.Data).ToList();
+            // Data is stored under its type's assembly-qualified name. Mapping that type first lets the driver
+            // resolve the stored discriminator even when nothing has been inserted since the process started.
+            var dataType = Type.GetType(name, false);
+            if (dataType != null)
+            {
+                BsonClassMap.LookupClassMap(dataType);
+            }
+
+            return _collection.Find(Builders<MongoDbData<object>>.Filter.Eq(x => x.Name, name)).ToList().Select(x => x.Data).ToList();
         }
 
         public void RemoveData(string name, Guid correlationsId)
         {
-            _collection.Remove(
-                Query.And(
-                    Query<MongoDbData<object>>.EQ(x => x.Name, name),
-                    Query<MongoDbData<Message>>.EQ(x => x.Data.CorrelationId, correlationsId)
-                )
-            );
+            var filter = Builders<MongoDbData<object>>.Filter.Eq(x => x.Name, name) &
+                         Builders<MongoDbData<object>>.Filter.Eq("Data.CorrelationId", correlationsId);
+
+            _collection.DeleteMany(filter);
         }
         
         public int Count(string name)
         {
-            return Convert.ToInt32(_collection.Count(Query<MongoDbData<object>>.EQ(x => x.Name, name)));
+            return Convert.ToInt32(_collection.CountDocuments(Builders<MongoDbData<object>>.Filter.Eq(x => x.Name, name)));
         }
     }
 }

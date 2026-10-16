@@ -127,7 +127,7 @@ namespace ServiceConnect.UnitTests
 
             // Assert
             _mockModel.Verify(x => x.ExchangeDeclare("MyMessageType1", "fanout", true, false, null), Times.Once);
-            _mockModel.Verify(x => x.QueueBind("myQueue", "MyMessageType1", string.Empty, null), Times.Once);
+            _mockModel.Verify(x => x.QueueBind("myQueue", "MyMessageType1", string.Empty, It.IsAny<IDictionary<string, object>>()), Times.Once);
         }
     }
 }

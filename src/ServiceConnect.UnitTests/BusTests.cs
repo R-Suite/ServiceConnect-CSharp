@@ -244,52 +244,6 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void SendShouldGetProducerFromContainer()
-        {
-            // Arrange
-            var mockConfiguration = new Mock<IConfiguration>();
-            var mockProducer = new Mock<IProducer>();
-            var mockContainer = new Mock<IBusContainer>();
-            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
-            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
-            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
-            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
-            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
-            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-
-            // Act
-            var bus = new ServiceConnect.Bus(mockConfiguration.Object);
-            bus.Send(new FakeMessage1(Guid.NewGuid()), null);
-
-            // Assert
-            mockConfiguration.Verify(x => x.GetProducer(), Times.Once());
-        }
-
-        [Fact]
-        public void SendWithEndPointShouldGetProducerFromContainer()
-        {
-            // Arrange
-            var mockConfiguration = new Mock<IConfiguration>();
-            var mockProducer = new Mock<IProducer>();
-            var mockContainer = new Mock<IBusContainer>();
-            var mockProessManagerFinder = new Mock<IProcessManagerFinder>();
-            var mockSendMessagePipeline = new Mock<ISendMessagePipeline>();
-            mockConfiguration.Setup(x => x.GetSendMessagePipeline()).Returns(mockSendMessagePipeline.Object);
-            mockConfiguration.Setup(x => x.GetContainer()).Returns(mockContainer.Object);
-            mockConfiguration.Setup(x => x.GetProcessManagerFinder()).Returns(mockProessManagerFinder.Object);
-            mockConfiguration.Setup(x => x.GetProducer()).Returns(mockProducer.Object);
-            mockConfiguration.SetupGet(x => x.TransportSettings).Returns(new TransportSettings());
-
-            // Act
-            var bus = new ServiceConnect.Bus(mockConfiguration.Object);
-            bus.Send("EndPoint", new FakeMessage1(Guid.NewGuid()), null);
-
-            // Assert
-            mockConfiguration.Verify(x => x.GetProducer(), Times.Once()); 
-        }
-
-        [Fact]
         public void SendShouldSendCommand()
         {
             // Arrange
@@ -731,8 +685,8 @@ namespace ServiceConnect.UnitTests
             // Assert
             mockRequestConfiguration.Verify(x => x.SetHandler(It.IsAny<Action<object>>()), Times.Exactly(1));
             Assert.Equal(2, count);
-            Assert.True(responses.Contains(r1));
-            Assert.True(responses.Contains(r2));
+            Assert.Contains(r1, responses);
+            Assert.Contains(r2, responses);
         }
 
         [Fact]

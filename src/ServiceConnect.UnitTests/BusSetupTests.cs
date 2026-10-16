@@ -472,7 +472,7 @@ namespace ServiceConnect.UnitTests
                 throw new NotImplementedException();
             }
 
-            public event TimeoutInsertedDelegate TimeoutInserted;
+            public event TimeoutInsertedDelegate TimeoutInserted { add { } remove { } }
 
             public IPersistanceData<T> FindData<T>(IProcessManagerPropertyMapper mapper, Message message) where T : class, IProcessManagerData
             {

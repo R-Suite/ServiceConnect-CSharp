@@ -215,7 +215,7 @@ namespace ServiceConnect.Container.ServiceCollection
                         }
                     }
                 }
-                catch (Exception e)
+                catch (Exception)
                 {
                 }
             }

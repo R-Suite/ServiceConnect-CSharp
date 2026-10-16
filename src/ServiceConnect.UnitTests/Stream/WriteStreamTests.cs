@@ -17,7 +17,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using Moq;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
@@ -27,9 +26,6 @@ namespace ServiceConnect.UnitTests.Stream
 {
     public class WriteStreamTests
     {
-        [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
-        static extern int memcmp(byte[] b1, byte[] b2, long count);
-
         private readonly Mock<IProducer> _producer;
         private Mock<IConfiguration> _mockConfigurtaion;
 
@@ -74,7 +70,7 @@ namespace ServiceConnect.UnitTests.Stream
 
         public bool CompareByteArrays(byte[] b1, byte[] b2)
         {
-            return b1.Length == b2.Length && memcmp(b1, b2, b1.Length) == 0;
+            return b1.AsSpan().SequenceEqual(b2);
         }
 
         [Fact]

@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -40,23 +41,23 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ProcessMessageShouldGetTheCorrectHandlerTypesFromContainer()
+        public async Task ProcessMessageShouldGetTheCorrectHandlerTypesFromContainer()
         {
             // Arrange
             var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
 
             // Act
-            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            await messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }), null).GetAwaiter().GetResult();
+            }), null);
 
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(It.Is<Type[]>(y => y.Contains(typeof(IMessageHandler<FakeMessage1>)) && y.Contains(typeof(IAsyncMessageHandler<FakeMessage1>)))), Times.Once());
         }
        
         [Fact]
-        public void ShouldExecuteTheCorrectHandlers()
+        public async Task ShouldExecuteTheCorrectHandlers()
         {
             // Arrange
             var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
@@ -80,14 +81,14 @@ namespace ServiceConnect.UnitTests
             {
                 Username = "Tim Watson"
             };
-            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1), null).GetAwaiter().GetResult(); ;
+            await messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1), null);
 
             var message2 = new FakeMessage2(Guid.NewGuid())
             {
                 DisplayName = "Tim Watson"
             };
 
-            messageProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message2), null).GetAwaiter().GetResult(); ;
+            await messageProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message2), null);
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
@@ -96,7 +97,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteTheCorrectBaseMessageHandlers()
+        public async Task ShouldExecuteTheCorrectBaseMessageHandlers()
         {
             // Arrange
             var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
@@ -121,7 +122,7 @@ namespace ServiceConnect.UnitTests
                 Status = "Test"
             };
 
-            messageProcessor.ProcessMessage<FakeDerivedMessage1>(JsonConvert.SerializeObject(message), null).GetAwaiter().GetResult(); ;
+            await messageProcessor.ProcessMessage<FakeDerivedMessage1>(JsonConvert.SerializeObject(message), null);
 
             // Assert
             Assert.Equal(message.CorrelationId, fakeHandler.Command.CorrelationId);
@@ -130,7 +131,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteTheCorrectHandlerWithRoutingKeyAttribute()
+        public async Task ShouldExecuteTheCorrectHandlerWithRoutingKeyAttribute()
         {
             // Arrange
             var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
@@ -155,8 +156,8 @@ namespace ServiceConnect.UnitTests
             {
                 Username = "Jakub Pachansky"
             };
-            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
-                new ConsumeContext {Headers = new Dictionary<string, object> {{"RoutingKey", Encoding.ASCII.GetBytes("Test") }}}).GetAwaiter().GetResult(); ;
+            await messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
+                new ConsumeContext {Headers = new Dictionary<string, object> {{"RoutingKey", Encoding.ASCII.GetBytes("Test") }}});
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
@@ -165,7 +166,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteTheCorrectHandlerWithCatchAllRoutingKeyAttribute()
+        public async Task ShouldExecuteTheCorrectHandlerWithCatchAllRoutingKeyAttribute()
         {
             // Arrange
             var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
@@ -190,8 +191,8 @@ namespace ServiceConnect.UnitTests
             {
                 Username = "Jakub Pachansky"
             };
-            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
-                new ConsumeContext { Headers = new Dictionary<string, object> { { "RoutingKey", Encoding.ASCII.GetBytes("SomeRandomRoutingKey") } } }).GetAwaiter().GetResult(); ;
+            await messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
+                new ConsumeContext { Headers = new Dictionary<string, object> { { "RoutingKey", Encoding.ASCII.GetBytes("SomeRandomRoutingKey") } } });
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
@@ -200,7 +201,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteTheCorrectHandlerWithMultipleRoutingKeyAttributes()
+        public async Task ShouldExecuteTheCorrectHandlerWithMultipleRoutingKeyAttributes()
         {
             // Arrange
             var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
@@ -225,8 +226,8 @@ namespace ServiceConnect.UnitTests
             {
                 Username = "Jakub Pachansky"
             };
-            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
-                new ConsumeContext { Headers = new Dictionary<string, object> {{"RoutingKey", Encoding.ASCII.GetBytes("Test2")}}}).GetAwaiter().GetResult(); ;
+            await messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
+                new ConsumeContext { Headers = new Dictionary<string, object> {{"RoutingKey", Encoding.ASCII.GetBytes("Test2")}}});
 
             // Assert
             Assert.Equal(message1.CorrelationId, fakeHandler.Command.CorrelationId);
@@ -235,7 +236,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteAsyncHandler()
+        public async Task ShouldExecuteAsyncHandler()
         {
             // Arrange
             var messageProcessor = new MessageHandlerProcessor(_mockContainer.Object, _mockLogger.Object);
@@ -257,8 +258,8 @@ namespace ServiceConnect.UnitTests
             // Act
             var message1 = new FakeMessage1(Guid.NewGuid());
 
-            messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
-                new ConsumeContext { Headers = new Dictionary<string, object>() }).GetAwaiter().GetResult(); ;
+            await messageProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(message1),
+                new ConsumeContext { Headers = new Dictionary<string, object>() });
 
             // Assert
             Assert.True(fakeHandler.Executed);

@@ -35,7 +35,7 @@ namespace ServiceConnect.UnitTests
             aggregatorPersistor.RemoveData("key1", corrId);
 
             // Assert
-            Assert.Equal(0, aggregatorPersistor.GetData("key1").Count);
+            Assert.Empty(aggregatorPersistor.GetData("key1"));
         }
     }
 }

@@ -15,6 +15,7 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Threading.Tasks;
 using System.Collections.Generic;
 using Moq;
 using Newtonsoft.Json;
@@ -41,7 +42,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldGetCorrectProcessManagerReferencesFromContainer()
+        public async Task ShouldGetCorrectProcessManagerReferencesFromContainer()
         {
             // Arrange
             _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>), typeof(IAsyncMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
@@ -76,10 +77,10 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            await processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }), new ConsumeContext()).GetAwaiter().GetResult();
+            }), new ConsumeContext());
 
             // Assert
             _mockContainer.Verify(x => x.GetHandlerTypes(typeof (IMessageHandler<FakeMessage1>), typeof(IAsyncMessageHandler<FakeMessage1>)), Times.Once);
@@ -87,7 +88,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldStartNewProcessManager()
+        public async Task ShouldStartNewProcessManager()
         {
             // Arrange
             _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>), typeof(IAsyncMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
@@ -123,10 +124,10 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            await processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }), new ConsumeContext()).GetAwaiter().GetResult();
+            }), new ConsumeContext());
 
             // Assert
             // Data.User is set by the ProcessManagers Execute method
@@ -134,7 +135,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldStartNewAsyncProcessManager()
+        public async Task ShouldStartNewAsyncProcessManager()
         {
             // Arrange
             _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>), typeof(IAsyncMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
@@ -170,10 +171,10 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            await processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }), new ConsumeContext()).GetAwaiter().GetResult();
+            }), new ConsumeContext());
 
             // Assert
             // Data.User is set by the ProcessManagers Execute method
@@ -181,7 +182,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldStartNewProcessManagerWithConsumerContext()
+        public async Task ShouldStartNewProcessManagerWithConsumerContext()
         {
             // Arrange
             _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>), typeof(IAsyncMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
@@ -218,10 +219,10 @@ namespace ServiceConnect.UnitTests
             var context = new ConsumeContext();
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            await processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }), context).GetAwaiter().GetResult();
+            }), context);
 
             // Assert
             // Data.User is set by the ProcessManagers Execute method
@@ -229,7 +230,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldPersistNewProcessManagerWhenPersistanceDataDoesNotYetExist()
+        public async Task ShouldPersistNewProcessManagerWhenPersistanceDataDoesNotYetExist()
         {
             // Arrange
             _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>), typeof(IAsyncMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
@@ -258,17 +259,17 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            await processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Tim Watson"
-            }), new ConsumeContext()).GetAwaiter().GetResult();
+            }), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.InsertData(It.Is<FakeProcessManagerData>(y => y.User == "Tim Watson")), Times.Once);
         }
 
         [Fact]
-        public void ShouldPersistNewProcessManagerWithExistingPersistanceData()
+        public async Task ShouldPersistNewProcessManagerWithExistingPersistanceData()
         {
             // Arrange
             _mockContainer.Setup(x => x.GetHandlerTypes(typeof(IMessageHandler<FakeMessage1>), typeof(IAsyncMessageHandler<FakeMessage1>))).Returns(new List<HandlerReference>
@@ -302,17 +303,17 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
+            await processManagerProcessor.ProcessMessage<FakeMessage1>(JsonConvert.SerializeObject(new FakeMessage1(Guid.NewGuid())
             {
                 Username = "Jakub Pachansky"
-            }), new ConsumeContext()).GetAwaiter().GetResult();
+            }), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.UpdateData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.User == "Jakub Pachansky")), Times.Exactly(2));
         }
 
         [Fact]
-        public void ShouldFindExistingProcessManagerInstance()
+        public async Task ShouldFindExistingProcessManagerInstance()
         {
             // Arrange
             var id = Guid.NewGuid();
@@ -341,7 +342,7 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
+            await processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext());
 
             
             _mockContainer.Verify(x => x.GetInstance(typeof (FakeProcessManager1)), Times.Once);
@@ -349,7 +350,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldStartProcessManagerWithExistingData()
+        public async Task ShouldStartProcessManagerWithExistingData()
         {
             // Arrange
             var id = Guid.NewGuid();
@@ -381,7 +382,7 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
+            await processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext());
 
             // Assert
             Assert.Equal("Tim Watson", processManager.Data.User); // Can only be this if Data was set on process manager
@@ -389,7 +390,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldStartAsyncProcessManagerWithExistingData()
+        public async Task ShouldStartAsyncProcessManagerWithExistingData()
         {
             // Arrange
             var id = Guid.NewGuid();
@@ -421,7 +422,7 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
+            await processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext());
 
             // Assert
             Assert.Equal("Tim Watson", processManager.Data.User); // Can only be this if Data was set on process manager
@@ -429,7 +430,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldStartExistingProcessManagerWithConsumerContext()
+        public async Task ShouldStartExistingProcessManagerWithConsumerContext()
         {
             // Arrange
             var id = Guid.NewGuid();
@@ -463,14 +464,14 @@ namespace ServiceConnect.UnitTests
             var context = new ConsumeContext();
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), context).GetAwaiter().GetResult();
+            await processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), context);
 
             // Assert
             Assert.Equal(context, processManager.Context); 
         }
 
         [Fact]
-        public void ShouldUpdateProcessManagerData()
+        public async Task ShouldUpdateProcessManagerData()
         {
             // Arrange
             var id = Guid.NewGuid();
@@ -504,14 +505,14 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
+            await processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.UpdateData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.Email == "abc@123.com" && y.Data.User == "Tim Watson")), Times.Once);
         }
 
         [Fact]
-        public void ShouldRemoveProcessManagerDataIfProcessManagerIsComplete()
+        public async Task ShouldRemoveProcessManagerDataIfProcessManagerIsComplete()
         {
             // Arrange
             var id = Guid.NewGuid();
@@ -548,7 +549,7 @@ namespace ServiceConnect.UnitTests
             var processManagerProcessor = new ProcessManagerProcessor(_mockProcessManagerFinder.Object, _mockContainer.Object, _mockLogger.Object);
 
             // Act
-            processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext()).GetAwaiter().GetResult();
+            await processManagerProcessor.ProcessMessage<FakeMessage2>(JsonConvert.SerializeObject(message), new ConsumeContext());
 
             // Assert
             _mockProcessManagerFinder.Verify(x => x.DeleteData(It.Is<IPersistanceData<FakeProcessManagerData>>(y => y.Data.Email == "abc@123.com" && y.Data.User == "Tim Watson")), Times.Once);

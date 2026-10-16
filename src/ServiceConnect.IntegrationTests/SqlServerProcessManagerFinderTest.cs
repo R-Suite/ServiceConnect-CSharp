@@ -17,7 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
+using Microsoft.Data.SqlClient;
 using System.IO;
 using System.Xml;
 using System.Xml.Serialization;
@@ -53,9 +53,15 @@ namespace ServiceConnect.IntegrationTests
 
         public SqlServerProcessManagerFinderTest()
         {
-            //var appBasePath = PlatformServices.Default.Application.ApplicationBasePath;
-            _connectionString = @"Data Source=(LocalDB)\v11.0;AttachDbFilename=|DataDirectory|\MyLocalDb.mdf;Integrated Security=True";
-           // _connectionString = string.Format(@"Data Source=(LocalDB)\v11.0;AttachDbFilename={0};Integrated Security=True", Path.Combine(appBasePath, "MyLocalDb.mdf"));
+            _connectionString = SqlServerFactAttribute.ConnectionString;
+
+            _mapper = new ProcessManagerPropertyMapper();
+            _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
+
+            if (string.IsNullOrEmpty(_connectionString))
+            {
+                return;
+            }
 
             // DROP TABLE before each test
             using (var connection = new SqlConnection(_connectionString))
@@ -69,12 +75,9 @@ namespace ServiceConnect.IntegrationTests
                     command.ExecuteNonQuery();
                 }
             }
-
-            _mapper = new ProcessManagerPropertyMapper();
-            _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldInsertData()
         {
             // Arrange
@@ -87,12 +90,12 @@ namespace ServiceConnect.IntegrationTests
 
             // Assert
             var results = GetTestDbData(correlationId);
-            Assert.Equal(1, results.Count);
+            Assert.Single(results);
             Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.True(results[0].DataXml.Contains("TestData"));
+            Assert.Contains("TestData", results[0].DataXml);
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldUpdateWhenInsertingDataWithExistingId()
         {
             // Arrange
@@ -107,13 +110,13 @@ namespace ServiceConnect.IntegrationTests
 
             // Assert
             var results = GetTestDbData(correlationId);
-            Assert.Equal(1, results.Count);
+            Assert.Single(results);
             Assert.Equal(correlationId.ToString(), results[0].Id);
             Assert.NotEqual("FakeJsonData", results[0].DataXml);
-            Assert.True(results[0].DataXml.Contains("TestData"));
+            Assert.Contains("TestData", results[0].DataXml);
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldFindData()
         {
             // Arrange
@@ -139,7 +142,7 @@ namespace ServiceConnect.IntegrationTests
             processManagerFinder.UpdateData(result);
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldReturnNullWhenDataTableNotFound()
         {
             // Arrange
@@ -154,7 +157,7 @@ namespace ServiceConnect.IntegrationTests
             Assert.Null(result);
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldReturnNullWhenDataNotFound()
         {
             // Arrange
@@ -169,12 +172,11 @@ namespace ServiceConnect.IntegrationTests
             Assert.Null(result);
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldUpdateData()
         {
             // Arrange
             var correlationId = Guid.NewGuid();
-            var testDataJson = "{\"CorrelationId\":\"e845f0a0-4af0-4d1e-a324-790d49d540ae\",\"Name\":\"TestDataOriginal\"}";
 
             IProcessManagerData data = new TestSqlServerData { CorrelationId = correlationId, Name = "TestDataOriginal" };
             var xmlSerializer = new XmlSerializer(data.GetType());
@@ -196,13 +198,13 @@ namespace ServiceConnect.IntegrationTests
 
             // Assert
             var results = GetTestDbData(correlationId);
-            Assert.Equal(1, results.Count);
+            Assert.Single(results);
             Assert.Equal(correlationId.ToString(), results[0].Id);
-            Assert.False(results[0].DataXml.Contains("TestDataOriginal"));
-            Assert.True(results[0].DataXml.Contains("TestDataUpdated"));
+            Assert.DoesNotContain("TestDataOriginal", results[0].DataXml);
+            Assert.Contains("TestDataUpdated", results[0].DataXml);
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldThrowWhenUpdatingTwoInstancesOfSameDataAtTheSameTime()
         {
             // Arrange
@@ -227,7 +229,7 @@ namespace ServiceConnect.IntegrationTests
             Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(foundData2)); // second update should fail
         }
 
-        [Fact]
+        [SqlServerFact]
         public void ShouldDeleteData()
         {
             // Arrange
@@ -252,7 +254,7 @@ namespace ServiceConnect.IntegrationTests
 
             // Assert
             var results = GetTestDbData(correlationId);
-            Assert.Equal(0, results.Count);
+            Assert.Empty(results);
         }
 
         private void SetupTestDbData(IEnumerable<TestDbRow> testData)

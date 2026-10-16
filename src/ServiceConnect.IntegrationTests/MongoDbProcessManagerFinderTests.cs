@@ -15,8 +15,9 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Linq;
+using MongoDB.Bson;
 using MongoDB.Driver;
-using MongoDB.Driver.Builders;
 using ServiceConnect.Core;
 using ServiceConnect.Interfaces;
 using ServiceConnect.Persistance.MongoDb;
@@ -33,27 +34,31 @@ namespace ServiceConnect.IntegrationTests
     public class MongoDbProcessManagerFinderTests
     {
         readonly Guid _correlationId = Guid.NewGuid();
-        private readonly MongoCollection<TestData> _collection;
         private readonly string _connectionString;
         private readonly string _dbName;
         private readonly IProcessManagerPropertyMapper _mapper;
-
+        private readonly string _testCollectionName = "TestData";
+        private readonly IMongoDatabase _testRepo;
 
         public MongoDbProcessManagerFinderTests()
         {
-            _connectionString = "mongodb://localhost/";
             _dbName = "ProcessManagerRepository";
-            var mongoClient = new MongoClient(_connectionString);
-            MongoServer server = mongoClient.GetServer();
-            MongoDatabase mongoDatabase = server.GetDatabase(_dbName);
-            _collection = mongoDatabase.GetCollection<TestData>("TestData");
-            _collection.Drop();
+            _connectionString = MongoDbFactAttribute.ConnectionString;
 
             _mapper = new ProcessManagerPropertyMapper();
             _mapper.ConfigureMapping<IProcessManagerData, Message>(m => m.CorrelationId, pm => pm.CorrelationId);
+
+            if (string.IsNullOrEmpty(_connectionString))
+            {
+                return;
+            }
+
+            _testRepo = MongoDbConnection.GetDatabase(_connectionString, _dbName);
+            _testRepo.DropCollection(_testCollectionName);
+            _testRepo.DropCollection("Timeouts");
         }
 
-        [Fact]
+        [MongoDbFact]
         public void ShouldInsertData()
         {
             // Arrange
@@ -64,16 +69,57 @@ namespace ServiceConnect.IntegrationTests
             processManagerFinder.InsertData(data);
 
             // Assert
-            var insertedData = _collection.FindOneAs<MongoDbData<TestData>>(Query<MongoDbData<TestData>>.Where(i => i.Data.CorrelationId == _correlationId));
+            var collection = _testRepo.GetCollection<MongoDbData<TestData>>(_testCollectionName);
+            var filter = Builders<MongoDbData<TestData>>.Filter.Eq(_ => _.Data.CorrelationId, _correlationId);
+            var insertedData = collection.Find(filter).First();
             Assert.Equal("TestData", insertedData.Data.Name);
         }
 
-        [Fact]
+        [MongoDbFact]
+        public void ShouldStoreGuidsAsLegacyBinarySubtype()
+        {
+            // Arrange
+            IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+
+            // Act
+            processManagerFinder.InsertData(data);
+
+            // Assert
+            var raw = _testRepo.GetCollection<BsonDocument>(_testCollectionName).Find(new BsonDocument()).Single();
+            var storedId = raw["Data"]["CorrelationId"].AsBsonBinaryData;
+            Assert.Equal(BsonBinarySubType.UuidLegacy, storedId.SubType);
+            Assert.Equal(_correlationId.ToByteArray(), storedId.Bytes);
+            Assert.Equal("TestData", raw["Data"]["_t"].AsString);
+        }
+
+        [MongoDbFact]
+        public void ShouldUpsertData()
+        {
+            // Arrange
+            IProcessManagerData data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
+            IProcessManagerData data2 = new TestData { CorrelationId = _correlationId, Name = "TestData2" };
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+
+            // Act
+            processManagerFinder.InsertData(data1);
+            processManagerFinder.InsertData(data2);
+
+            // Assert
+            var collection = _testRepo.GetCollection<MongoDbData<TestData>>(_testCollectionName);
+            var filter = Builders<MongoDbData<TestData>>.Filter.Eq(_ => _.Data.CorrelationId, _correlationId);
+            var insertedData = collection.Find(filter).ToList();
+            Assert.Single(insertedData);
+            Assert.Equal("TestData2", insertedData[0].Data.Name);
+        }
+
+        [MongoDbFact]
         public void ShouldFindData()
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-            _collection.Save(new MongoDbData<IProcessManagerData> { Data = data });
+            IMongoCollection<MongoDbData<IProcessManagerData>> collection = _testRepo.GetCollection<MongoDbData<IProcessManagerData>>(_testCollectionName);
+            collection.InsertOne(new MongoDbData<IProcessManagerData> { Data = data });
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
@@ -83,7 +129,7 @@ namespace ServiceConnect.IntegrationTests
             Assert.Equal("TestData", result.Data.Name);
         }
 
-        [Fact]
+        [MongoDbFact]
         public void ShouldReturnNullWhenDataNotFound()
         {
             // Arrange
@@ -96,56 +142,177 @@ namespace ServiceConnect.IntegrationTests
             Assert.Null(result);
         }
 
-        [Fact]
+        [MongoDbFact]
         public void ShouldUpdateData()
         {
             // Arrange
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
+            var collection = _testRepo.GetCollection<MongoDbData<IProcessManagerData>>(_testCollectionName);
             var versionData = new MongoDbData<IProcessManagerData> { Data = data };
-            _collection.Save(versionData);
-            ((TestData) data).Name = "TestDataUpdated";
+            collection.InsertOne(versionData);
+            ((TestData)data).Name = "TestDataUpdated";
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
             processManagerFinder.UpdateData(versionData);
 
             // Assert
-            var updatedData = _collection.FindOneAs<MongoDbData<TestData>>(Query<MongoDbData<TestData>>.Where(i => i.Data.CorrelationId == _correlationId));
+            var collection2 = _testRepo.GetCollection<MongoDbData<TestData>>(_testCollectionName);
+            var filter = Builders<MongoDbData<TestData>>.Filter.Eq(_ => _.Data.CorrelationId, _correlationId);
+            var updatedData = collection2.Find(filter).First();
             Assert.Equal("TestDataUpdated", updatedData.Data.Name);
             Assert.Equal(1, updatedData.Version);
         }
 
-        [Fact]
+        [MongoDbFact]
         public void ShouldThrowWhenUpdatingTwoInstancesOfSameDataAtTheSameTime()
         {
             // Arrange
             IProcessManagerData data1 = new TestData { CorrelationId = _correlationId, Name = "TestData1" };
-            _collection.Save(new MongoDbData<IProcessManagerData> { Data = data1 }); 
+            var collection = _testRepo.GetCollection<MongoDbData<IProcessManagerData>>(_testCollectionName);
+            collection.InsertOne(new MongoDbData<IProcessManagerData> { Data = data1 });
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             var foundData1 = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
             var foundData2 = processManagerFinder.FindData<TestData>(_mapper, new Message(_correlationId));
-            
+
             processManagerFinder.UpdateData(foundData1); // first update should be fine
 
             // Act / Assert
             Assert.Throws<ArgumentException>(() => processManagerFinder.UpdateData(foundData2)); // second update should fail
         }
 
-        [Fact]
+        [MongoDbFact]
         public void ShouldDeleteData()
         {
             // Arrange
+            var collection = _testRepo.GetCollection<MongoDbData<IProcessManagerData>>(_testCollectionName);
             IProcessManagerData data = new TestData { CorrelationId = _correlationId, Name = "TestData" };
-            _collection.Save(new MongoDbData<IProcessManagerData> { Data = data });
+            collection.InsertOne(new MongoDbData<IProcessManagerData> { Data = data });
             IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
 
             // Act
             processManagerFinder.DeleteData(new MongoDbData<IProcessManagerData> { Data = data });
 
             // Assert
-            var deletedData = _collection.FindOneAs<TestData>(Query<TestData>.Where(i => i.CorrelationId == _correlationId));
+            var collection2 = _testRepo.GetCollection<MongoDbData<TestData>>(_testCollectionName);
+            var filter = Builders<MongoDbData<TestData>>.Filter.Eq(_ => _.Data.CorrelationId, _correlationId);
+            var deletedData = collection2.Find(filter).FirstOrDefault();
             Assert.Null(deletedData);
+        }
+
+        [MongoDbFact]
+        public void ShouldFindAndUpdateDataWrittenByVersion7()
+        {
+            // Arrange: a document as ServiceConnect.Persistance.MongoDb 7.0.0 (mongocsharpdriver 2.19) wrote it.
+            var correlationId = Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e");
+            _testRepo.GetCollection<BsonDocument>(_testCollectionName).InsertOne(BsonDocument.Parse(@"{
+                ""_id"": { ""$binary"": { ""base64"": ""CD8ln2Jcw0auh6cA8KSlkw=="", ""subType"": ""03"" } },
+                ""Version"": 1,
+                ""Data"": {
+                    ""_t"": ""TestData"",
+                    ""CorrelationId"": { ""$binary"": { ""base64"": ""W62PD8vZn0ahZXCGdyiVDg=="", ""subType"": ""03"" } },
+                    ""Name"": ""Written by 7.0.0""
+                },
+                ""Name"": null
+            }"));
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+
+            // Act
+            var found = processManagerFinder.FindData<TestData>(_mapper, new Message(correlationId));
+            found.Data.Name = "Updated";
+            processManagerFinder.UpdateData(found);
+            var updated = processManagerFinder.FindData<TestData>(_mapper, new Message(correlationId));
+            processManagerFinder.DeleteData(updated);
+
+            // Assert
+            Assert.Equal(correlationId, found.Data.CorrelationId);
+            Assert.Equal("Updated", updated.Data.Name);
+            Assert.Equal(2, ((MongoDbData<TestData>)updated).Version);
+            Assert.Equal(0, _testRepo.GetCollection<BsonDocument>(_testCollectionName).CountDocuments(new BsonDocument()));
+        }
+
+        [MongoDbFact]
+        public void ShouldInsertTimeoutAndRaiseEvent()
+        {
+            // Arrange
+            var processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var time = DateTime.UtcNow.AddMinutes(5);
+            DateTime? raised = null;
+            processManagerFinder.TimeoutInserted += t => raised = t;
+
+            // Act
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = time });
+
+            // Assert
+            Assert.Equal(time, raised);
+            Assert.Equal(1, _testRepo.GetCollection<TimeoutData>("Timeouts").CountDocuments(Builders<TimeoutData>.Filter.Empty));
+        }
+
+        [MongoDbFact]
+        public void ShouldLockAndReturnOnlyDueTimeouts()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var dueId = Guid.NewGuid();
+            var futureTime = DateTime.UtcNow.AddMinutes(10);
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = dueId, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow.AddMinutes(-1) });
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = Guid.NewGuid(), ProcessManagerId = _correlationId, Destination = "dest", Time = futureTime });
+
+            // Act
+            var firstBatch = processManagerFinder.GetTimeoutsBatch();
+            var secondBatch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            var due = Assert.Single(firstBatch.DueTimeouts);
+            Assert.Equal(dueId, due.Id);
+            Assert.True(due.Locked);
+            Assert.Equal(futureTime.Ticks / TimeSpan.TicksPerMillisecond, firstBatch.NextQueryTime.Ticks / TimeSpan.TicksPerMillisecond);
+            Assert.Empty(secondBatch.DueTimeouts);
+        }
+
+        [MongoDbFact]
+        public void ShouldRemoveOnlyTheDispatchedTimeout()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var firstId = Guid.NewGuid();
+            var secondId = Guid.NewGuid();
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = firstId, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow.AddMinutes(-2) });
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = secondId, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow.AddMinutes(-1) });
+            Assert.Equal(2, processManagerFinder.GetTimeoutsBatch().DueTimeouts.Count);
+
+            // Act
+            processManagerFinder.RemoveDispatchedTimeout(firstId);
+
+            // Assert
+            var remaining = _testRepo.GetCollection<TimeoutData>("Timeouts").Find(Builders<TimeoutData>.Filter.Empty).ToList();
+            Assert.Equal(secondId, Assert.Single(remaining).Id);
+        }
+
+        [MongoDbFact]
+        public void ShouldReadTimeoutWrittenByVersion7()
+        {
+            // Arrange: an unlocked, due timeout as ServiceConnect.Persistance.MongoDb 7.0.0 wrote it.
+            _testRepo.GetCollection<BsonDocument>("Timeouts").InsertOne(BsonDocument.Parse(@"{
+                ""_id"": { ""$binary"": { ""base64"": ""eWaefCV03kCUS+B/wfkK5w=="", ""subType"": ""03"" } },
+                ""Destination"": ""dest"",
+                ""ProcessManagerId"": { ""$binary"": { ""base64"": ""W62PD8vZn0ahZXCGdyiVDg=="", ""subType"": ""03"" } },
+                ""Time"": { ""$date"": { ""$numberLong"": ""1577836800000"" } },
+                ""Headers"": null,
+                ""Locked"": false
+            }"));
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+
+            // Act
+            var batch = processManagerFinder.GetTimeoutsBatch();
+            processManagerFinder.RemoveDispatchedTimeout(batch.DueTimeouts.Single().Id);
+
+            // Assert
+            var timeout = Assert.Single(batch.DueTimeouts);
+            Assert.Equal(Guid.Parse("7c9e6679-7425-40de-944b-e07fc1f90ae7"), timeout.Id);
+            Assert.Equal(Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e"), timeout.ProcessManagerId);
+            Assert.Equal(0, _testRepo.GetCollection<BsonDocument>("Timeouts").CountDocuments(new BsonDocument()));
         }
     }
 }

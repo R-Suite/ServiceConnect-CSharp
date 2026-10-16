@@ -18,7 +18,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Security.Cryptography.X509Certificates;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using System.Reflection;
@@ -35,115 +34,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
         public MongoDbSslProcessManagerFinder(string connectionString, string databaseName)
         {
-            var connectionParts = connectionString.Split(',');
-            string nodes = string.Empty;
-            string username = string.Empty;
-            string password = string.Empty;
-            string certPath = string.Empty;
-            string userdb = string.Empty;
-            string cert = string.Empty;
-            string certPassword = string.Empty;
-
-            foreach (string connectionPart in connectionParts)
-            {
-                var assignmentIndex = connectionPart.IndexOf('=');
-                var nameValue = connectionPart.Substring(0, assignmentIndex);
-
-                switch (nameValue.ToLower())
-                {
-                    case "nodes":
-                        nodes = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "userdb":
-                        userdb = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "username":
-                        username = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "password":
-                        password = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "certpath":
-                        certPath = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "cert":
-                        cert = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "certpassword":
-                        certPassword = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                }
-            }
-
-            var mongoNodes = nodes.Split(';');
-
-            List<X509Certificate> certs = null;
-            if (!string.IsNullOrEmpty(certPath))
-            {
-                if (string.IsNullOrEmpty(certPassword))
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(certPath)
-                    };
-                }
-                else
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(certPath, certPassword)
-                    };
-                }
-
-            }
-
-            if (!string.IsNullOrEmpty(cert))
-            {
-                if (string.IsNullOrEmpty(certPassword))
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(Convert.FromBase64String(cert))
-                    };
-                }
-                else
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(Convert.FromBase64String(cert), certPassword)
-                    };
-                }
-            }
-
-            MongoCredential credential = null;
-            if (!string.IsNullOrEmpty(username))
-            {
-                string db = "admin";
-
-                if (!string.IsNullOrEmpty(userdb))
-                {
-                    db = userdb;
-                }
-
-                credential = MongoCredential.CreateCredential(db, username, password);
-            }
-
-            var settings = new MongoClientSettings
-            {
-                UseTls = true,
-                Credential = credential,
-                ConnectionMode = ConnectionMode.Automatic,
-                Servers = mongoNodes.Select(x => new MongoServerAddress(x)),
-                SslSettings = certs == null ? null : new SslSettings
-                {
-                    ClientCertificates = certs,
-                    ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
-                    CheckCertificateRevocation = false
-                }
-            };
-
-            var client = new MongoClient(settings);
-            _mongoDatabase = client.GetDatabase(databaseName);
+            _mongoDatabase = MongoDbSslConnection.GetDatabase(connectionString, databaseName);
         }
 
         public event TimeoutInsertedDelegate TimeoutInserted;
@@ -261,7 +152,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             versionData.Version += 1;
             var result = collection.ReplaceOne(filter, versionData);
 
-            if (result.IsAcknowledged && result.ModifiedCount == 0)
+            if (result.IsAcknowledged && result.MatchedCount == 0)
                 throw new ArgumentException(string.Format("Possible Concurrency Error. ProcessManagerData with CorrelationId {0} and Version {1} could not be updated.", versionData.Data.CorrelationId, versionData.Version));
         }
 
@@ -305,29 +196,20 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             DateTime utcNow = DateTime.UtcNow;
 
             // Find all the due timeouts and put a lock on each one to prevent multiple threads/processes getting hold of the same data.
-            bool doQuery = true;
-            while (doQuery)
+            var dueFilter = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, false) &
+                            Builders<TimeoutData>.Filter.Lte(_ => _.Time, utcNow);
+            var lockUpdate = Builders<TimeoutData>.Update.Set(_ => _.Locked, true);
+            var lockOptions = new FindOneAndUpdateOptions<TimeoutData> { ReturnDocument = ReturnDocument.After };
+
+            TimeoutData dueTimeout;
+            while ((dueTimeout = collection.FindOneAndUpdate(dueFilter, lockUpdate, lockOptions)) != null)
             {
-                var filter1 = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, false) &
-                              Builders<TimeoutData>.Filter.Lte(_ => _.Time, utcNow);
-
-                var update = Builders<TimeoutData>.Update.Set(_ => _.Locked, true);
-                var result = collection.UpdateOne(filter1, update);
-
-                if (result.ModifiedCount == 0)
-                {
-                    doQuery = false;
-                }
-                else
-                {
-                    var filter2 = Builders<TimeoutData>.Filter.Eq(s => s.Id, result.UpsertedId);
-                    retval.DueTimeouts.Add(collection.Find(filter2).First());
-                }
+                retval.DueTimeouts.Add(dueTimeout);
             }
 
             // Get next query time
             var nextQueryTime = DateTime.MaxValue;
-            var filter = Builders<TimeoutData>.Filter.Eq(_=>_.Time, utcNow);
+            var filter = Builders<TimeoutData>.Filter.Gt(_ => _.Time, utcNow);
             var upcomingTimeoutsRes = collection.Find(filter);
             foreach (TimeoutData upcomingTimeout in upcomingTimeoutsRes.ToList())
             {
@@ -352,7 +234,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
             var filter = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, true) &
-                          Builders<TimeoutData>.Filter.Lte(_ => _.Id, id);
+                          Builders<TimeoutData>.Filter.Eq(_ => _.Id, id);
 
             collection.DeleteOne(filter);
         }
