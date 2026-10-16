@@ -21,6 +21,18 @@ namespace ServiceConnect.IntegrationTests
             Assert.Equal("p", result.Password);
         }
 
+        [Fact]
+        public void ShouldRecogniseEveryOldClientSpelling()
+        {
+            var result = new SqlConnectionStringBuilder(SqlServerProcessManagerFinder.WithUnencryptedDefault(
+                "Data Source=db;Initial Catalog=d;uid=sa;pwd=p;app=a;Connect Timeout=5;MultiSubnetFailover=True;ApplicationIntent=ReadOnly;Pooling=False"));
+
+            Assert.Equal(SqlConnectionEncryptOption.Optional, result.Encrypt);
+            Assert.True(result.TrustServerCertificate);
+            Assert.Equal("d", result.InitialCatalog);
+            Assert.Equal(ApplicationIntent.ReadOnly, result.ApplicationIntent);
+        }
+
         [Theory]
         [InlineData("Server=db;Encrypt=True")]
         [InlineData("Server=db;Encrypt=Strict")]
@@ -29,6 +41,9 @@ namespace ServiceConnect.IntegrationTests
         [InlineData("Server=db;User ID=sa;Password=p;HostNameInCertificate=db.example.net")]
         [InlineData("Server=db;User ID=sa;Password=p;Server Certificate=/certs/db.pem")]
         [InlineData("Server=db;Integrated Security=True;ServerSPN=MSSQLSvc/db")]
+        [InlineData("Server=db;User ID=sa;Password=p;Column Encryption Setting=Enabled")]
+        [InlineData("Server=db;User ID=sa;Password=p;IPAddressPreference=IPv4First")]
+        [InlineData("Server=db;User ID=sa;Password=p;Command Timeout=60")]
         public void ShouldKeepAConnectionStringThatAsksForEncryptionOrWasWrittenForMicrosoftDataSqlClient(string connectionString)
         {
             Assert.Equal(connectionString, SqlServerProcessManagerFinder.WithUnencryptedDefault(connectionString));

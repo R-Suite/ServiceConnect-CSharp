@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using Microsoft.Data.SqlClient;
 using System.IO;
 using System.Linq;
@@ -64,24 +65,65 @@ namespace ServiceConnect.Persistance.SqlServer
 
         public event TimeoutInsertedDelegate TimeoutInserted;
 
-        // Keywords that change authentication or certificate checks and that System.Data.SqlClient rejected.
-        private static readonly string[] MicrosoftDataSqlClientOnlyKeywords =
+        // Every keyword spelling System.Data.SqlClient accepted on .NET, in lower case.
+        private static readonly HashSet<string> SystemDataSqlClientKeywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Authentication",
-            "Host Name In Certificate",
-            "Server Certificate",
-            "Server SPN",
-            "Failover Partner SPN",
-            "Attestation Protocol",
-            "Enclave Attestation Url"
+            "addr",
+            "address",
+            "app",
+            "application name",
+            "applicationintent",
+            "attachdbfilename",
+            "connect timeout",
+            "connection lifetime",
+            "connection timeout",
+            "connectretrycount",
+            "connectretryinterval",
+            "current language",
+            "data source",
+            "database",
+            "encrypt",
+            "enlist",
+            "extended properties",
+            "failover partner",
+            "initial catalog",
+            "initial file name",
+            "integrated security",
+            "language",
+            "load balance timeout",
+            "max pool size",
+            "min pool size",
+            "multipleactiveresultsets",
+            "multisubnetfailover",
+            "network address",
+            "packet size",
+            "password",
+            "persist security info",
+            "persistsecurityinfo",
+            "poolblockingperiod",
+            "pooling",
+            "pwd",
+            "replication",
+            "server",
+            "timeout",
+            "transaction binding",
+            "trusted_connection",
+            "trustservercertificate",
+            "type system version",
+            "uid",
+            "user",
+            "user id",
+            "user instance",
+            "workstation id",
+            "wsid"
         };
 
         /// <summary>
         /// Connects the way System.Data.SqlClient did unless the connection string sets <c>Encrypt=True</c>:
         /// unencrypted, or, when the server forces encryption, without checking the server certificate.
         /// Microsoft.Data.SqlClient would otherwise encrypt, and check the certificate whenever the
-        /// connection is encrypted. A connection string that uses a keyword System.Data.SqlClient did not
-        /// support was written for Microsoft.Data.SqlClient, so it is left as it is.
+        /// connection is encrypted. A connection string with a keyword System.Data.SqlClient did not accept was
+        /// written for Microsoft.Data.SqlClient, so it is left as it is.
         /// </summary>
         internal static string WithUnencryptedDefault(string connectionString)
         {
@@ -98,12 +140,10 @@ namespace ServiceConnect.Persistance.SqlServer
                     return connectionString;
                 }
 
-                foreach (var keyword in MicrosoftDataSqlClientOnlyKeywords)
+                var keywords = new DbConnectionStringBuilder { ConnectionString = connectionString }.Keys.Cast<string>();
+                if (!keywords.All(SystemDataSqlClientKeywords.Contains))
                 {
-                    if (builder.ShouldSerialize(keyword))
-                    {
-                        return connectionString;
-                    }
+                    return connectionString;
                 }
 
                 builder.Encrypt = SqlConnectionEncryptOption.Optional;

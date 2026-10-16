@@ -456,5 +456,31 @@ namespace ServiceConnect.IntegrationTests
             // Assert
             Assert.Equal(next.Ticks / TimeSpan.TicksPerMillisecond, batch.NextQueryTime.Ticks / TimeSpan.TicksPerMillisecond);
         }
+
+        [MongoDbFact]
+        public void ShouldReturnDueTimeoutsWhenTheNextTimeoutHasATimeOutOfRange()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbProcessManagerFinder(_connectionString, _dbName);
+            var due = Guid.NewGuid();
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = due, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow.AddMinutes(-1) });
+            _testRepo.GetCollection<BsonDocument>("Timeouts").InsertOne(new BsonDocument
+            {
+                { "_id", new BsonBinaryData(Guid.NewGuid(), GuidRepresentation.CSharpLegacy) },
+                { "Destination", "dest" },
+                { "ProcessManagerId", new BsonBinaryData(_correlationId, GuidRepresentation.CSharpLegacy) },
+                { "Time", new BsonDateTime(25_000_000_000_000_000L) },
+                { "Headers", BsonNull.Value },
+                { "Locked", false }
+            });
+            var before = DateTime.UtcNow;
+
+            // Act
+            var batch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            Assert.Equal(due, Assert.Single(batch.DueTimeouts).Id);
+            Assert.InRange(batch.NextQueryTime, before.AddMinutes(1), DateTime.UtcNow.AddMinutes(1));
+        }
     }
 }

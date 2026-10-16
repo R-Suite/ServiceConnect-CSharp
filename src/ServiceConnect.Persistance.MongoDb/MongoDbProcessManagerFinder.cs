@@ -164,49 +164,57 @@ namespace ServiceConnect.Persistance.MongoDb
         {
             var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
 
-            // Read raw documents so that one the registered Guid serializer cannot read does not stop the others.
             var collection = _mongoDatabase.GetCollection<BsonDocument>(TimeoutsCollectionName);
+            var classMap = BsonClassMap.LookupClassMap(typeof(TimeoutData));
+            var timeField = classMap.GetMemberMap(nameof(TimeoutData.Time)).ElementName;
+            var lockedField = classMap.GetMemberMap(nameof(TimeoutData.Locked)).ElementName;
 
             DateTime utcNow = DateTime.UtcNow;
 
-            // Find all the due timeouts and put a lock on each one to prevent multiple threads/processes getting hold of the same data.
-            var unreadable = new BsonArray();
-            var lockUpdate = Builders<BsonDocument>.Update.Set("Locked", true);
-            var lockOptions = new FindOneAndUpdateOptions<BsonDocument> { ReturnDocument = ReturnDocument.After };
+            // Before locking anything, so that a failure here cannot leave timeouts locked.
+            retval.NextQueryTime = GetNextQueryTime(collection, timeField, utcNow);
 
-            while (true)
+            // Read the due timeouts as raw documents, so that one the registered serializers cannot read is skipped
+            // without being locked. Lock each of the others on its own, so only one thread or process dispatches it.
+            var dueFilter = Builders<BsonDocument>.Filter.Eq(lockedField, false) &
+                            Builders<BsonDocument>.Filter.Lte(timeField, utcNow);
+            var lockUpdate = Builders<BsonDocument>.Update.Set(lockedField, true);
+
+            foreach (var document in collection.Find(dueFilter).ToEnumerable())
             {
-                var dueFilter = Builders<BsonDocument>.Filter.Eq("Locked", false) &
-                                Builders<BsonDocument>.Filter.Lte("Time", utcNow) &
-                                Builders<BsonDocument>.Filter.Nin("_id", unreadable);
-                var document = collection.FindOneAndUpdate(dueFilter, lockUpdate, lockOptions);
-                if (document == null)
-                {
-                    break;
-                }
-
+                TimeoutData timeout;
                 try
                 {
-                    retval.DueTimeouts.Add(BsonSerializer.Deserialize<TimeoutData>(document));
+                    timeout = BsonSerializer.Deserialize<TimeoutData>(document);
                 }
                 catch (Exception ex) when (ex is FormatException || ex is BsonException)
                 {
-                    // Usually a Guid stored in another representation. Unlock it so it is not lost.
-                    collection.UpdateOne(Builders<BsonDocument>.Filter.Eq("_id", document["_id"]), Builders<BsonDocument>.Update.Set("Locked", false));
-                    unreadable.Add(document["_id"]);
+                    continue;
+                }
+
+                var lockFilter = Builders<BsonDocument>.Filter.Eq("_id", document["_id"]) &
+                                 Builders<BsonDocument>.Filter.Eq(lockedField, false);
+                if (collection.UpdateOne(lockFilter, lockUpdate).ModifiedCount == 1)
+                {
+                    timeout.Locked = true;
+                    retval.DueTimeouts.Add(timeout);
                 }
             }
 
-            // Get next query time
-            var nextTimeout = collection.Find(Builders<BsonDocument>.Filter.Gt("Time", utcNow))
-                .Sort(Builders<BsonDocument>.Sort.Ascending("Time"))
-                .Project(Builders<BsonDocument>.Projection.Include("Time"))
+            return retval;
+        }
+
+        private static DateTime GetNextQueryTime(IMongoCollection<BsonDocument> collection, string timeField, DateTime utcNow)
+        {
+            var nextTimeout = collection.Find(Builders<BsonDocument>.Filter.Gt(timeField, utcNow))
+                .Sort(Builders<BsonDocument>.Sort.Ascending(timeField))
+                .Project(Builders<BsonDocument>.Projection.Include(timeField))
                 .Limit(1)
                 .FirstOrDefault();
 
-            retval.NextQueryTime = nextTimeout?["Time"].ToUniversalTime() ?? utcNow.AddMinutes(1);
-
-            return retval;
+            return nextTimeout?[timeField] is BsonDateTime { IsValidDateTime: true } time
+                ? time.ToUniversalTime()
+                : utcNow.AddMinutes(1);
         }
 
         public void RemoveDispatchedTimeout(Guid id)
