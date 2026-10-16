@@ -25,7 +25,11 @@ namespace ServiceConnect.IntegrationTests
         [InlineData("Server=db;Encrypt=True")]
         [InlineData("Server=db;Encrypt=Strict")]
         [InlineData("Server=db;Encrypt=True;TrustServerCertificate=True")]
-        public void ShouldKeepAConnectionStringThatAsksForEncryption(string connectionString)
+        [InlineData("Server=tcp:db.example.net,1433;Initial Catalog=d;Authentication=Active Directory Managed Identity")]
+        [InlineData("Server=db;User ID=sa;Password=p;HostNameInCertificate=db.example.net")]
+        [InlineData("Server=db;User ID=sa;Password=p;Server Certificate=/certs/db.pem")]
+        [InlineData("Server=db;Integrated Security=True;ServerSPN=MSSQLSvc/db")]
+        public void ShouldKeepAConnectionStringThatAsksForEncryptionOrWasWrittenForMicrosoftDataSqlClient(string connectionString)
         {
             Assert.Equal(connectionString, SqlServerProcessManagerFinder.WithUnencryptedDefault(connectionString));
         }

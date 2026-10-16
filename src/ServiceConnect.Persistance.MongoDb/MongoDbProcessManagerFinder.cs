@@ -19,6 +19,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using System.Reflection;
@@ -160,31 +162,49 @@ namespace ServiceConnect.Persistance.MongoDb
 
         public TimeoutsBatch GetTimeoutsBatch()
         {
-            var retval = new TimeoutsBatch {DueTimeouts = new List<TimeoutData>()};
+            var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
 
-            var collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            // Read raw documents so that one the registered Guid serializer cannot read does not stop the others.
+            var collection = _mongoDatabase.GetCollection<BsonDocument>(TimeoutsCollectionName);
 
             DateTime utcNow = DateTime.UtcNow;
 
             // Find all the due timeouts and put a lock on each one to prevent multiple threads/processes getting hold of the same data.
-            var dueFilter = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, false) &
-                            Builders<TimeoutData>.Filter.Lte(_ => _.Time, utcNow);
-            var lockUpdate = Builders<TimeoutData>.Update.Set(_ => _.Locked, true);
-            var lockOptions = new FindOneAndUpdateOptions<TimeoutData> { ReturnDocument = ReturnDocument.After };
+            var unreadable = new BsonArray();
+            var lockUpdate = Builders<BsonDocument>.Update.Set("Locked", true);
+            var lockOptions = new FindOneAndUpdateOptions<BsonDocument> { ReturnDocument = ReturnDocument.After };
 
-            TimeoutData dueTimeout;
-            while ((dueTimeout = collection.FindOneAndUpdate(dueFilter, lockUpdate, lockOptions)) != null)
+            while (true)
             {
-                retval.DueTimeouts.Add(dueTimeout);
+                var dueFilter = Builders<BsonDocument>.Filter.Eq("Locked", false) &
+                                Builders<BsonDocument>.Filter.Lte("Time", utcNow) &
+                                Builders<BsonDocument>.Filter.Nin("_id", unreadable);
+                var document = collection.FindOneAndUpdate(dueFilter, lockUpdate, lockOptions);
+                if (document == null)
+                {
+                    break;
+                }
+
+                try
+                {
+                    retval.DueTimeouts.Add(BsonSerializer.Deserialize<TimeoutData>(document));
+                }
+                catch (Exception ex) when (ex is FormatException || ex is BsonException)
+                {
+                    // Usually a Guid stored in another representation. Unlock it so it is not lost.
+                    collection.UpdateOne(Builders<BsonDocument>.Filter.Eq("_id", document["_id"]), Builders<BsonDocument>.Update.Set("Locked", false));
+                    unreadable.Add(document["_id"]);
+                }
             }
 
             // Get next query time
-            var nextTimeout = collection.Find(Builders<TimeoutData>.Filter.Gt(_ => _.Time, utcNow))
-                .SortBy(_ => _.Time)
+            var nextTimeout = collection.Find(Builders<BsonDocument>.Filter.Gt("Time", utcNow))
+                .Sort(Builders<BsonDocument>.Sort.Ascending("Time"))
+                .Project(Builders<BsonDocument>.Projection.Include("Time"))
                 .Limit(1)
                 .FirstOrDefault();
 
-            retval.NextQueryTime = nextTimeout?.Time ?? utcNow.AddMinutes(1);
+            retval.NextQueryTime = nextTimeout?["Time"].ToUniversalTime() ?? utcNow.AddMinutes(1);
 
             return retval;
         }

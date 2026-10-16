@@ -127,6 +127,7 @@ Register the representation your existing data uses. That is `CSharpLegacy` unle
 
 * `Standard` does not match `CSharpLegacy` data. `FindData` returns `null`, so new process manager instances start, or it throws a `FormatException`. The aggregator persistors throw a `FormatException`.
 * `JavaLegacy` and `PythonLegacy` read `CSharpLegacy` data without an error, but with the bytes of each GUID in a different order. Lookups by GUID find nothing, and other GUIDs come back with wrong values.
+* `GetTimeoutsBatch` skips a timeout it cannot read and leaves it in the `Timeouts` collection, so it is never dispatched. The other timeouts are dispatched as usual.
 
 You no longer need to register an `ObjectSerializer` that allows your process manager data and message types. The persistence classes allow any `IProcessManagerData` or `Message` type in the data they store.
 
@@ -139,12 +140,12 @@ These bugs are fixed:
 * `MongoDbSslProcessManagerFinder.GetTimeoutsBatch` threw for every due timeout and left it locked, so timeouts never fired.
 * `MongoDbSslProcessManagerFinder.RemoveDispatchedTimeout` could remove a different locked timeout from the one it was given.
 * `MongoDbProcessManagerFinder.InsertData` added a new document on every call instead of replacing the one with the same correlation ID. Two calls that run at the same time for a new correlation ID can still each add a document, in both MongoDB packages.
-* `MongoDbProcessManagerFinder.UpdateData` now updates the document that `FindData` returned, even when an earlier version left duplicates. `MongoDbSslProcessManagerFinder.UpdateData` can still fail when duplicates exist.
+* `MongoDbProcessManagerFinder.UpdateData` now updates the document that `FindData` returned, even when an earlier version left duplicates. When duplicates exist, `MongoDbSslProcessManagerFinder.UpdateData` can still fail, or two updates that run at the same time can both succeed.
 * `DeleteData` removes every document with the correlation ID, so a finished process manager does not come back from a duplicate.
 
 ### SQL Server persistence
 
-`SqlServerProcessManagerFinder` now uses `Microsoft.Data.SqlClient` instead of the deprecated `System.Data.SqlClient`. `Microsoft.Data.SqlClient` encrypts connections by default and checks the server certificate whenever a connection is encrypted. To keep existing connection strings working, `SqlServerProcessManagerFinder` connects as `System.Data.SqlClient` did unless the connection string sets `Encrypt=True`. The connection is unencrypted, or, when the server forces encryption, encrypted without a certificate check. To encrypt and check the certificate, add `Encrypt=True` to the connection string. Add `TrustServerCertificate=True` as well to encrypt without the check.
+`SqlServerProcessManagerFinder` now uses `Microsoft.Data.SqlClient` instead of the deprecated `System.Data.SqlClient`. `Microsoft.Data.SqlClient` encrypts connections by default and checks the server certificate whenever a connection is encrypted. To keep existing connection strings working, `SqlServerProcessManagerFinder` connects as `System.Data.SqlClient` did unless the connection string sets `Encrypt=True` or uses a keyword that only `Microsoft.Data.SqlClient` supports: `Authentication`, `Host Name In Certificate`, `Server Certificate`, `Server SPN`, `Failover Partner SPN`, `Attestation Protocol`, or `Enclave Attestation Url`. The connection is unencrypted, or, when the server forces encryption, encrypted without a certificate check. To encrypt and check the certificate, add `Encrypt=True` to the connection string. Add `TrustServerCertificate=True` as well to encrypt without the check.
 
 ### Packages
 

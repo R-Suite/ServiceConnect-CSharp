@@ -64,11 +64,24 @@ namespace ServiceConnect.Persistance.SqlServer
 
         public event TimeoutInsertedDelegate TimeoutInserted;
 
+        // Keywords that change authentication or certificate checks and that System.Data.SqlClient rejected.
+        private static readonly string[] MicrosoftDataSqlClientOnlyKeywords =
+        {
+            "Authentication",
+            "Host Name In Certificate",
+            "Server Certificate",
+            "Server SPN",
+            "Failover Partner SPN",
+            "Attestation Protocol",
+            "Enclave Attestation Url"
+        };
+
         /// <summary>
         /// Connects the way System.Data.SqlClient did unless the connection string sets <c>Encrypt=True</c>:
         /// unencrypted, or, when the server forces encryption, without checking the server certificate.
         /// Microsoft.Data.SqlClient would otherwise encrypt, and check the certificate whenever the
-        /// connection is encrypted.
+        /// connection is encrypted. A connection string that uses a keyword System.Data.SqlClient did not
+        /// support was written for Microsoft.Data.SqlClient, so it is left as it is.
         /// </summary>
         internal static string WithUnencryptedDefault(string connectionString)
         {
@@ -83,6 +96,14 @@ namespace ServiceConnect.Persistance.SqlServer
                 if (builder.ShouldSerialize("Encrypt") && !SqlConnectionEncryptOption.Optional.Equals(builder.Encrypt))
                 {
                     return connectionString;
+                }
+
+                foreach (var keyword in MicrosoftDataSqlClientOnlyKeywords)
+                {
+                    if (builder.ShouldSerialize(keyword))
+                    {
+                        return connectionString;
+                    }
                 }
 
                 builder.Encrypt = SqlConnectionEncryptOption.Optional;

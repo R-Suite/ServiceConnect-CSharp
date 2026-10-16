@@ -418,5 +418,60 @@ namespace ServiceConnect.IntegrationTestsSsl
             // Assert
             Assert.Null(processManagerFinder.FindData<TestDataSsl>(_mapper, new Message(_correlationId)));
         }
+
+        [MongoDbSslFact]
+        public void ShouldSkipATimeoutItCannotReadAndDispatchTheOthers()
+        {
+            // Arrange: a timeout stored with a Guid representation other than the registered one.
+            IProcessManagerFinder processManagerFinder = new MongoDbSslProcessManagerFinder(_connectionString, _dbName);
+            var first = Guid.NewGuid();
+            var last = Guid.NewGuid();
+            var unreadable = Guid.NewGuid();
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = first, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow.AddMinutes(-3) });
+            var timeouts = _testRepo.MongoDatabase.GetCollection<BsonDocument>("Timeouts");
+            timeouts.InsertOne(new BsonDocument
+            {
+                { "_id", new BsonBinaryData(unreadable, GuidRepresentation.Standard) },
+                { "Destination", "dest" },
+                { "ProcessManagerId", new BsonBinaryData(_correlationId, GuidRepresentation.Standard) },
+                { "Time", DateTime.UtcNow.AddMinutes(-2) },
+                { "Headers", BsonNull.Value },
+                { "Locked", false }
+            });
+            processManagerFinder.InsertTimeout(new TimeoutData { Id = last, ProcessManagerId = _correlationId, Destination = "dest", Time = DateTime.UtcNow.AddMinutes(-1) });
+
+            // Act
+            var firstBatch = processManagerFinder.GetTimeoutsBatch();
+            var secondBatch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            Assert.Equal(new[] { first, last }, firstBatch.DueTimeouts.Select(t => t.Id).OrderBy(id => Array.IndexOf(new[] { first, last }, id)));
+            Assert.Empty(secondBatch.DueTimeouts);
+            var stored = timeouts.Find(Builders<BsonDocument>.Filter.Eq("_id", new BsonBinaryData(unreadable, GuidRepresentation.Standard))).Single();
+            Assert.False(stored["Locked"].AsBoolean);
+        }
+
+        [MongoDbSslFact]
+        public void ShouldUseTheNextTimeoutEvenWhenItCannotBeRead()
+        {
+            // Arrange
+            IProcessManagerFinder processManagerFinder = new MongoDbSslProcessManagerFinder(_connectionString, _dbName);
+            var next = DateTime.UtcNow.AddMinutes(5);
+            _testRepo.MongoDatabase.GetCollection<BsonDocument>("Timeouts").InsertOne(new BsonDocument
+            {
+                { "_id", new BsonBinaryData(Guid.NewGuid(), GuidRepresentation.Standard) },
+                { "Destination", "dest" },
+                { "ProcessManagerId", new BsonBinaryData(_correlationId, GuidRepresentation.Standard) },
+                { "Time", next },
+                { "Headers", BsonNull.Value },
+                { "Locked", false }
+            });
+
+            // Act
+            var batch = processManagerFinder.GetTimeoutsBatch();
+
+            // Assert
+            Assert.Equal(next.Ticks / TimeSpan.TicksPerMillisecond, batch.NextQueryTime.Ticks / TimeSpan.TicksPerMillisecond);
+        }
     }
 }
