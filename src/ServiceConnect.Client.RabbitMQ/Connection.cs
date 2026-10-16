@@ -47,7 +47,6 @@ namespace ServiceConnect.Client.RabbitMQ
             var connectionFactory = new ConnectionFactory
             {
                 Port = AmqpTcpEndpoint.UseDefaultPort,
-                UseBackgroundThreadsForIO = true,
                 AutomaticRecoveryEnabled = true,
                 TopologyRecoveryEnabled = true,
                 DispatchConsumersAsync = true

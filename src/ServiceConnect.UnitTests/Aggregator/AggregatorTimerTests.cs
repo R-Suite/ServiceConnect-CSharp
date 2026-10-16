@@ -110,7 +110,7 @@ namespace ServiceConnect.UnitTests.Aggregator
 
             // Assert 
             mockPersistor.Verify(x => x.GetData(typeof(FakeMessage1).AssemblyQualifiedName), Times.Once);
-            Assert.Equal(1, aggregator.Messages.Count);
+            Assert.Single(aggregator.Messages);
             Assert.Equal(message, aggregator.Messages.First());
             timer.Dispose();
         }

@@ -16,6 +16,15 @@ using ServiceConnect.UnitTests.Fakes.Handlers;
 
 namespace ServiceConnect.UnitTests;
 
+/// <summary>
+/// The activity sources are static, so these tests would also record activities from bus tests running in parallel.
+/// </summary>
+[CollectionDefinition(nameof(TelemetryTests), DisableParallelization = true)]
+public class TelemetryTestsCollection
+{
+}
+
+[Collection(nameof(TelemetryTests))]
 public class TelemetryTests
 {
     private static readonly Guid CorrelationId = Guid.NewGuid();

@@ -17,7 +17,6 @@ namespace ServiceConnect.UnitTests
         private Mock<IConfiguration> _mockConfiguration;
         private Mock<IBusContainer> _mockContainer;
         private Mock<IConsumer> _mockConsumer;
-        private Mock<IProducer> _mockProducer;
         private ConsumerEventHandler _fakeEventHandler;
         private List<HandlerReference> _handlerReferences;
 
@@ -196,7 +195,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldExecuteAfterConsumingFilters()
+        public async Task ShouldExecuteAfterConsumingFilters()
         {
             // Arrange
             var bus = new Bus(_mockConfiguration.Object);
@@ -232,7 +231,7 @@ namespace ServiceConnect.UnitTests
             }));
 
             // Act
-            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers).GetAwaiter().GetResult();
+            await _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
             // Assert
             Assert.True(_afterFilter1Ran);
@@ -240,7 +239,7 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
-        public void ShouldNotProcessMessageIfBeforeFilterReturnsFalse()
+        public async Task ShouldNotProcessMessageIfBeforeFilterReturnsFalse()
         {
             // Arrange
             var bus = new Bus(_mockConfiguration.Object);
@@ -274,7 +273,7 @@ namespace ServiceConnect.UnitTests
             }));
 
             // Act
-            _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers).GetAwaiter().GetResult();
+            await _fakeEventHandler(message, typeof(FakeMessage1).AssemblyQualifiedName, headers);
 
             // Assert
             mockMessageHandlerProcessor.Verify(x => x.ProcessMessage<FakeMessage1>(It.IsAny<string>(), It.IsAny<IConsumeContext>()), Times.Never);

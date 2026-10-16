@@ -43,7 +43,6 @@ namespace ServiceConnect
         #region Private Fields
 
         //private string _configurationPath;
-        private string _endPoint;
         private string _queueName;
         private string _errorQueueName;
         private string _auditQueueName;

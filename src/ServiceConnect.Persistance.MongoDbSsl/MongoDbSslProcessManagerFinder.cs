@@ -15,10 +15,12 @@
 //Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
-using System.Security.Cryptography.X509Certificates;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using ServiceConnect.Interfaces;
 using System.Reflection;
@@ -31,119 +33,12 @@ namespace ServiceConnect.Persistance.MongoDbSsl
     public class MongoDbSslProcessManagerFinder : IProcessManagerFinder
     {
         private readonly IMongoDatabase _mongoDatabase;
+        private readonly ConcurrentDictionary<string, bool> _indexes = new ConcurrentDictionary<string, bool>();
         private const string TimeoutsCollectionName = "Timeouts";
 
         public MongoDbSslProcessManagerFinder(string connectionString, string databaseName)
         {
-            var connectionParts = connectionString.Split(',');
-            string nodes = string.Empty;
-            string username = string.Empty;
-            string password = string.Empty;
-            string certPath = string.Empty;
-            string userdb = string.Empty;
-            string cert = string.Empty;
-            string certPassword = string.Empty;
-
-            foreach (string connectionPart in connectionParts)
-            {
-                var assignmentIndex = connectionPart.IndexOf('=');
-                var nameValue = connectionPart.Substring(0, assignmentIndex);
-
-                switch (nameValue.ToLower())
-                {
-                    case "nodes":
-                        nodes = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "userdb":
-                        userdb = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "username":
-                        username = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "password":
-                        password = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "certpath":
-                        certPath = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "cert":
-                        cert = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                    case "certpassword":
-                        certPassword = connectionPart.Substring(assignmentIndex + 1);
-                        break;
-                }
-            }
-
-            var mongoNodes = nodes.Split(';');
-
-            List<X509Certificate> certs = null;
-            if (!string.IsNullOrEmpty(certPath))
-            {
-                if (string.IsNullOrEmpty(certPassword))
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(certPath)
-                    };
-                }
-                else
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(certPath, certPassword)
-                    };
-                }
-
-            }
-
-            if (!string.IsNullOrEmpty(cert))
-            {
-                if (string.IsNullOrEmpty(certPassword))
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(Convert.FromBase64String(cert))
-                    };
-                }
-                else
-                {
-                    certs = new List<X509Certificate>
-                    {
-                        new X509Certificate2(Convert.FromBase64String(cert), certPassword)
-                    };
-                }
-            }
-
-            MongoCredential credential = null;
-            if (!string.IsNullOrEmpty(username))
-            {
-                string db = "admin";
-
-                if (!string.IsNullOrEmpty(userdb))
-                {
-                    db = userdb;
-                }
-
-                credential = MongoCredential.CreateCredential(db, username, password);
-            }
-
-            var settings = new MongoClientSettings
-            {
-                UseTls = true,
-                Credential = credential,
-                ConnectionMode = ConnectionMode.Automatic,
-                Servers = mongoNodes.Select(x => new MongoServerAddress(x)),
-                SslSettings = certs == null ? null : new SslSettings
-                {
-                    ClientCertificates = certs,
-                    ClientCertificateSelectionCallback = (sender, host, certificates, certificate, issuers) => certificates[0],
-                    CheckCertificateRevocation = false
-                }
-            };
-
-            var client = new MongoClient(settings);
-            _mongoDatabase = client.GetDatabase(databaseName);
+            _mongoDatabase = MongoDbSslConnection.GetDatabase(connectionString, databaseName);
         }
 
         public event TimeoutInsertedDelegate TimeoutInserted;
@@ -162,10 +57,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
 
             var collectionName = typeof(T).Name;
             IMongoCollection<MongoDbSslData<T>> collection = _mongoDatabase.GetCollection<MongoDbSslData<T>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<MongoDbSslData<T>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<MongoDbSslData<T>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             object msgPropValue = null;
 
@@ -211,9 +103,8 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         }
 
         /// <summary>
-        /// Create new instance of ProcessManager
-        /// When multiple threads try to create new ProcessManager instance, only the first one is allowed. 
-        /// All subsequent threads will update data instead.
+        /// Create new instance of ProcessManager, or replace the data of the one with the same CorrelationId.
+        /// Calls that run at the same time for a new CorrelationId can each insert a document.
         /// </summary>
         /// <param name="data"></param>
         public void InsertData(IProcessManagerData data)
@@ -221,10 +112,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             var collectionName = GetCollectionName(data);
 
             IMongoCollection<MongoDbSslData<IProcessManagerData>> collection = _mongoDatabase.GetCollection<MongoDbSslData<IProcessManagerData>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<MongoDbSslData<IProcessManagerData>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<MongoDbSslData<IProcessManagerData>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             var mongoDbData = new MongoDbSslData<IProcessManagerData>
             {
@@ -247,10 +135,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             var collectionName = GetCollectionName(persistanceData.Data);
 
             IMongoCollection<MongoDbSslData<T>> collection = _mongoDatabase.GetCollection<MongoDbSslData<T>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<MongoDbSslData<T>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<MongoDbSslData<T>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             var versionData = (MongoDbSslData<T>)persistanceData;
 
@@ -261,7 +146,7 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             versionData.Version += 1;
             var result = collection.ReplaceOne(filter, versionData);
 
-            if (result.IsAcknowledged && result.ModifiedCount == 0)
+            if (result.IsAcknowledged && result.MatchedCount == 0)
                 throw new ArgumentException(string.Format("Possible Concurrency Error. ProcessManagerData with CorrelationId {0} and Version {1} could not be updated.", versionData.Data.CorrelationId, versionData.Version));
         }
 
@@ -274,22 +159,16 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             var collectionName = GetCollectionName(persistanceData.Data);
 
             IMongoCollection<IPersistanceData<T>> collection = _mongoDatabase.GetCollection<IPersistanceData<T>>(collectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<IPersistanceData<T>>.IndexKeys.Ascending("Data.CorrelationId");
-            var indexModel = new CreateIndexModel<IPersistanceData<T>>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Data.CorrelationId");
 
             var filter = Builders<IPersistanceData<T>>.Filter.Eq("Data.CorrelationId", persistanceData.Data.CorrelationId);
-            collection.DeleteOne(filter);
+            collection.DeleteMany(filter);
         }
 
         public void InsertTimeout(TimeoutData timeoutData)
         {
             IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
-            var indexOptions = new CreateIndexOptions();
-            var indexKeys = Builders<TimeoutData>.IndexKeys.Ascending("Id");
-            var indexModel = new CreateIndexModel<TimeoutData>(indexKeys, indexOptions);
-            collection.Indexes.CreateOne(indexModel);
+            EnsureIndex(collection, "Id");
 
             collection.InsertOne(timeoutData);
 
@@ -300,51 +179,57 @@ namespace ServiceConnect.Persistance.MongoDbSsl
         {
             var retval = new TimeoutsBatch { DueTimeouts = new List<TimeoutData>() };
 
-            IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
+            var collection = _mongoDatabase.GetCollection<BsonDocument>(TimeoutsCollectionName);
+            var classMap = BsonClassMap.LookupClassMap(typeof(TimeoutData));
+            var timeField = classMap.GetMemberMap(nameof(TimeoutData.Time)).ElementName;
+            var lockedField = classMap.GetMemberMap(nameof(TimeoutData.Locked)).ElementName;
 
             DateTime utcNow = DateTime.UtcNow;
 
-            // Find all the due timeouts and put a lock on each one to prevent multiple threads/processes getting hold of the same data.
-            bool doQuery = true;
-            while (doQuery)
+            // Before locking anything, so that a failure here cannot leave timeouts locked.
+            retval.NextQueryTime = GetNextQueryTime(collection, timeField, utcNow);
+
+            // Read the due timeouts as raw documents, so that one the registered serializers cannot read is skipped
+            // without being locked. Lock each of the others on its own, so only one thread or process dispatches it.
+            var dueFilter = Builders<BsonDocument>.Filter.Eq(lockedField, false) &
+                            Builders<BsonDocument>.Filter.Lte(timeField, utcNow);
+            var lockUpdate = Builders<BsonDocument>.Update.Set(lockedField, true);
+
+            foreach (var document in collection.Find(dueFilter).ToEnumerable())
             {
-                var filter1 = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, false) &
-                              Builders<TimeoutData>.Filter.Lte(_ => _.Time, utcNow);
-
-                var update = Builders<TimeoutData>.Update.Set(_ => _.Locked, true);
-                var result = collection.UpdateOne(filter1, update);
-
-                if (result.ModifiedCount == 0)
+                TimeoutData timeout;
+                try
                 {
-                    doQuery = false;
+                    timeout = BsonSerializer.Deserialize<TimeoutData>(document);
                 }
-                else
+                catch (Exception ex) when (ex is FormatException || ex is BsonException)
                 {
-                    var filter2 = Builders<TimeoutData>.Filter.Eq(s => s.Id, result.UpsertedId);
-                    retval.DueTimeouts.Add(collection.Find(filter2).First());
+                    continue;
                 }
-            }
 
-            // Get next query time
-            var nextQueryTime = DateTime.MaxValue;
-            var filter = Builders<TimeoutData>.Filter.Eq(_=>_.Time, utcNow);
-            var upcomingTimeoutsRes = collection.Find(filter);
-            foreach (TimeoutData upcomingTimeout in upcomingTimeoutsRes.ToList())
-            {
-                if (upcomingTimeout.Time < nextQueryTime)
+                var lockFilter = Builders<BsonDocument>.Filter.Eq("_id", document["_id"]) &
+                                 Builders<BsonDocument>.Filter.Eq(lockedField, false);
+                if (collection.UpdateOne(lockFilter, lockUpdate).ModifiedCount == 1)
                 {
-                    nextQueryTime = upcomingTimeout.Time;
+                    timeout.Locked = true;
+                    retval.DueTimeouts.Add(timeout);
                 }
             }
-
-            if (nextQueryTime == DateTime.MaxValue)
-            {
-                nextQueryTime = utcNow.AddMinutes(1);
-            }
-
-            retval.NextQueryTime = nextQueryTime;
 
             return retval;
+        }
+
+        private static DateTime GetNextQueryTime(IMongoCollection<BsonDocument> collection, string timeField, DateTime utcNow)
+        {
+            var nextTimeout = collection.Find(Builders<BsonDocument>.Filter.Gt(timeField, utcNow))
+                .Sort(Builders<BsonDocument>.Sort.Ascending(timeField))
+                .Project(Builders<BsonDocument>.Projection.Include(timeField))
+                .Limit(1)
+                .FirstOrDefault();
+
+            return nextTimeout?[timeField] is BsonDateTime { IsValidDateTime: true } time
+                ? time.ToUniversalTime()
+                : utcNow.AddMinutes(1);
         }
 
         public void RemoveDispatchedTimeout(Guid id)
@@ -352,9 +237,21 @@ namespace ServiceConnect.Persistance.MongoDbSsl
             IMongoCollection<TimeoutData> collection = _mongoDatabase.GetCollection<TimeoutData>(TimeoutsCollectionName);
 
             var filter = Builders<TimeoutData>.Filter.Eq(_ => _.Locked, true) &
-                          Builders<TimeoutData>.Filter.Lte(_ => _.Id, id);
+                          Builders<TimeoutData>.Filter.Eq(_ => _.Id, id);
 
             collection.DeleteOne(filter);
+        }
+
+        private void EnsureIndex<TDocument>(IMongoCollection<TDocument> collection, string field)
+        {
+            var key = collection.CollectionNamespace.CollectionName + "/" + field;
+            if (_indexes.ContainsKey(key))
+            {
+                return;
+            }
+
+            collection.Indexes.CreateOne(new CreateIndexModel<TDocument>(Builders<TDocument>.IndexKeys.Ascending(field)));
+            _indexes.TryAdd(key, true);
         }
 
         private static string GetCollectionName<T>(T data) where T : class, IProcessManagerData

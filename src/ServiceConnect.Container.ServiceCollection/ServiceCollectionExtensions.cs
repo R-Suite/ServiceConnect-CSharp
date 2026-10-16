@@ -8,14 +8,14 @@ namespace ServiceConnect.Container.ServiceCollection
     {
         public static void AddServiceConnect(this IServiceCollection services, Action<IConfiguration> config)
         {
-            Bus.Initialize(newConfig =>
+            Action<IConfiguration> useServiceCollection = newConfig =>
             {
                 newConfig.SetContainerType<ServiceCollectionContainer>();
                 var busContainer = newConfig.GetContainer();
                 busContainer.Initialize(services);
+            };
 
-            }
-            + config);
+            Bus.Initialize(useServiceCollection + config);
         }
     }
 }

@@ -63,7 +63,6 @@ namespace ServiceConnect.Client.RabbitMQ
             {
                 VirtualHost = "/",
                 Port = AmqpTcpEndpoint.UseDefaultPort,
-                UseBackgroundThreadsForIO = true,
                 AutomaticRecoveryEnabled = true,
                 TopologyRecoveryEnabled = true
             };

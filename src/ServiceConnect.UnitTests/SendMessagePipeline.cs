@@ -37,6 +37,16 @@ namespace ServiceConnect.UnitTests
         }
 
         [Fact]
+        public void ShouldGetProducerFromConfiguration()
+        {
+            // Act
+            new SendMessagePipeline(_mockConfiguration.Object);
+
+            // Assert
+            _mockConfiguration.Verify(x => x.GetProducer(), Times.Once());
+        }
+
+        [Fact]
         public void ShouldExecuteMiddlewareWhenSendingMessageWithEndpoint()
         {
             _mockConfiguration.SetupGet(x => x.SendMessageMiddleware).Returns(new List<Type> {
